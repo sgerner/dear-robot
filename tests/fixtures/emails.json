@@ -1,0 +1,212 @@
+[
+  {
+    "id": "fixture-newsletter-001",
+    "thread_id": "thread-newsletter",
+    "subject": "April product digest and launch notes",
+    "from": "Digest Team <digest@example.com>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-20T15:00:00.000Z",
+    "body_text": "This month in product updates: new releases, webinar links, and a partner newsletter.",
+    "seed_suggestion": {
+      "category": "Newsletter",
+      "confidence": 0.94,
+      "recommendedAction": "move_to_folder",
+      "targetFolder": "Newsletters",
+      "draftReply": null,
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Promotional digest with no direct response required.",
+      "riskLevel": "low"
+    }
+  },
+  {
+    "id": "fixture-receipt-001",
+    "thread_id": "thread-receipt",
+    "subject": "Receipt for your invoice payment",
+    "from": "Billing <billing@vendor.example>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-20T16:10:00.000Z",
+    "body_text": "Your payment of $84.21 was received. Attached is receipt #4828.",
+    "seed_suggestion": {
+      "category": "Receipt",
+      "confidence": 0.96,
+      "recommendedAction": "move_to_folder",
+      "targetFolder": "Receipts",
+      "draftReply": null,
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Transactional receipt that should be filed.",
+      "riskLevel": "low"
+    }
+  },
+  {
+    "id": "fixture-angry-customer-001",
+    "thread_id": "thread-angry",
+    "subject": "Still no update on my refund",
+    "from": "Jordan Lee <jordan@example.net>",
+    "to": "support@example.test",
+    "cc": null,
+    "date": "2026-04-21T09:12:00.000Z",
+    "body_text": "I have asked three times about my refund and nobody has replied. This is unacceptable and I want a response today.",
+    "seed_suggestion": {
+      "category": "Customer Escalation",
+      "confidence": 0.88,
+      "recommendedAction": "reply",
+      "targetFolder": null,
+      "draftReply": "Hi Jordan,\n\nI am sorry this has taken multiple follow-ups. I am checking the refund status now and will send you a clear update today.\n\nThank you for your patience.",
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Angry refund-related customer message needs an empathetic reviewed response.",
+      "riskLevel": "high"
+    }
+  },
+  {
+    "id": "fixture-complex-request-001",
+    "thread_id": "thread-complex",
+    "subject": "Can you quote three catering options?",
+    "from": "Morgan <morgan@example.org>",
+    "to": "sales@example.test",
+    "cc": "events@example.test",
+    "date": "2026-04-21T10:34:00.000Z",
+    "body_text": "We need breakfast for 75 people with gluten-free and vegan options. Can you send three package options and delivery windows for May 14?",
+    "seed_suggestion": {
+      "category": "Complex Customer Request",
+      "confidence": 0.83,
+      "recommendedAction": "reply",
+      "targetFolder": null,
+      "draftReply": "Hi Morgan,\n\nThanks for the details. We can put together three breakfast package options for 75 guests, including gluten-free and vegan choices, and include delivery windows for May 14. I will confirm availability and send the options shortly.",
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Detailed catering request needs a draft but should be reviewed for accuracy.",
+      "riskLevel": "medium"
+    }
+  },
+  {
+    "id": "fixture-vendor-pricing-001",
+    "thread_id": "thread-pricing",
+    "subject": "Updated ingredient pricing effective May 1",
+    "from": "Vendor Rep <rep@supplier.example>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-21T13:42:00.000Z",
+    "body_text": "Please note our flour and butter pricing changes effective May 1. The attached sheet lists new case prices.",
+    "seed_suggestion": {
+      "category": "Vendor Pricing",
+      "confidence": 0.8,
+      "recommendedAction": "delegate",
+      "targetFolder": null,
+      "draftReply": null,
+      "forwardTo": null,
+      "delegateInstructions": "Review vendor pricing update and adjust costing assumptions if needed.",
+      "reasoningSummary": "Operational pricing update should be routed for review.",
+      "riskLevel": "medium"
+    }
+  },
+  {
+    "id": "fixture-phishing-001",
+    "thread_id": "thread-phishing",
+    "subject": "Urgent: password expiration action required",
+    "from": "IT Security <security@examp1e-login.ru>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-21T14:15:00.000Z",
+    "body_text": "Your mailbox password expires in 30 minutes. Click http://not-example.invalid/login to keep access.",
+    "seed_suggestion": {
+      "category": "Suspicious",
+      "confidence": 0.98,
+      "recommendedAction": "spam",
+      "targetFolder": "Spam Review",
+      "draftReply": null,
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Credential urgency and suspicious domain indicate phishing.",
+      "riskLevel": "high"
+    }
+  },
+  {
+    "id": "fixture-internal-task-001",
+    "thread_id": "thread-task",
+    "subject": "Please update the prep checklist",
+    "from": "Avery <avery@example.test>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-22T08:05:00.000Z",
+    "body_text": "Can you have someone add the new packaging steps to the Friday prep checklist?",
+    "seed_suggestion": {
+      "category": "Internal Task",
+      "confidence": 0.77,
+      "recommendedAction": "delegate",
+      "targetFolder": null,
+      "draftReply": null,
+      "forwardTo": null,
+      "delegateInstructions": "Assign checklist update for Friday prep packaging steps.",
+      "reasoningSummary": "Internal operational task is suitable for delegation.",
+      "riskLevel": "low"
+    }
+  },
+  {
+    "id": "fixture-scheduling-001",
+    "thread_id": "thread-scheduling",
+    "subject": "Meeting time next Tuesday?",
+    "from": "Riley <riley@example.com>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-22T11:25:00.000Z",
+    "body_text": "Are you available next Tuesday at 2 PM to discuss the upcoming order?",
+    "seed_suggestion": {
+      "category": "Scheduling",
+      "confidence": 0.84,
+      "recommendedAction": "reply",
+      "targetFolder": null,
+      "draftReply": "Hi Riley,\n\nTuesday at 2 PM works for me. Please send over anything you want me to review beforehand.\n\nThanks.",
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Simple scheduling request needs a concise confirmation draft.",
+      "riskLevel": "low"
+    }
+  },
+  {
+    "id": "fixture-wholesale-001",
+    "thread_id": "thread-wholesale",
+    "subject": "Wholesale pastry inquiry",
+    "from": "Cafe Buyer <buyer@cafe.example>",
+    "to": "sales@example.test",
+    "cc": null,
+    "date": "2026-04-22T16:10:00.000Z",
+    "body_text": "We are opening a cafe and would like wholesale pricing for croissants and muffins, 3 deliveries per week.",
+    "seed_suggestion": {
+      "category": "Wholesale Inquiry",
+      "confidence": 0.86,
+      "recommendedAction": "reply",
+      "targetFolder": null,
+      "draftReply": "Hi,\n\nThanks for reaching out. We can discuss wholesale pricing for croissants and muffins with three deliveries per week. Could you share your expected weekly quantities and preferred delivery days?",
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Potential wholesale lead needs a helpful qualification reply.",
+      "riskLevel": "medium"
+    }
+  },
+  {
+    "id": "fixture-sensitive-001",
+    "thread_id": "thread-sensitive",
+    "subject": "Contract clause and chargeback question",
+    "from": "Pat <pat@examplelegal.test>",
+    "to": "owner@example.test",
+    "cc": null,
+    "date": "2026-04-23T09:00:00.000Z",
+    "body_text": "Can you confirm whether the contract allows us to dispute this chargeback and send the customer's personal details to the processor?",
+    "seed_suggestion": {
+      "category": "Sensitive Legal Financial",
+      "confidence": 0.91,
+      "recommendedAction": "reply",
+      "targetFolder": null,
+      "draftReply": "Hi Pat,\n\nThis involves contract terms, chargeback handling, and customer personal information, so it needs careful review before we respond or share anything. I will review the details and confirm the appropriate next step.",
+      "forwardTo": null,
+      "delegateInstructions": null,
+      "reasoningSummary": "Legal, financial, and personal data issues require high-risk human review.",
+      "riskLevel": "high"
+    }
+  }
+]

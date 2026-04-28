@@ -1,0 +1,16 @@
+services:
+  triage:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      DB_PATH: /data/triage.db
+      PORT: 3000
+    volumes:
+      - triage-data:/data
+
+volumes:
+  triage-data:
