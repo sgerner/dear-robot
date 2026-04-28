@@ -13,9 +13,14 @@ export function load({ url }) {
     limit: url.searchParams.get('limit') || 80
   });
   const messages = listMessages(query);
-  const selectedId = Number(url.searchParams.get('message') || messages[0]?.id || 0);
+  const messageParam = url.searchParams.get('message');
+  const selectedId = messageParam ? Number(messageParam) : (messages[0]?.id || 0);
+  
   return {
-    query,
+    query: {
+      ...query,
+      messageId: messageParam ? Number(messageParam) : null
+    },
     accounts: listAccounts(),
     messages,
     selected: selectedId ? getMessageDetail(selectedId) : null,
