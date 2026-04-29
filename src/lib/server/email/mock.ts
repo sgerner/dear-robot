@@ -27,23 +27,82 @@ export const mockEmailProvider: MailProvider = {
       { name: 'Trash', path: 'Trash', role: 'trash' }
     ];
   },
-  async backfill(_account, limit = 100) {
+  async backfill(_account, limit = 100, folderPath = 'INBOX') {
+    if (folderPath !== 'INBOX') return [];
     return readFixtureEmails().slice(0, limit).map(
       (email): ProviderMessage => ({
-        providerMessageId: email.id,
+        providerMessageId: `${folderPath}:${email.id}`,
         threadId: email.thread_id ?? null,
-        folderPath: 'INBOX',
+        messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+        inReplyTo: null,
+        references: null,
+        folderPath,
         subject: email.subject,
         from: email.from,
         to: email.to,
         cc: email.cc ?? null,
+        bcc: null,
         date: email.date,
         bodyText: email.body_text,
         bodyHtml: null,
+        attachments: [
+          {
+            filename: 'note.txt',
+            contentType: 'text/plain',
+            sizeBytes: 18,
+            contentId: null,
+            disposition: 'attachment',
+            contentBase64: Buffer.from('fixture attachment', 'utf8').toString('base64')
+          }
+        ],
         isRead: false,
-        isAnswered: false
+        isAnswered: false,
+        isFlagged: false
       })
     );
+  },
+  async fetchSinceUid(_account, folderPath, sinceUidExclusive, limit = 100) {
+    if (folderPath !== 'INBOX') return [];
+    const emails = readFixtureEmails();
+    return emails
+      .map((email, index) => ({ email, uid: index + 1 }))
+      .filter((row) => row.uid > sinceUidExclusive)
+      .slice(0, limit)
+      .map(
+        ({ email }): ProviderMessage => ({
+          providerMessageId: `${folderPath}:${email.id}`,
+          threadId: email.thread_id ?? null,
+          messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+          inReplyTo: null,
+          references: null,
+          folderPath,
+          subject: email.subject,
+          from: email.from,
+          to: email.to,
+          cc: email.cc ?? null,
+          bcc: null,
+          date: email.date,
+          bodyText: email.body_text,
+          bodyHtml: null,
+          attachments: [
+            {
+              filename: 'note.txt',
+              contentType: 'text/plain',
+              sizeBytes: 18,
+              contentId: null,
+              disposition: 'attachment',
+              contentBase64: Buffer.from('fixture attachment', 'utf8').toString('base64')
+            }
+          ],
+          isRead: false,
+          isAnswered: false,
+          isFlagged: false
+        })
+      );
+  },
+  async folderState(_account, folderPath) {
+    if (folderPath !== 'INBOX') return { uidValidity: 'mock-static', highestUid: 0 };
+    return { uidValidity: 'mock-static', highestUid: readFixtureEmails().length };
   },
   async watchInbox(_account, _handlers, signal) {
     while (!signal.aborted) {
@@ -56,9 +115,16 @@ export const mockEmailProvider: MailProvider = {
   async markAnswered(account: Account, message: Message) {
     mockActions.push({ type: 'mark_answered', accountId: account.id, messageId: message.id });
   },
+  async markRead(account: Account, message: Message, read: boolean) {
+    mockActions.push({ type: 'mark_read', accountId: account.id, messageId: message.id, read });
+  },
+  async setFlagged(account: Account, message: Message, flagged: boolean) {
+    mockActions.push({ type: 'set_flagged', accountId: account.id, messageId: message.id, flagged });
+  },
   async send(account: Account, options) {
     const messageId = `mock-sent-${Date.now()}-${mockActions.length}`;
     mockActions.push({ type: 'send', accountId: account.id, messageId, ...options });
+    mockActions.push({ type: 'append_sent', accountId: account.id, messageId });
     return { messageId };
   }
 };

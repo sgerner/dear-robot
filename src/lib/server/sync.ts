@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, nowIso } from './db';
-import { accounts, folders, messages } from './db/schema';
+import { accounts, folders, folderSyncState, messageAttachments, messages } from './db/schema';
 import { providerForAccount } from './email/provider';
 import { suggestForMessage } from './services/messages';
 
@@ -61,25 +61,71 @@ export async function syncAccount(accountId: number) {
         })
         .run();
     }
-    const remoteMessages = await provider.backfill(account, 100);
-    for (const remote of remoteMessages) {
-      const inserted = db
-        .insert(messages)
+    const foldersToSync = remoteFolders.length ? remoteFolders : [{ path: 'INBOX' }];
+    for (const folder of foldersToSync) {
+      const now = nowIso();
+      const priorState = db
+        .select()
+        .from(folderSyncState)
+        .where(and(eq(folderSyncState.accountId, accountId), eq(folderSyncState.folderPath, folder.path)))
+        .get();
+      const remoteState = provider.folderState ? await provider.folderState(account, folder.path) : null;
+      const uidValidityChanged =
+        Boolean(priorState?.uidValidity && remoteState?.uidValidity) &&
+        priorState?.uidValidity !== remoteState?.uidValidity;
+      const sinceUid = uidValidityChanged ? 0 : (priorState?.highestUid ?? 0);
+      const incremental =
+        provider.fetchSinceUid && sinceUid > 0
+          ? await provider.fetchSinceUid(account, folder.path, sinceUid, 1000)
+          : await provider.backfill(account, 1000, folder.path);
+      // Reconcile recent state for remote flag/folder changes that may happen on existing messages.
+      const recent = await provider.backfill(account, 200, folder.path);
+      const remoteMessages = mergeByProviderMessageId([...incremental, ...recent]);
+      let maxSeenUid = sinceUid;
+      for (const remote of remoteMessages) {
+        const existedBefore = db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(and(eq(messages.accountId, accountId), eq(messages.providerMessageId, remote.providerMessageId)))
+          .get();
+        const saved = upsertRemoteMessage(accountId, remote);
+        const uid = messageUid(remote.providerMessageId);
+        if (uid > maxSeenUid) maxSeenUid = uid;
+        if (!existedBefore && saved && remote.folderPath.toLowerCase() === 'inbox') {
+          void suggestForMessage(saved.id).catch((error) => {
+            console.error('[triage] AI evaluation failed for inserted message', saved.id, error);
+          });
+        }
+      }
+      const highestUid = Math.max(maxSeenUid, remoteState?.highestUid ?? 0);
+      db.insert(folderSyncState)
         .values({
           accountId,
-          ...remote,
-          cc: remote.cc ?? null,
-          bodyHtml: remote.bodyHtml ?? null,
-          createdAt: nowIso(),
-          updatedAt: nowIso()
+          folderPath: folder.path,
+          uidValidity: remoteState?.uidValidity ?? null,
+          highestUid,
+          lastSyncedAt: now,
+          createdAt: now,
+          updatedAt: now
         })
-        .onConflictDoNothing()
-        .returning()
-        .get();
-      if (inserted) {
-        void suggestForMessage(inserted.id).catch((error) => {
-          console.error('[triage] AI evaluation failed for inserted message', inserted.id, error);
-        });
+        .onConflictDoUpdate({
+          target: [folderSyncState.accountId, folderSyncState.folderPath],
+          set: {
+            uidValidity: remoteState?.uidValidity ?? null,
+            highestUid,
+            lastSyncedAt: now,
+            updatedAt: now
+          }
+        })
+        .run();
+      if (uidValidityChanged) {
+        db.update(accounts)
+          .set({
+            syncError: `UIDVALIDITY changed for ${folder.path}; cursor reset`,
+            updatedAt: nowIso()
+          })
+          .where(eq(accounts.id, accountId))
+          .run();
       }
     }
     db.update(accounts)
@@ -108,20 +154,32 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
         account,
         {
           onMessage: async (remote) => {
-            const inserted = db
-              .insert(messages)
-              .values({
-                accountId,
-                ...remote,
-                cc: remote.cc ?? null,
-                bodyHtml: remote.bodyHtml ?? null,
-                createdAt: nowIso(),
-                updatedAt: nowIso()
-              })
-              .onConflictDoNothing()
-              .returning()
+            const existedBefore = db
+              .select({ id: messages.id })
+              .from(messages)
+              .where(and(eq(messages.accountId, accountId), eq(messages.providerMessageId, remote.providerMessageId)))
               .get();
-            if (inserted) {
+            const inserted = upsertRemoteMessage(accountId, remote);
+            if (inserted && !existedBefore) {
+              const uid = messageUid(remote.providerMessageId);
+              if (uid > 0) {
+                const now = nowIso();
+                db.insert(folderSyncState)
+                  .values({
+                    accountId,
+                    folderPath: remote.folderPath,
+                    uidValidity: null,
+                    highestUid: uid,
+                    lastSyncedAt: now,
+                    createdAt: now,
+                    updatedAt: now
+                  })
+                  .onConflictDoUpdate({
+                    target: [folderSyncState.accountId, folderSyncState.folderPath],
+                    set: { highestUid: uid, lastSyncedAt: now, updatedAt: now }
+                  })
+                  .run();
+              }
               await suggestForMessage(inserted.id);
               db.update(accounts)
                 .set({ lastSyncAt: nowIso(), syncStatus: 'idle', syncError: null, updatedAt: nowIso() })
@@ -153,4 +211,89 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
       }
     }
   }
+}
+
+function upsertRemoteMessage(accountId: number, remote: {
+  providerMessageId: string;
+  threadId?: string | null;
+  messageIdHeader?: string | null;
+  inReplyTo?: string | null;
+  references?: string | null;
+  folderPath: string;
+  subject: string;
+  from: string;
+  to: string;
+  cc?: string | null;
+  bcc?: string | null;
+  date: string;
+  bodyText: string;
+  bodyHtml?: string | null;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+    contentId?: string | null;
+    disposition?: string | null;
+    contentBase64?: string | null;
+  }>;
+  isRead: boolean;
+  isAnswered: boolean;
+  isFlagged: boolean;
+}) {
+  const saved = db
+    .insert(messages)
+    .values({
+      accountId,
+      ...remote,
+      messageIdHeader: remote.messageIdHeader ?? null,
+      inReplyTo: remote.inReplyTo ?? null,
+      references: remote.references ?? null,
+      cc: remote.cc ?? null,
+      bcc: remote.bcc ?? null,
+      bodyHtml: remote.bodyHtml ?? null,
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    })
+    .onConflictDoUpdate({
+      target: [messages.accountId, messages.providerMessageId],
+      set: {
+        folderPath: remote.folderPath,
+        isRead: remote.isRead,
+        isAnswered: remote.isAnswered,
+        isFlagged: remote.isFlagged,
+        updatedAt: nowIso()
+      }
+    })
+    .returning()
+    .get();
+  if (saved?.id && remote.attachments?.length) {
+    db.delete(messageAttachments).where(eq(messageAttachments.messageId, saved.id)).run();
+    for (const attachment of remote.attachments) {
+      db.insert(messageAttachments)
+        .values({
+          messageId: saved.id,
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          sizeBytes: attachment.sizeBytes || 0,
+          contentId: attachment.contentId || null,
+          disposition: attachment.disposition || null,
+          contentBase64: attachment.contentBase64 || null,
+          createdAt: nowIso()
+        })
+        .run();
+    }
+  }
+  return saved;
+}
+
+function messageUid(providerMessageId: string) {
+  const last = providerMessageId.split(':').at(-1) || '';
+  const uid = Number(last);
+  return Number.isFinite(uid) ? uid : 0;
+}
+
+function mergeByProviderMessageId<T extends { providerMessageId: string }>(rows: T[]) {
+  const map = new Map<string, T>();
+  for (const row of rows) map.set(row.providerMessageId, row);
+  return [...map.values()];
 }

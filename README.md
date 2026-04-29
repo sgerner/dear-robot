@@ -3,8 +3,10 @@
 Triage is a self-hosted SvelteKit webmail triage application that keeps architecture simple and UX fast:
 
 - Multi-account IMAP + SMTP
+- Folder-based email client controls
 - SQLite cache for folders/messages/suggestions/actions
 - Review-first AI suggestions (never auto-send / never auto-delete)
+- Installable PWA with browser-side IndexedDB cache for recent working data
 - MCP endpoint for external agent tooling
 - Single Node process, single Docker container
 
@@ -25,8 +27,10 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 - Primary: DeepSeek (`AI_PROVIDER=deepseek`)
 - Primary model default: `deepseek-v4-flash`
 - Fallback: Gemini via OpenAI-compatible endpoint
+- Optional advanced planner profile for harder multi-step tasks
 - Zod schema validation on model output
 - One JSON repair attempt before fallback
+- AI provider details are editable in the UI under Config -> AI Profiles
 
 ### Data + files
 
@@ -44,12 +48,32 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 - Sync status + last sync timestamps per account
 - IMAP backfill + active inbox watch loop using IMAP IDLE
 - SMTP send for reply/forward actions
+- Folder navigation, folder counts, and per-folder message filtering
+- Move, star/unstar, mark read/unread
+- Compose, reply, reply all, forward, cc, and bcc
+- Attachment metadata parsing and authenticated attachment download endpoints
+- Attach-to-send support in compose flows
+- Persistent drafts with autosave
+- Offline compose outbox queue with retry on reconnect
+- Rich/plain compose modes with HTML fallback
+- Bulk selection and bulk operations (read/unread, star/unstar, trash move)
+- Conversation timeline using message/thread headers with subject fallback
+- Address book/autocomplete from observed and manually used contacts
+- Contact CSV import/export APIs and config-panel controls
 - Action execution audit log
 - FTS5-backed message search with automatic LIKE fallback
 - Safe HTML rendering mode for email bodies (sanitized server-side)
+- PWA manifest/service worker and local IndexedDB cache for messages/folders/contacts
 - Memory editor for `AGENT_INSTRUCTIONS.md`
 - Webhook delegate execution with optional signature
 - MCP endpoint with auth token
+- Incremental folder sync cursors + UIDVALIDITY tracking table
+- Folder-role mapping for archive/spam/trash routing
+- Best-effort sent folder append on IMAP accounts after SMTP send
+- Agent task planning (action graph) per email with explicit approve/execute lifecycle
+- Bring-your-own tool gateway (MCP HTTP + CLI) managed in UI
+- Advanced-model routing for complex planning tasks (with fallback behavior)
+- Task run + step + tool call audit persistence
 
 ### Safety guarantees
 
@@ -76,9 +100,10 @@ npm run dev
 
 1. Create `.env` at the repo root.
 2. Set `APP_PASSWORD`, `APP_SESSION_SECRET`, `ENCRYPTION_KEY`, and `MCP_AUTH_TOKEN`.
-3. Set `AI_API_KEY` for DeepSeek (and optional Gemini fallback vars).
+3. Optionally set AI bootstrap defaults in `.env` if you want the first run to seed providers.
 4. Start dev server with `npm run dev`.
 5. Sign in at `/login` with `APP_PASSWORD`.
+6. Open Config -> AI Profiles and save the provider, model, base URL, and API key for each profile you want active.
 
 ### Daily feature branch workflow
 
@@ -217,6 +242,7 @@ MCP_AUTH_TOKEN=
 AI_PROVIDER=deepseek
 AI_MODEL=deepseek-v4-flash
 AI_BASE_URL=https://api.deepseek.com
+# Optional bootstrap API key if you want the DB to seed with a live key on first boot
 AI_API_KEY=
 
 # Fallback AI provider: Gemini OpenAI-compatible API
@@ -224,6 +250,12 @@ AI_FALLBACK_PROVIDER=gemini
 AI_FALLBACK_MODEL=
 AI_FALLBACK_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 AI_FALLBACK_API_KEY=
+
+# Optional advanced planning model (for complex task plans)
+AI_ADVANCED_PROVIDER=deepseek
+AI_ADVANCED_MODEL=deepseek-v4-pro
+AI_ADVANCED_BASE_URL=https://api.deepseek.com
+AI_ADVANCED_API_KEY=
 
 AI_MAX_REPAIR_ATTEMPTS=1
 DEBUG_AI=false
@@ -252,7 +284,6 @@ Startup fails in production if any are missing:
 - `APP_PASSWORD`
 - `ENCRYPTION_KEY`
 - `MCP_AUTH_TOKEN`
-- `AI_API_KEY`
 
 ### Development behavior
 
@@ -332,29 +363,33 @@ Passwords:
 
 ## 8) AI configuration
 
-### DeepSeek primary
+AI settings are managed in the UI:
 
-```env
-AI_PROVIDER=deepseek
-AI_MODEL=deepseek-v4-flash
-AI_BASE_URL=https://api.deepseek.com
-AI_API_KEY=<deepseek-key>
-```
+- Open `Config`
+- Edit `AI Profiles`
+- Save `Primary`, `Fallback`, and `Advanced` profiles as needed
 
-### Gemini fallback
+Each profile supports:
 
-```env
-AI_FALLBACK_PROVIDER=gemini
-AI_FALLBACK_MODEL=<your-model-name>
-AI_FALLBACK_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-AI_FALLBACK_API_KEY=<gemini-key>
-```
+- preset selectors for DeepSeek, Gemini, OpenAI, Anthropic, Vertex/Gemini, OpenRouter, and manual setup
+- model, base URL, API key, and transport editing
+- enabling/disabling without losing stored values
+
+`.env` AI variables remain useful as bootstrap defaults for first-run seeding, but the app reads the saved profiles from SQLite at runtime.
+
+Recommended starting points:
+
+- Fast triage: `deepseek-v4-flash`
+- Balanced default: `gemini-2.5-flash`
+- Strong planning: `deepseek-v4-pro`
+- Careful long-form drafting: `claude-sonnet-4`
+- OpenAI-compatible general purpose: `gpt-4.1-mini`
 
 Behavior summary:
 
-- Primary provider called first
+- Primary profile called first
 - If malformed output: one repair attempt
-- If primary fails: fallback provider (if configured)
+- If primary fails: fallback profile, if configured
 - If all fail: safe error suggestion saved, no action executed
 
 ---
@@ -380,9 +415,63 @@ Sanitization is done server-side before rendering to the browser.
 ### Inbox ergonomics
 
 - Account filter in the left pane (`All accounts` or per account)
+- Folder navigation with unread/total counts
+- Compose drawer for new mail, reply, reply all, and forward
+- Star, read/unread, move, and trash controls in the reading pane
 - Keyboard shortcuts:
   - `/` focuses search
+  - `c` opens compose
   - `j` / `k` moves message selection
+
+## 10.1) PWA and Local Cache
+
+The app includes:
+
+- `/manifest.webmanifest`
+- service worker asset caching
+- standalone display mode for installable browser/PWA use
+- IndexedDB database named `triage-client-cache`
+
+The local cache stores recent message-list rows, folders, contacts, and cache metadata. It is intended for faster UI startup and PWA ergonomics; the server SQLite database remains authoritative.
+
+Phase 2 adds:
+
+- `outbox` queue storage for offline sends
+- local draft cache snapshots alongside server-side persistent drafts
+
+For Phase 1, this cache is sized for normal mailbox operation around 1000 indexed messages. Future phases can move heavier local search to OPFS SQLite if IndexedDB becomes limiting.
+
+## 10.2) Email Client Roadmap
+
+See [EMAIL_CLIENT_ROADMAP.md](./EMAIL_CLIENT_ROADMAP.md) for the phased plan beyond the implemented Phase 4 baseline, including deeper production hardening and richer AI workflows.
+
+## 10.3) Agentic Operations
+
+Phase 4 adds a task/action-graph layer:
+
+- per-email task plans with ordered steps
+- explicit step approval and task execution controls
+- persistent status and outputs for each step
+
+Bring-your-own tools:
+
+- add tool definitions in Config view (`mcp_http` or `cli`)
+- test/enable/disable/remove tools from UI
+- task steps can call tools only through the gateway layer (audited)
+
+Phase 4 route additions:
+
+- `POST /api/messages/:id/plan`
+- `GET /api/tasks`
+- `GET /api/tasks/:id`
+- `POST /api/tasks/:id/approve`
+- `POST /api/tasks/:id/reject`
+- `POST /api/tasks/:id/execute`
+- `GET /api/tools`
+- `POST /api/tools`
+- `POST /api/tools/:id`
+- `POST /api/tools/:id/test`
+- `DELETE /api/tools/:id`
 
 ---
 
@@ -463,6 +552,7 @@ docker build -t triage .
 - `MCP_AUTH_TOKEN` required for MCP endpoint
 - Webhook payloads signed when webhook secret exists
 - Raw model outputs stored only when `DEBUG_AI=true`
+- BYO tools run under instance-owner trust model; treat tool access as highly privileged
 
 ---
 
@@ -472,13 +562,41 @@ docker build -t triage .
 
 Cause:
 
-- invalid or expired `AI_API_KEY`
+- invalid or expired key in the saved AI profile or the bootstrap env value
 
 Actions:
 
-1. Verify key in `.env`
-2. Re-run `npm run eval:ai`
-3. Configure Gemini fallback so production suggestions continue
+1. Open Config -> AI Profiles and confirm the saved key for the active profile
+2. If you are bootstrapping from `.env`, confirm the key there too
+3. Re-run `npm run eval:ai`
+4. Configure Gemini fallback so production suggestions continue
+
+### Runtime uses a different DeepSeek key than `.env`
+
+Cause:
+
+- the app now prefers saved AI profiles from SQLite over bootstrap env defaults
+- environment variables already exported in the shell can still override `.env` at process start
+- long-running Node/dev processes keep env values loaded at startup
+
+Actions:
+
+1. Open Config -> AI Profiles and check which profile is enabled
+2. Confirm the saved API key and base URL for that profile
+3. If you changed `.env`, fully restart `npm run dev` / `node build` / container after edits
+4. Avoid setting conflicting AI env vars in shell profiles when you expect the UI values to win
+
+### Task planning uses model you did not expect
+
+Cause:
+
+- complexity routing may choose advanced planner profile
+
+Actions:
+
+1. Set `AI_ADVANCED_MODEL` explicitly
+2. If you want one model only, set `AI_ADVANCED_MODEL` equal to `AI_MODEL`
+3. Restart app/container after env changes
 
 ### No new mail appears
 

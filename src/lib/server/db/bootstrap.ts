@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { count } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import { env } from '../env';
 import { encryptSecret } from '../security';
-import { aiSuggestions, folders, messages, accounts } from './schema';
+import { aiProfiles, aiSuggestions, contacts, drafts, folders, messageAttachments, messages, accounts, automationPolicies } from './schema';
 import { db, nowIso, sqlite } from './index';
 import { defaultAgentInstructions, ensureAgentInstructions } from '../memory';
 
@@ -64,25 +64,81 @@ CREATE TABLE IF NOT EXISTS folders (
   updated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS folders_account_path_unique ON folders(account_id, path);
+CREATE TABLE IF NOT EXISTS folder_sync_state (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  folder_path TEXT NOT NULL,
+  uid_validity TEXT,
+  highest_uid INTEGER NOT NULL DEFAULT 0,
+  last_synced_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS folder_sync_state_account_path_unique ON folder_sync_state(account_id, folder_path);
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   provider_message_id TEXT NOT NULL,
   thread_id TEXT,
+  message_id_header TEXT,
+  in_reply_to TEXT,
+  "references" TEXT,
   folder_path TEXT NOT NULL,
   subject TEXT NOT NULL,
   "from" TEXT NOT NULL,
   "to" TEXT NOT NULL,
   cc TEXT,
+  bcc TEXT,
   date TEXT NOT NULL,
   body_text TEXT NOT NULL,
   body_html TEXT,
   is_read INTEGER NOT NULL DEFAULT 0,
   is_answered INTEGER NOT NULL DEFAULT 0,
+  is_flagged INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS messages_account_provider_unique ON messages(account_id, provider_message_id);
+CREATE INDEX IF NOT EXISTS messages_account_folder_date_idx ON messages(account_id, folder_path, date);
+CREATE INDEX IF NOT EXISTS messages_account_thread_idx ON messages(account_id, thread_id);
+CREATE TABLE IF NOT EXISTS message_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  content_id TEXT,
+  disposition TEXT,
+  content_base64 TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  name TEXT,
+  source TEXT NOT NULL DEFAULT 'observed',
+  last_seen_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS contacts_account_email_unique ON contacts(account_id, email);
+CREATE TABLE IF NOT EXISTS drafts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL DEFAULT 'compose',
+  source_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+  "to" TEXT NOT NULL DEFAULT '',
+  cc TEXT,
+  bcc TEXT,
+  subject TEXT NOT NULL DEFAULT '',
+  body_text TEXT NOT NULL DEFAULT '',
+  body_html TEXT,
+  attachments_json TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS ai_suggestions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -126,7 +182,93 @@ CREATE TABLE IF NOT EXISTS executed_actions (
   details_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_tools (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT,
+  kind TEXT NOT NULL,
+  endpoint TEXT,
+  command TEXT,
+  args_json TEXT,
+  auth_headers_encrypted TEXT,
+  env_encrypted TEXT,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  read_only INTEGER NOT NULL DEFAULT 0,
+  require_approval_for_write INTEGER NOT NULL DEFAULT 1,
+  timeout_ms INTEGER NOT NULL DEFAULT 30000,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  suggestion_id INTEGER REFERENCES ai_suggestions(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'planned',
+  complexity TEXT NOT NULL DEFAULT 'simple',
+  model_used TEXT NOT NULL,
+  provider_used TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  plan_json TEXT NOT NULL,
+  result_summary TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_steps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_run_id INTEGER NOT NULL REFERENCES task_runs(id) ON DELETE CASCADE,
+  step_index INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  details TEXT NOT NULL,
+  tool_name TEXT,
+  tool_input_json TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  requires_approval INTEGER NOT NULL DEFAULT 1,
+  risk_level TEXT NOT NULL DEFAULT 'low',
+  output_json TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tool_calls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_run_id INTEGER REFERENCES task_runs(id) ON DELETE CASCADE,
+  task_step_id INTEGER REFERENCES task_steps(id) ON DELETE SET NULL,
+  tool_id INTEGER REFERENCES agent_tools(id) ON DELETE SET NULL,
+  tool_name TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  response_json TEXT,
+  status TEXT NOT NULL,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS automation_policies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  always_require_approval INTEGER NOT NULL DEFAULT 1,
+  auto_approve_read_only_tool_calls INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ai_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile TEXT NOT NULL,
+  label TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  transport TEXT NOT NULL DEFAULT 'openai_compatible',
+  model TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  preset TEXT,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ai_profiles_profile_unique ON ai_profiles(profile);
 `);
+  migrateMessageClientColumns();
 
   // FTS5 index for message search with triggers to keep it in sync.
   try {
@@ -163,6 +305,8 @@ SELECT id, subject, "from", "to", body_text FROM messages;
   fs.mkdirSync(env.DATA_DIR, { recursive: true });
   ensureAgentInstructions();
   seedMockDataIfEmpty();
+  seedAutomationDefaults();
+  seedAiDefaults();
 }
 
 function seedMockDataIfEmpty() {
@@ -202,23 +346,40 @@ function seedMockDataIfEmpty() {
       .insert(messages)
       .values({
         accountId: account.id,
-        providerMessageId: email.id,
+        providerMessageId: `INBOX:${email.id}`,
         threadId: email.thread_id ?? null,
+        messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+        inReplyTo: null,
+        references: null,
         folderPath: 'INBOX',
         subject: email.subject,
         from: email.from,
         to: email.to,
         cc: email.cc ?? null,
+        bcc: null,
         date: email.date,
         bodyText: email.body_text,
         bodyHtml: null,
         isRead: false,
         isAnswered: false,
+        isFlagged: false,
         createdAt: now,
         updatedAt: now
       })
       .returning()
       .get();
+    db.insert(messageAttachments)
+      .values({
+        messageId: msg.id,
+        filename: 'note.txt',
+        contentType: 'text/plain',
+        sizeBytes: 18,
+        contentId: null,
+        disposition: 'attachment',
+        contentBase64: Buffer.from('fixture attachment', 'utf8').toString('base64'),
+        createdAt: now
+      })
+      .run();
     if (email.seed_suggestion) {
       db.insert(aiSuggestions)
         .values({
@@ -233,8 +394,151 @@ function seedMockDataIfEmpty() {
         .run();
     }
   }
+  seedContactsForMessages(account.id);
+  seedDraft(account.id);
   const memoryPath = path.join(env.DATA_DIR, 'AGENT_INSTRUCTIONS.md');
   if (!fs.existsSync(memoryPath)) fs.writeFileSync(memoryPath, defaultAgentInstructions, 'utf8');
+}
+
+function seedAutomationDefaults() {
+  const existing = db.select({ value: count() }).from(automationPolicies).get()?.value ?? 0;
+  if (existing > 0) return;
+  const now = nowIso();
+  db.insert(automationPolicies)
+    .values({
+      name: 'default',
+      alwaysRequireApproval: true,
+      autoApproveReadOnlyToolCalls: false,
+      createdAt: now,
+      updatedAt: now
+    })
+    .run();
+}
+
+function seedAiDefaults() {
+  const existing = db.select({ value: count() }).from(aiProfiles).get()?.value ?? 0;
+  if (existing > 0) return;
+  const now = nowIso();
+  db.insert(aiProfiles)
+    .values([
+      {
+        profile: 'primary',
+        label: 'Primary',
+        provider: env.AI_PROVIDER || 'deepseek',
+        transport: 'openai_compatible',
+        model: env.AI_MODEL || 'deepseek-v4-flash',
+        baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
+        apiKeyEncrypted: env.AI_API_KEY ? encryptSecret(env.AI_API_KEY) : null,
+        preset: env.AI_PROVIDER || 'deepseek',
+        isEnabled: true,
+        notes: 'Fast default triage model.',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        profile: 'fallback',
+        label: 'Fallback',
+        provider: env.AI_FALLBACK_PROVIDER || 'gemini',
+        transport: 'openai_compatible',
+        model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
+        baseUrl: env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        apiKeyEncrypted: env.AI_FALLBACK_API_KEY ? encryptSecret(env.AI_FALLBACK_API_KEY) : null,
+        preset: env.AI_FALLBACK_PROVIDER || 'gemini',
+        isEnabled: true,
+        notes: 'Fallback provider when the primary model fails.',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        profile: 'advanced',
+        label: 'Advanced Planner',
+        provider: env.AI_ADVANCED_PROVIDER || env.AI_PROVIDER || 'deepseek',
+        transport: 'openai_compatible',
+        model: env.AI_ADVANCED_MODEL || 'deepseek-v4-pro',
+        baseUrl: env.AI_ADVANCED_BASE_URL || env.AI_BASE_URL || 'https://api.deepseek.com',
+        apiKeyEncrypted: env.AI_ADVANCED_API_KEY ? encryptSecret(env.AI_ADVANCED_API_KEY) : null,
+        preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
+        isEnabled: true,
+        notes: 'Used for complex multi-step planning.',
+        createdAt: now,
+        updatedAt: now
+      }
+    ])
+    .run();
+}
+
+function migrateMessageClientColumns() {
+  const columns = sqlite.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  const additions: Array<[string, string]> = [
+    ['message_id_header', 'TEXT'],
+    ['in_reply_to', 'TEXT'],
+    ['references', 'TEXT'],
+    ['bcc', 'TEXT'],
+    ['is_flagged', 'INTEGER NOT NULL DEFAULT 0']
+  ];
+  for (const [name, definition] of additions) {
+    if (!existing.has(name)) sqlite.exec(`ALTER TABLE messages ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function seedContactsForMessages(accountId: number) {
+  const now = nowIso();
+  const rows = db.select().from(messages).where(eq(messages.accountId, accountId)).all();
+  for (const message of rows) {
+    for (const address of [message.from, message.to, message.cc].filter(Boolean)) {
+      for (const contact of extractContacts(address || '')) {
+        db.insert(contacts)
+          .values({
+            accountId,
+            email: contact.email,
+            name: contact.name,
+            source: 'observed',
+            lastSeenAt: message.date,
+            createdAt: now,
+            updatedAt: now
+          })
+          .onConflictDoUpdate({
+            target: [contacts.accountId, contacts.email],
+            set: { name: contact.name, lastSeenAt: message.date, updatedAt: now }
+          })
+          .run();
+      }
+    }
+  }
+}
+
+function seedDraft(accountId: number) {
+  const now = nowIso();
+  db.insert(drafts)
+    .values({
+      accountId,
+      mode: 'compose',
+      sourceMessageId: null,
+      to: '',
+      cc: null,
+      bcc: null,
+      subject: '',
+      bodyText: '',
+      bodyHtml: null,
+      attachmentsJson: JSON.stringify([]),
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now
+    })
+    .run();
+}
+
+function extractContacts(value: string) {
+  return value
+    .split(',')
+    .map((part) => {
+      const match = part.match(/^(.*?)<([^>]+)>$/);
+      if (match) return { name: match[1].trim().replace(/^"|"$/g, '') || null, email: match[2].trim().toLowerCase() };
+      const email = part.trim().toLowerCase();
+      return email.includes('@') ? { name: null, email } : null;
+    })
+    .filter((contact): contact is { name: string | null; email: string } => Boolean(contact?.email));
 }
 
 function readFixtureEmails(): FixtureEmail[] {
@@ -243,14 +547,28 @@ function readFixtureEmails(): FixtureEmail[] {
 }
 
 export function resetForTests() {
-  sqlite.exec(`
+  try {
+    sqlite.exec(`
 DELETE FROM executed_actions;
 DELETE FROM feedback_log;
 DELETE FROM ai_suggestions;
+DELETE FROM tool_calls;
+DELETE FROM task_steps;
+DELETE FROM task_runs;
+DELETE FROM agent_tools;
+DELETE FROM automation_policies;
+DELETE FROM ai_profiles;
+DELETE FROM drafts;
+DELETE FROM message_attachments;
 DELETE FROM messages;
+DELETE FROM folder_sync_state;
+DELETE FROM contacts;
 DELETE FROM folders;
 DELETE FROM accounts;
 `);
+  } catch {
+    // Fresh in-memory databases may not have been bootstrapped yet.
+  }
   try {
     sqlite.exec(`DELETE FROM messages_fts;`);
   } catch {

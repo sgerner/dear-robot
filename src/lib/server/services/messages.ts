@@ -1,7 +1,7 @@
-import { and, desc, eq, like, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, nowIso } from '../db';
-import { accounts, aiSuggestions, executedActions, feedbackLog, folders, messages } from '../db/schema';
+import { accounts, aiSuggestions, contacts, drafts, executedActions, feedbackLog, folders, messageAttachments, messages } from '../db/schema';
 import { readAgentInstructions } from '../memory';
 import { generateEmailSuggestion } from '../ai/provider';
 import { EmailSuggestionSchema, type EmailSuggestion } from '../ai/schema';
@@ -14,7 +14,81 @@ export const MessageQuerySchema = z.object({
   q: z.string().optional(),
   view: z.string().optional(),
   accountId: z.coerce.number().optional(),
+  folder: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50)
+});
+
+export const MessageMoveSchema = z.object({
+  folderPath: z.string().min(1)
+});
+
+export const MessageReadSchema = z.object({
+  read: z.boolean()
+});
+
+export const MessageFlagSchema = z.object({
+  flagged: z.boolean()
+});
+
+export const BulkMessageActionSchema = z
+  .object({
+    messageIds: z.array(z.coerce.number().int().positive()).min(1).max(500),
+    action: z.enum(['move', 'mark_read', 'mark_unread', 'flag', 'unflag']),
+    folderPath: z.string().min(1).optional()
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === 'move' && !value.folderPath) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'folderPath is required when action is move' });
+    }
+  });
+
+export const ComposeSendSchema = z.object({
+  accountId: z.coerce.number().int().positive(),
+  to: z.string().min(1),
+  cc: z.string().nullable().optional(),
+  bcc: z.string().nullable().optional(),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+  bodyHtml: z.string().nullable().optional(),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string().min(1),
+        contentType: z.string().nullable().optional(),
+        contentBase64: z.string().min(1)
+      })
+    )
+    .optional(),
+  mode: z.enum(['compose', 'reply', 'reply_all', 'forward']).default('compose'),
+  draftId: z.coerce.number().int().positive().nullable().optional(),
+  sourceMessageId: z.coerce.number().int().positive().nullable().optional()
+});
+
+export const DraftUpsertSchema = z.object({
+  id: z.coerce.number().int().positive().nullable().optional(),
+  accountId: z.coerce.number().int().positive(),
+  mode: z.enum(['compose', 'reply', 'reply_all', 'forward']).default('compose'),
+  sourceMessageId: z.coerce.number().int().positive().nullable().optional(),
+  to: z.string().default(''),
+  cc: z.string().nullable().optional(),
+  bcc: z.string().nullable().optional(),
+  subject: z.string().default(''),
+  bodyText: z.string().default(''),
+  bodyHtml: z.string().nullable().optional(),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string().min(1),
+        contentType: z.string().nullable().optional(),
+        contentBase64: z.string().min(1)
+      })
+    )
+    .default([])
+});
+
+export const ContactImportSchema = z.object({
+  accountId: z.coerce.number().int().positive().nullable().optional(),
+  csv: z.string().min(1)
 });
 
 export const SuggestionEditSchema = z.object({
@@ -45,6 +119,7 @@ function latestSuggestionSubquery() {
 export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   const where = [];
   if (query.accountId) where.push(eq(messages.accountId, query.accountId));
+  if (query.folder) where.push(eq(messages.folderPath, query.folder));
   const ftsQuery = query.q ? toFtsQuery(query.q) : '';
   const likePattern = query.q ? `%${query.q}%` : '';
   if (ftsQuery) where.push(sql`messages.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${ftsQuery})`);
@@ -55,6 +130,8 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   if (query.view === 'executed') {
     where.push(sql`EXISTS (SELECT 1 FROM executed_actions a WHERE a.message_id = messages.id)`);
   }
+  if (query.view === 'starred') where.push(eq(messages.isFlagged, true));
+  if (query.view === 'unread') where.push(eq(messages.isRead, false));
   try {
     const rows = db
       .select({
@@ -68,6 +145,8 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
         date: messages.date,
         snippet: sql<string>`substr(${messages.bodyText}, 1, 180)`,
         isRead: messages.isRead,
+        isAnswered: messages.isAnswered,
+        isFlagged: messages.isFlagged,
         latestSuggestionId: latestSuggestionSubquery(),
         category: aiSuggestions.category,
         recommendedAction: aiSuggestions.recommendedAction,
@@ -87,6 +166,7 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
     // FTS query syntax can still fail on malformed input; fall back to LIKE search.
     const fallbackWhere = [];
     if (query.accountId) fallbackWhere.push(eq(messages.accountId, query.accountId));
+    if (query.folder) fallbackWhere.push(eq(messages.folderPath, query.folder));
     fallbackWhere.push(or(like(messages.subject, likePattern), like(messages.from, likePattern), like(messages.to, likePattern), like(messages.bodyText, likePattern)));
     if (query.view === 'pending') {
       fallbackWhere.push(sql`EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.message_id = messages.id AND s.status = 'pending')`);
@@ -94,6 +174,8 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
     if (query.view === 'executed') {
       fallbackWhere.push(sql`EXISTS (SELECT 1 FROM executed_actions a WHERE a.message_id = messages.id)`);
     }
+    if (query.view === 'starred') fallbackWhere.push(eq(messages.isFlagged, true));
+    if (query.view === 'unread') fallbackWhere.push(eq(messages.isRead, false));
     return db
       .select({
         id: messages.id,
@@ -106,6 +188,8 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
         date: messages.date,
         snippet: sql<string>`substr(${messages.bodyText}, 1, 180)`,
         isRead: messages.isRead,
+        isAnswered: messages.isAnswered,
+        isFlagged: messages.isFlagged,
         latestSuggestionId: latestSuggestionSubquery(),
         category: aiSuggestions.category,
         recommendedAction: aiSuggestions.recommendedAction,
@@ -126,6 +210,7 @@ export function getMessageDetail(id: number) {
   const message = db.select().from(messages).where(eq(messages.id, id)).get();
   if (!message) return null;
   const account = db.select().from(accounts).where(eq(accounts.id, message.accountId)).get();
+  const attachments = db.select().from(messageAttachments).where(eq(messageAttachments.messageId, id)).all();
   const suggestions = db
     .select()
     .from(aiSuggestions)
@@ -133,16 +218,258 @@ export function getMessageDetail(id: number) {
     .orderBy(desc(aiSuggestions.createdAt))
     .all();
   const executed = db.select().from(executedActions).where(eq(executedActions.messageId, id)).orderBy(desc(executedActions.createdAt)).all();
+  const threadKey = message.threadId || normalizedSubject(message.subject);
+  const thread = db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.accountId, message.accountId), or(eq(messages.threadId, threadKey), like(messages.subject, `%${normalizedSubject(message.subject)}%`))))
+    .orderBy(messages.date)
+    .limit(50)
+    .all();
   return {
     message: {
       ...message,
       safeBodyHtml: sanitizeEmailHtml(message.bodyHtml)
     },
     account,
+    attachments: attachments.map((attachment) => ({
+      ...attachment,
+      hasContent: Boolean(attachment.contentBase64)
+    })),
     suggestion: suggestions[0] ?? null,
     suggestions,
-    executed
+    executed,
+    thread: thread.map((threadMessage) => ({
+      ...threadMessage,
+      safeBodyHtml: sanitizeEmailHtml(threadMessage.bodyHtml)
+    }))
   };
+}
+
+export function getAttachment(messageId: number, attachmentId: number) {
+  return db
+    .select()
+    .from(messageAttachments)
+    .where(and(eq(messageAttachments.id, attachmentId), eq(messageAttachments.messageId, messageId)))
+    .get();
+}
+
+export function listFoldersWithCounts(accountId?: number) {
+  const where = accountId ? eq(folders.accountId, accountId) : undefined;
+  const folderRows = db
+    .select({
+      id: folders.id,
+      accountId: folders.accountId,
+      accountEmail: accounts.email,
+      name: folders.name,
+      path: folders.path,
+      role: folders.role,
+      total: sql<number>`(SELECT count(*) FROM messages m WHERE m.account_id = folders.account_id AND m.folder_path = folders.path)`,
+      unread: sql<number>`(SELECT count(*) FROM messages m WHERE m.account_id = folders.account_id AND m.folder_path = folders.path AND m.is_read = 0)`
+    })
+    .from(folders)
+    .innerJoin(accounts, eq(accounts.id, folders.accountId))
+    .where(where)
+    .orderBy(accounts.email, folders.path)
+    .all();
+  return folderRows;
+}
+
+export function listContacts(query = '', limit = 50) {
+  const pattern = `%${query}%`;
+  return db
+    .select()
+    .from(contacts)
+    .where(query ? or(like(contacts.email, pattern), like(contacts.name, pattern)) : undefined)
+    .orderBy(desc(contacts.lastSeenAt))
+    .limit(limit)
+    .all();
+}
+
+export function exportContactsCsv(accountId?: number) {
+  const rows = db
+    .select()
+    .from(contacts)
+    .where(accountId ? eq(contacts.accountId, accountId) : undefined)
+    .orderBy(contacts.accountId, contacts.email)
+    .all();
+  const header = 'account_id,email,name,source,last_seen_at';
+  const body = rows
+    .map((row) => [row.accountId ?? '', row.email, row.name ?? '', row.source, row.lastSeenAt].map(csvEscape).join(','))
+    .join('\n');
+  return `${header}\n${body}\n`;
+}
+
+export function importContactsCsv(input: z.infer<typeof ContactImportSchema>) {
+  const lines = input.csv
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return { imported: 0 };
+  const rows = lines[0].toLowerCase().includes('email') ? lines.slice(1) : lines;
+  let imported = 0;
+  const now = nowIso();
+  for (const row of rows) {
+    const columns = splitCsvLine(row);
+    const hasAccountPrefix = Boolean(columns[0] && !columns[0].includes('@'));
+    const accountIdRaw = hasAccountPrefix ? columns[0] : undefined;
+    const emailRaw = hasAccountPrefix ? columns[1] : columns[0];
+    const nameRaw = hasAccountPrefix ? columns[2] : columns[1];
+    const sourceRaw = hasAccountPrefix ? columns[3] : columns[2];
+    const email = (emailRaw || '').trim().toLowerCase();
+    if (!email.includes('@')) continue;
+    const targetAccountId = input.accountId ?? parseNullableInt(accountIdRaw);
+    const name = nameRaw?.trim() || null;
+    db.insert(contacts)
+      .values({
+        accountId: targetAccountId,
+        email,
+        name,
+        source: sourceRaw?.trim() || 'import',
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now
+      })
+      .onConflictDoUpdate({
+        target: [contacts.accountId, contacts.email],
+        set: { name, source: sourceRaw?.trim() || 'import', lastSeenAt: now, updatedAt: now }
+      })
+      .run();
+    imported += 1;
+  }
+  return { imported };
+}
+
+export function listDrafts(accountId?: number) {
+  return db
+    .select()
+    .from(drafts)
+    .where(accountId ? eq(drafts.accountId, accountId) : undefined)
+    .orderBy(desc(drafts.updatedAt))
+    .all()
+    .map((draft) => ({
+      ...draft,
+      attachments: parseAttachments(draft.attachmentsJson)
+    }));
+}
+
+export function upsertDraft(input: z.infer<typeof DraftUpsertSchema>) {
+  const now = nowIso();
+  const attachmentsJson = JSON.stringify(input.attachments || []);
+  if (input.id) {
+    return db
+      .update(drafts)
+      .set({
+        accountId: input.accountId,
+        mode: input.mode,
+        sourceMessageId: input.sourceMessageId ?? null,
+        to: input.to,
+        cc: input.cc ?? null,
+        bcc: input.bcc ?? null,
+        subject: input.subject,
+        bodyText: input.bodyText,
+        bodyHtml: input.bodyHtml ?? null,
+        attachmentsJson,
+        status: 'draft',
+        updatedAt: now
+      })
+      .where(eq(drafts.id, input.id))
+      .returning()
+      .get();
+  }
+  return db
+    .insert(drafts)
+    .values({
+      accountId: input.accountId,
+      mode: input.mode,
+      sourceMessageId: input.sourceMessageId ?? null,
+      to: input.to,
+      cc: input.cc ?? null,
+      bcc: input.bcc ?? null,
+      subject: input.subject,
+      bodyText: input.bodyText,
+      bodyHtml: input.bodyHtml ?? null,
+      attachmentsJson,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now
+    })
+    .returning()
+    .get();
+}
+
+export function deleteDraft(id: number) {
+  return db.delete(drafts).where(eq(drafts.id, id)).returning().get();
+}
+
+export async function moveMessage(id: number, folderPath: string) {
+  const detail = getMessageDetail(id);
+  if (!detail?.message || !detail.account) throw new Error('Message not found');
+  const provider = providerForAccount(detail.account);
+  await provider.move(detail.account, detail.message, folderPath);
+  return db.update(messages).set({ folderPath, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
+}
+
+export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionSchema>) {
+  const rows = db
+    .select()
+    .from(messages)
+    .where(inArray(messages.id, input.messageIds))
+    .all();
+  let processed = 0;
+  for (const row of rows) {
+    if (input.action === 'move') await moveMessage(row.id, input.folderPath || 'INBOX');
+    if (input.action === 'mark_read') await setMessageRead(row.id, true);
+    if (input.action === 'mark_unread') await setMessageRead(row.id, false);
+    if (input.action === 'flag') await setMessageFlagged(row.id, true);
+    if (input.action === 'unflag') await setMessageFlagged(row.id, false);
+    processed += 1;
+  }
+  return { processed, requested: input.messageIds.length };
+}
+
+export async function setMessageRead(id: number, read: boolean) {
+  const detail = getMessageDetail(id);
+  if (!detail?.message || !detail.account) throw new Error('Message not found');
+  const provider = providerForAccount(detail.account);
+  await provider.markRead(detail.account, detail.message, read);
+  return db.update(messages).set({ isRead: read, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
+}
+
+export async function setMessageFlagged(id: number, flagged: boolean) {
+  const detail = getMessageDetail(id);
+  if (!detail?.message || !detail.account) throw new Error('Message not found');
+  const provider = providerForAccount(detail.account);
+  await provider.setFlagged(detail.account, detail.message, flagged);
+  return db.update(messages).set({ isFlagged: flagged, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
+}
+
+export async function sendComposedMessage(input: z.infer<typeof ComposeSendSchema>) {
+  const account = db.select().from(accounts).where(eq(accounts.id, input.accountId)).get();
+  if (!account) throw new Error('Account not found');
+  const source = input.sourceMessageId ? db.select().from(messages).where(eq(messages.id, input.sourceMessageId)).get() : null;
+  const provider = providerForAccount(account);
+  const sent = await provider.send(account, {
+    to: input.to,
+    cc: input.cc || null,
+    bcc: input.bcc || null,
+    subject: input.subject,
+    text: input.body,
+    html: input.bodyHtml || null,
+    inReplyTo: source?.messageIdHeader || source?.threadId || null,
+    references: source?.references || source?.messageIdHeader || null,
+    attachments: input.attachments || []
+  });
+  if (source && ['reply', 'reply_all'].includes(input.mode)) {
+    await provider.markAnswered(account, source);
+    db.update(messages).set({ isAnswered: true, updatedAt: nowIso() }).where(eq(messages.id, source.id)).run();
+  }
+  const now = nowIso();
+  upsertContactsFromAddressList(account.id, [input.to, input.cc || '', input.bcc || ''], now);
+  if (input.draftId) {
+    db.update(drafts).set({ status: 'sent', updatedAt: now }).where(eq(drafts.id, input.draftId)).run();
+  }
+  return { ok: true, messageId: sent.messageId, sourceMessageId: source?.id ?? null, draftId: input.draftId ?? null };
 }
 
 export async function suggestForMessage(id: number, options: { note?: string | null; existing?: EmailSuggestion | null } = {}) {
@@ -311,10 +638,11 @@ function resolveTargetFolder(accountId: number, suggestion: typeof aiSuggestions
   const folderRows = db.select().from(folders).where(eq(folders.accountId, accountId)).all();
   const find = (...names: string[]) =>
     folderRows.find((folder) => names.some((name) => folder.path.toLowerCase() === name.toLowerCase()))?.path;
+  const findByRole = (role: string) => folderRows.find((folder) => folder.role?.toLowerCase() === role)?.path;
   if (suggestion.recommendedAction === 'move_to_folder') return suggestion.targetFolder || undefined;
-  if (suggestion.recommendedAction === 'archive') return find('Archive');
-  if (suggestion.recommendedAction === 'spam') return find('Spam', 'Junk', 'Spam Review');
-  if (suggestion.recommendedAction === 'delete') return find('Trash', 'Deleted Items');
+  if (suggestion.recommendedAction === 'archive') return findByRole('archive') || find('Archive');
+  if (suggestion.recommendedAction === 'spam') return findByRole('spam') || find('Spam', 'Junk', 'Spam Review');
+  if (suggestion.recommendedAction === 'delete') return findByRole('trash') || find('Trash', 'Deleted Items');
   return undefined;
 }
 
@@ -342,4 +670,90 @@ function toFtsQuery(input: string) {
     .filter(Boolean);
   if (!tokens.length) return '';
   return tokens.map((token) => `${token}*`).join(' AND ');
+}
+
+function normalizedSubject(subject: string) {
+  return subject.toLowerCase().replace(/^(re|fwd?):\s*/i, '').trim();
+}
+
+function upsertContactsFromAddressList(accountId: number, values: string[], seenAt: string) {
+  for (const value of values) {
+    for (const contact of extractContacts(value)) {
+      db.insert(contacts)
+        .values({
+          accountId,
+          email: contact.email,
+          name: contact.name,
+          source: 'manual',
+          lastSeenAt: seenAt,
+          createdAt: seenAt,
+          updatedAt: seenAt
+        })
+        .onConflictDoUpdate({
+          target: [contacts.accountId, contacts.email],
+          set: { name: contact.name, source: 'manual', lastSeenAt: seenAt, updatedAt: seenAt }
+        })
+        .run();
+    }
+  }
+}
+
+function extractContacts(value: string) {
+  return value
+    .split(',')
+    .map((part) => {
+      const match = part.trim().match(/^(.*?)<([^>]+)>$/);
+      if (match) return { name: match[1].trim().replace(/^"|"$/g, '') || null, email: match[2].trim().toLowerCase() };
+      const email = part.trim().toLowerCase();
+      return email.includes('@') ? { name: null, email } : null;
+    })
+    .filter((contact): contact is { name: string | null; email: string } => Boolean(contact?.email));
+}
+
+function parseAttachments(value: string | null) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function csvEscape(value: string | number) {
+  const raw = String(value ?? '');
+  if (!raw.includes('"') && !raw.includes(',') && !raw.includes('\n')) return raw;
+  return `"${raw.replace(/"/g, '""')}"`;
+}
+
+function splitCsvLine(line: string) {
+  const out: string[] = [];
+  let current = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (quoted && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === ',' && !quoted) {
+      out.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  out.push(current);
+  return out;
+}
+
+function parseNullableInt(value: string | undefined) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }

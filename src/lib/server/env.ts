@@ -24,6 +24,10 @@ const EnvSchema = z.object({
   AI_FALLBACK_MODEL: z.string().optional(),
   AI_FALLBACK_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
   AI_FALLBACK_API_KEY: z.string().optional(),
+  AI_ADVANCED_PROVIDER: z.string().default('deepseek'),
+  AI_ADVANCED_MODEL: z.string().optional(),
+  AI_ADVANCED_BASE_URL: z.string().optional(),
+  AI_ADVANCED_API_KEY: z.string().optional(),
   AI_MAX_REPAIR_ATTEMPTS: z.coerce.number().default(1),
   DEBUG_AI: z
     .string()
@@ -54,8 +58,7 @@ const requiredProductionSecrets = [
   'APP_SESSION_SECRET',
   'APP_PASSWORD',
   'ENCRYPTION_KEY',
-  'MCP_AUTH_TOKEN',
-  'AI_API_KEY'
+  'MCP_AUTH_TOKEN'
 ] as const;
 
 if (isProduction) {

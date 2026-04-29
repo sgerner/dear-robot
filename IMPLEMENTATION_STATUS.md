@@ -17,14 +17,25 @@
 - Safe HTML email rendering mode (server-side sanitization) plus text fallback.
 - UX improvements: account-level inbox filter and keyboard shortcuts (`/`, `j`, `k`).
 - Svelte check warnings removed (clean `npm run check`).
+- Phase 1 email-client expansion: folder navigation/counts, per-folder filtering, move, star/unstar, read/unread, compose, reply, reply all, forward, cc/bcc, conversation view, contacts/autocomplete.
+- PWA installability: manifest, icon, service worker, standalone mode metadata.
+- Browser/PWA local cache: IndexedDB cache for recent messages, folders, contacts, and cache metadata.
+- Future roadmap documented in `EMAIL_CLIENT_ROADMAP.md`.
+- Phase 2 implemented: attachment metadata storage + authenticated download endpoints, attach-to-send, server drafts with autosave, offline outbox queue retry, and rich/plain compose with HTML fallback.
+- Phase 3 implemented: folder UID cursor state (`folder_sync_state`), incremental sync fetch + recent reconciliation pass, provider role mapping for archive/spam/trash, IMAP sent-folder append after SMTP send, bulk message operations, and contacts CSV import/export.
+- Phase 4 implemented: AI action-graph task planning, task approval/execution lifecycle, bring-your-own tool gateway (`mcp_http` + `cli`) with UI management, tool call audit logging, and advanced model routing for complex plans.
+- AI provider profiles are now UI-managed with saved presets for DeepSeek, Gemini, OpenAI, Anthropic, Vertex, OpenRouter, and manual configuration.
 
 ## Remaining
 
-- None for the requested v1 acceptance pass.
+- Optional Phase 4 expansion: conversation summaries, multi-variant drafts, follow-up scheduling automations, and richer delegation callbacks.
+- Optional AI UX expansion: per-profile test button, richer provider-specific hints, and model comparison previews.
+- Optional sync hardening: remote expunge propagation and tighter sync throttling for very large mailboxes.
 
 ## Known Limitations
 
-- The local `.env` DeepSeek API key currently returns HTTP 401, so `npm run eval:ai` validates structured AI-error fallback outputs instead of real model classifications unless valid provider credentials are supplied.
+- Attachment security hardening (malware scanning and policy enforcement) is not yet implemented.
+- IMAP sent-folder append is best-effort; when providers reject append, send still succeeds and message will appear once provider-side sent sync catches up.
 
 ## Commands Run
 
@@ -37,14 +48,19 @@
 - `npm run build`
 - `docker build -t triage .`
 - Re-run pass after UX/search fixes: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
+- Phase 1 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
+- Live credential smoke check: IMAP connect/list succeeded with 8 folders; SMTP `verify()` succeeded. No live messages were sent and no mailbox state was changed.
+- Phase 2 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`
+- Phase 3 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
+- Phase 4 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
 
 ## Current Test Status
 
 - `npm run check`: pass, 0 warnings.
 - `npm run lint`: pass.
-- `npm run test:unit`: pass, 1 test.
-- `npm run test:e2e`: pass, 2 tests.
-- `npm run eval:ai`: pass schema validation and summary output; DeepSeek returned 401 for the configured key, so safe AI-error suggestions were produced.
+- `npm run test:unit`: pass, 7 tests.
+- `npm run test:e2e`: pass, 6 tests.
+- `npm run eval:ai`: pass with real DeepSeek credentials and structured outputs for all fixtures.
 - `npm run build`: pass.
 - `docker build -t triage .`: pass.
 
