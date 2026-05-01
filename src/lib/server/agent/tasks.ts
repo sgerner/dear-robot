@@ -4,6 +4,7 @@ import { type EmailSuggestion } from '../ai/schema';
 import { db, nowIso } from '../db';
 import { aiSuggestions, automationPolicies, messages, taskRuns, taskSteps } from '../db/schema';
 import { readAgentInstructions } from '../memory';
+import { buildMemoryPromptContext } from '../memory-learning';
 import { getMessageDetail, listFoldersWithCounts, moveMessage } from '../services/messages';
 import { buildAgentPlanMessages } from './prompts';
 import { AgentPlanSchema, TaskApproveSchema, TaskPlanInputSchema, type AgentPlan } from './schema';
@@ -62,6 +63,11 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
   const complexity = classifyComplexity(detail.message.subject, detail.message.bodyText, parsed.note || null);
   const messagesPrompt = buildAgentPlanMessages({
     agentInstructions: readAgentInstructions(),
+    memoryContext: buildMemoryPromptContext({
+      subject: detail.message.subject,
+      bodyText: detail.message.bodyText,
+      note: parsed.note || null
+    }).text,
     subject: detail.message.subject,
     sender: detail.message.from,
     recipients: detail.message.to,
@@ -361,26 +367,31 @@ function suggestionToShape(
 function normalizePlanWithPolicy(
   plan: AgentPlan,
   policy: { alwaysRequireApproval: boolean; autoApproveReadOnlyToolCalls: boolean },
-  tools: Array<{ name: string; readOnly: boolean }>
+  tools: Array<{ name: string; readOnly: boolean; requireApprovalForWrite?: boolean }>
 ) {
   const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
   const steps = plan.steps.map((step) => {
     let requiresApproval = step.requires_approval || policy.alwaysRequireApproval;
+    if (isNonDestructiveInternalStep(step.kind)) requiresApproval = false;
     if (step.kind === 'tool_call' && step.tool_name && policy.autoApproveReadOnlyToolCalls) {
       const tool = toolMap.get(step.tool_name);
-      if (tool?.readOnly) requiresApproval = false;
+      if (tool?.readOnly || tool?.requireApprovalForWrite === false) requiresApproval = false;
     }
     return { ...step, requires_approval: requiresApproval };
   });
-  return { ...plan, requires_user_approval: true, steps };
+  return { ...plan, requires_user_approval: steps.some((step) => step.requires_approval), steps };
 }
 
 function getAutomationPolicy() {
   const policy = db.select().from(automationPolicies).orderBy(automationPolicies.id).get();
   return {
     alwaysRequireApproval: policy?.alwaysRequireApproval ?? true,
-    autoApproveReadOnlyToolCalls: policy?.autoApproveReadOnlyToolCalls ?? false
+    autoApproveReadOnlyToolCalls: policy?.autoApproveReadOnlyToolCalls ?? true
   };
+}
+
+function isNonDestructiveInternalStep(kind: AgentPlan['steps'][number]['kind']) {
+  return kind === 'draft_reply' || kind === 'mark_done';
 }
 
 function safeParseJson(value: string | null | undefined) {

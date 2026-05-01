@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS accounts (
   smtp_port INTEGER NOT NULL,
   smtp_username TEXT NOT NULL,
   smtp_password_encrypted TEXT NOT NULL,
+  auth_type TEXT NOT NULL DEFAULT 'password',
+  oauth_provider TEXT,
+  oauth_access_token_encrypted TEXT,
+  oauth_refresh_token_encrypted TEXT,
+  oauth_access_token_expires_at TEXT,
   is_enabled INTEGER NOT NULL DEFAULT 1,
   last_sync_at TEXT,
   sync_status TEXT NOT NULL DEFAULT 'idle',
@@ -182,6 +187,85 @@ CREATE TABLE IF NOT EXISTS executed_actions (
   details_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_action_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  suggestion_id INTEGER REFERENCES ai_suggestions(id) ON DELETE CASCADE,
+  task_run_id INTEGER,
+  action_type TEXT NOT NULL,
+  risk_level TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'proposed',
+  title TEXT NOT NULL,
+  details_json TEXT NOT NULL,
+  approval_reason TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'autopilot',
+  idempotency_key TEXT NOT NULL,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  executed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS agent_action_queue_idempotency_unique ON agent_action_queue(idempotency_key);
+CREATE TABLE IF NOT EXISTS autopilot_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  status TEXT NOT NULL DEFAULT 'running',
+  mode TEXT NOT NULL DEFAULT 'dry_run',
+  scanned_count INTEGER NOT NULL DEFAULT 0,
+  suggested_count INTEGER NOT NULL DEFAULT 0,
+  queued_count INTEGER NOT NULL DEFAULT 0,
+  executed_count INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  summary_json TEXT NOT NULL DEFAULT '{}',
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS ai_observability (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+  suggestion_id INTEGER REFERENCES ai_suggestions(id) ON DELETE SET NULL,
+  task_run_id INTEGER REFERENCES task_runs(id) ON DELETE SET NULL,
+  operation TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  status TEXT NOT NULL,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  prompt_hash TEXT NOT NULL,
+  estimated_cost_cents REAL NOT NULL DEFAULT 0,
+  error_message TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS thread_summaries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  thread_key TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  open_questions TEXT NOT NULL DEFAULT '[]',
+  commitments TEXT NOT NULL DEFAULT '[]',
+  next_action TEXT NOT NULL,
+  urgency TEXT NOT NULL DEFAULT 'low',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS thread_summaries_account_thread_unique ON thread_summaries(account_id, thread_key);
+CREATE TABLE IF NOT EXISTS follow_up_reminders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  due_at TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS outcome_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  suggestion_id INTEGER REFERENCES ai_suggestions(id) ON DELETE SET NULL,
+  action_queue_id INTEGER REFERENCES agent_action_queue(id) ON DELETE SET NULL,
+  outcome_type TEXT NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS agent_tools (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -248,6 +332,14 @@ CREATE TABLE IF NOT EXISTS automation_policies (
   name TEXT NOT NULL,
   always_require_approval INTEGER NOT NULL DEFAULT 1,
   auto_approve_read_only_tool_calls INTEGER NOT NULL DEFAULT 0,
+  autopilot_enabled INTEGER NOT NULL DEFAULT 0,
+  dry_run_only INTEGER NOT NULL DEFAULT 1,
+  allow_auto_file_low_risk INTEGER NOT NULL DEFAULT 0,
+  allow_auto_no_action_low_risk INTEGER NOT NULL DEFAULT 0,
+  require_approval_for_send INTEGER NOT NULL DEFAULT 1,
+  max_messages_per_run INTEGER NOT NULL DEFAULT 25,
+  max_auto_actions_per_run INTEGER NOT NULL DEFAULT 5,
+  follow_up_days INTEGER NOT NULL DEFAULT 2,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -267,8 +359,64 @@ CREATE TABLE IF NOT EXISTS ai_profiles (
   updated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ai_profiles_profile_unique ON ai_profiles(profile);
+CREATE TABLE IF NOT EXISTS oauth_providers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  client_secret_encrypted TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  scopes TEXT NOT NULL,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_providers_provider_unique ON oauth_providers(provider);
+CREATE TABLE IF NOT EXISTS memory_profile (
+  id INTEGER PRIMARY KEY,
+  core_profile TEXT NOT NULL,
+  advanced_mode INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT NOT NULL,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  suggestion_id INTEGER REFERENCES ai_suggestions(id) ON DELETE SET NULL,
+  context_json TEXT NOT NULL,
+  before_text TEXT NOT NULL,
+  after_text TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  rule_text TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0.5,
+  usage_count INTEGER NOT NULL DEFAULT 1,
+  last_seen_at TEXT NOT NULL,
+  source_event_id INTEGER REFERENCES memory_events(id) ON DELETE SET NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_examples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER REFERENCES memory_events(id) ON DELETE SET NULL,
+  scope TEXT NOT NULL,
+  before_text TEXT NOT NULL,
+  after_text TEXT NOT NULL,
+  note TEXT,
+  score REAL NOT NULL DEFAULT 0.5,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `);
   migrateMessageClientColumns();
+  migrateAccountAuthColumns();
+  migrateAutomationPolicyColumns();
 
   // FTS5 index for message search with triggers to keep it in sync.
   try {
@@ -408,10 +556,22 @@ function seedAutomationDefaults() {
     .values({
       name: 'default',
       alwaysRequireApproval: true,
-      autoApproveReadOnlyToolCalls: false,
+      autoApproveReadOnlyToolCalls: true,
+      autopilotEnabled: false,
+      dryRunOnly: true,
+      allowAutoFileLowRisk: false,
+      allowAutoNoActionLowRisk: false,
+      requireApprovalForSend: true,
+      maxMessagesPerRun: 25,
+      maxAutoActionsPerRun: 5,
+      followUpDays: 2,
       createdAt: now,
       updatedAt: now
     })
+    .run();
+  db.update(automationPolicies)
+    .set({ autoApproveReadOnlyToolCalls: true, updatedAt: now })
+    .where(eq(automationPolicies.name, 'default'))
     .run();
 }
 
@@ -462,6 +622,20 @@ function seedAiDefaults() {
         notes: 'Used for complex multi-step planning.',
         createdAt: now,
         updatedAt: now
+      },
+      {
+        profile: 'audio',
+        label: 'Dictation (Speech-to-Text)',
+        provider: 'deepgram',
+        transport: 'openai_compatible',
+        model: 'nova-3',
+        baseUrl: 'https://api.deepgram.com',
+        apiKeyEncrypted: null,
+        preset: 'deepgram',
+        isEnabled: true,
+        notes: 'Speech-to-text dictation provider',
+        createdAt: now,
+        updatedAt: now
       }
     ])
     .run();
@@ -479,6 +653,39 @@ function migrateMessageClientColumns() {
   ];
   for (const [name, definition] of additions) {
     if (!existing.has(name)) sqlite.exec(`ALTER TABLE messages ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function migrateAccountAuthColumns() {
+  const columns = sqlite.prepare(`PRAGMA table_info(accounts)`).all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  const additions: Array<[string, string]> = [
+    ['auth_type', "TEXT NOT NULL DEFAULT 'password'"],
+    ['oauth_provider', 'TEXT'],
+    ['oauth_access_token_encrypted', 'TEXT'],
+    ['oauth_refresh_token_encrypted', 'TEXT'],
+    ['oauth_access_token_expires_at', 'TEXT']
+  ];
+  for (const [name, definition] of additions) {
+    if (!existing.has(name)) sqlite.exec(`ALTER TABLE accounts ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function migrateAutomationPolicyColumns() {
+  const columns = sqlite.prepare(`PRAGMA table_info(automation_policies)`).all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  const additions: Array<[string, string]> = [
+    ['autopilot_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+    ['dry_run_only', 'INTEGER NOT NULL DEFAULT 1'],
+    ['allow_auto_file_low_risk', 'INTEGER NOT NULL DEFAULT 0'],
+    ['allow_auto_no_action_low_risk', 'INTEGER NOT NULL DEFAULT 0'],
+    ['require_approval_for_send', 'INTEGER NOT NULL DEFAULT 1'],
+    ['max_messages_per_run', 'INTEGER NOT NULL DEFAULT 25'],
+    ['max_auto_actions_per_run', 'INTEGER NOT NULL DEFAULT 5'],
+    ['follow_up_days', 'INTEGER NOT NULL DEFAULT 2']
+  ];
+  for (const [name, definition] of additions) {
+    if (!existing.has(name)) sqlite.exec(`ALTER TABLE automation_policies ADD COLUMN "${name}" ${definition};`);
   }
 }
 
@@ -550,6 +757,12 @@ export function resetForTests() {
   try {
     sqlite.exec(`
 DELETE FROM executed_actions;
+DELETE FROM outcome_events;
+DELETE FROM follow_up_reminders;
+DELETE FROM thread_summaries;
+DELETE FROM ai_observability;
+DELETE FROM autopilot_runs;
+DELETE FROM agent_action_queue;
 DELETE FROM feedback_log;
 DELETE FROM ai_suggestions;
 DELETE FROM tool_calls;
@@ -558,6 +771,11 @@ DELETE FROM task_runs;
 DELETE FROM agent_tools;
 DELETE FROM automation_policies;
 DELETE FROM ai_profiles;
+    DELETE FROM oauth_providers;
+    DELETE FROM memory_profile;
+    DELETE FROM memory_events;
+    DELETE FROM memory_rules;
+    DELETE FROM memory_examples;
 DELETE FROM drafts;
 DELETE FROM message_attachments;
 DELETE FROM messages;

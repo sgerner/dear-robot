@@ -42,14 +42,28 @@ const EnvSchema = z.object({
   SMTP_USERNAME: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   TEST_EMAIL_FROM: z.string().optional(),
-  TEST_EMAIL_TO: z.string().optional()
+  TEST_EMAIL_TO: z.string().optional(),
+  ATTACHMENT_MAX_BYTES: z.coerce.number().default(15 * 1024 * 1024),
+  ATTACHMENT_SCAN_STRICT: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  API_RATE_LIMIT_PER_MINUTE: z.coerce.number().default(180),
+  MAILBOX_OP_MIN_INTERVAL_MS: z.coerce.number().default(120),
+  RUN_LIVE_PROVIDER_TESTS: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  AUTOPILOT_INTERVAL_MINUTES: z.coerce.number().default(15)
 });
 
 const parsed = EnvSchema.parse(process.env);
 export const env = {
   ...parsed,
   DB_PATH: isBuildProcess ? ':memory:' : parsed.DB_PATH || path.join(parsed.DATA_DIR, 'triage.db'),
-  DEBUG_AI: parsed.DEBUG_AI ?? false
+  DEBUG_AI: parsed.DEBUG_AI ?? false,
+  ATTACHMENT_SCAN_STRICT: parsed.ATTACHMENT_SCAN_STRICT ?? false,
+  RUN_LIVE_PROVIDER_TESTS: parsed.RUN_LIVE_PROVIDER_TESTS ?? false
 };
 
 export const isProduction = env.NODE_ENV === 'production' && !isBuildProcess;

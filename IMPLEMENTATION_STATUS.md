@@ -25,6 +25,16 @@
 - Phase 3 implemented: folder UID cursor state (`folder_sync_state`), incremental sync fetch + recent reconciliation pass, provider role mapping for archive/spam/trash, IMAP sent-folder append after SMTP send, bulk message operations, and contacts CSV import/export.
 - Phase 4 implemented: AI action-graph task planning, task approval/execution lifecycle, bring-your-own tool gateway (`mcp_http` + `cli`) with UI management, tool call audit logging, and advanced model routing for complex plans.
 - AI provider profiles are now UI-managed with saved presets for DeepSeek, Gemini, OpenAI, Anthropic, Vertex, OpenRouter, and manual configuration.
+- Onboarding banners now steer users through AI setup first, then real mailbox setup, and the seeded demo mailbox is pruned automatically when the first real account is added.
+- Full memory system implemented: core profile store, learned rules/examples/events tables, retrieval-injected prompt context, automatic learning from suggestion edits/regenerations, and a Memory UI with Advanced mode gating for raw `AGENT_INSTRUCTIONS.md`.
+- Audio dictation implemented for focused text inputs/textareas via browser recording + server transcription endpoint (`/api/audio/transcribe`) backed by a UI-managed `audio` AI profile.
+- Google OAuth Gmail connect flow implemented with UI-managed client credentials (`/api/oauth/google/settings`) and OAuth start/callback routes that create/update Gmail accounts using token auth for IMAP/SMTP.
+- AI-first Autopilot implemented: explicit scan loop, optional singleton background interval, unified action queue, policy controls, thread summaries, follow-up reminders, outcome learning, and AI observability.
+- `AI_AGENT_IMPLEMENTATION_PLAN.md` added with the simplified architecture and next-step guidance.
+- Mobile inbox swipe gestures implemented with browser-local customization for short/long left/right actions.
+- Message quick action bars are browser-customizable, use Archive instead of Star by default, and overflow on mobile behind a three-dot menu.
+- Folder role mapping is exposed in Settings -> Interface and persists to SQLite for archive/spam/trash/sent/drafts resolution.
+- Root `AGENTS.md` added with repo engineering and UI conventions.
 
 ## Remaining
 
@@ -53,13 +63,16 @@
 - Phase 2 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`
 - Phase 3 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
 - Phase 4 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
+- Feature pass (audio + gmail oauth): `npm run check`, `npm run test:unit`, `npm run test:e2e`
+- AI Autopilot pass: `npm run check`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run lint`, `npm run build`, `docker build -t triage .`
+- Interface/swipe pass: `npm run check`, `npm run test:unit`, `npm run test:e2e`, `npm run build`
 
 ## Current Test Status
 
 - `npm run check`: pass, 0 warnings.
 - `npm run lint`: pass.
-- `npm run test:unit`: pass, 7 tests.
-- `npm run test:e2e`: pass, 6 tests.
+- `npm run test:unit`: pass, 9 tests.
+- `npm run test:e2e`: pass, 7 tests.
 - `npm run eval:ai`: pass with real DeepSeek credentials and structured outputs for all fixtures.
 - `npm run build`: pass.
 - `docker build -t triage .`: pass.

@@ -28,12 +28,15 @@ export function publicAccount(account: typeof accounts.$inferSelect) {
     smtpHost: account.smtpHost,
     smtpPort: account.smtpPort,
     smtpUsername: account.smtpUsername,
+    authType: account.authType,
+    oauthProvider: account.oauthProvider,
     isEnabled: account.isEnabled,
     lastSyncAt: account.lastSyncAt,
     syncStatus: account.syncStatus,
     syncError: account.syncError,
     hasImapPassword: Boolean(account.passwordEncrypted),
     hasSmtpPassword: Boolean(account.smtpPasswordEncrypted),
+    hasOauthRefreshToken: Boolean(account.oauthRefreshTokenEncrypted),
     createdAt: account.createdAt,
     updatedAt: account.updatedAt
   };
@@ -48,6 +51,7 @@ export function getAccount(id: number) {
 }
 
 export function createAccount(input: z.infer<typeof AccountInputSchema>) {
+  pruneSeededDemoDataIfSafe(input);
   const now = nowIso();
   const created = db
     .insert(accounts)
@@ -69,6 +73,16 @@ export function createAccount(input: z.infer<typeof AccountInputSchema>) {
     .returning()
     .get();
   return publicAccount(created);
+}
+
+function pruneSeededDemoDataIfSafe(input: z.infer<typeof AccountInputSchema>) {
+  if (input.host === 'mock' && input.email === 'mock@example.test') return;
+  const currentAccounts = db.select().from(accounts).all();
+  if (currentAccounts.some((account) => account.host !== 'mock')) return;
+  const demoAccounts = currentAccounts.filter((account) => account.host === 'mock' && account.email === 'mock@example.test');
+  for (const account of demoAccounts) {
+    removeAccount(account.id);
+  }
 }
 
 export async function testAccount(id: number) {

@@ -2,6 +2,7 @@ import type { EmailSuggestion } from '../ai/schema';
 
 export function buildAgentPlanMessages(input: {
   agentInstructions: string;
+  memoryContext: string;
   subject: string;
   sender: string;
   recipients: string;
@@ -58,6 +59,9 @@ Safety:
       role: 'user',
       content: `AGENT_INSTRUCTIONS.md:
 ${input.agentInstructions}
+
+Memory context:
+${input.memoryContext || 'None'}
 
 Email:
 Subject: ${input.subject}

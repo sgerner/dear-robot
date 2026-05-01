@@ -10,6 +10,7 @@ type WorkerState = {
 };
 
 const workers = new Map<number, WorkerState>();
+const syncInFlight = new Set<number>();
 let initialized = false;
 
 export function startSyncEngine() {
@@ -38,8 +39,13 @@ export function stopSyncWorkerForAccount(accountId: number) {
 }
 
 export async function syncAccount(accountId: number) {
+  if (syncInFlight.has(accountId)) return;
+  syncInFlight.add(accountId);
   const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
-  if (!account || !account.isEnabled) return;
+  if (!account || !account.isEnabled) {
+    syncInFlight.delete(accountId);
+    return;
+  }
   const provider = providerForAccount(account);
   const now = nowIso();
   db.update(accounts).set({ syncStatus: 'syncing', syncError: null, updatedAt: now }).where(eq(accounts.id, accountId)).run();
@@ -141,6 +147,8 @@ export async function syncAccount(accountId: number) {
       })
       .where(eq(accounts.id, accountId))
       .run();
+  } finally {
+    syncInFlight.delete(accountId);
   }
 }
 

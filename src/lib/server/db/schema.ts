@@ -12,6 +12,11 @@ export const accounts = sqliteTable('accounts', {
   smtpPort: integer('smtp_port').notNull(),
   smtpUsername: text('smtp_username').notNull(),
   smtpPasswordEncrypted: text('smtp_password_encrypted').notNull(),
+  authType: text('auth_type', { enum: ['password', 'oauth_gmail'] }).notNull().default('password'),
+  oauthProvider: text('oauth_provider'),
+  oauthAccessTokenEncrypted: text('oauth_access_token_encrypted'),
+  oauthRefreshTokenEncrypted: text('oauth_refresh_token_encrypted'),
+  oauthAccessTokenExpiresAt: text('oauth_access_token_expires_at'),
   isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),
   lastSyncAt: text('last_sync_at'),
   syncStatus: text('sync_status', { enum: ['idle', 'syncing', 'error', 'disabled'] }).notNull().default('idle'),
@@ -183,6 +188,99 @@ export const executedActions = sqliteTable('executed_actions', {
   createdAt: text('created_at').notNull()
 });
 
+export const agentActionQueue = sqliteTable('agent_action_queue', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  messageId: integer('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, { onDelete: 'cascade' }),
+  taskRunId: integer('task_run_id'),
+  actionType: text('action_type').notNull(),
+  riskLevel: text('risk_level', { enum: ['low', 'medium', 'high'] }).notNull().default('medium'),
+  status: text('status', { enum: ['proposed', 'approved', 'executing', 'executed', 'rejected', 'failed'] })
+    .notNull()
+    .default('proposed'),
+  title: text('title').notNull(),
+  detailsJson: text('details_json').notNull(),
+  approvalReason: text('approval_reason').notNull(),
+  source: text('source').notNull().default('autopilot'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  errorMessage: text('error_message'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  executedAt: text('executed_at')
+}, (table) => ({
+  idempotencyUnique: uniqueIndex('agent_action_queue_idempotency_unique').on(table.idempotencyKey)
+}));
+
+export const autopilotRuns = sqliteTable('autopilot_runs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  status: text('status', { enum: ['running', 'completed', 'failed'] }).notNull().default('running'),
+  mode: text('mode', { enum: ['dry_run', 'assistive'] }).notNull().default('dry_run'),
+  scannedCount: integer('scanned_count').notNull().default(0),
+  suggestedCount: integer('suggested_count').notNull().default(0),
+  queuedCount: integer('queued_count').notNull().default(0),
+  executedCount: integer('executed_count').notNull().default(0),
+  errorMessage: text('error_message'),
+  summaryJson: text('summary_json').notNull().default('{}'),
+  startedAt: text('started_at').notNull(),
+  finishedAt: text('finished_at')
+});
+
+export const aiObservability = sqliteTable('ai_observability', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  messageId: integer('message_id').references(() => messages.id, { onDelete: 'set null' }),
+  suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, { onDelete: 'set null' }),
+  taskRunId: integer('task_run_id'),
+  operation: text('operation').notNull(),
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  status: text('status', { enum: ['ok', 'error'] }).notNull(),
+  latencyMs: integer('latency_ms').notNull().default(0),
+  promptHash: text('prompt_hash').notNull(),
+  estimatedCostCents: real('estimated_cost_cents').notNull().default(0),
+  errorMessage: text('error_message'),
+  createdAt: text('created_at').notNull()
+});
+
+export const threadSummaries = sqliteTable(
+  'thread_summaries',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+    threadKey: text('thread_key').notNull(),
+    subject: text('subject').notNull(),
+    summary: text('summary').notNull(),
+    openQuestions: text('open_questions').notNull().default('[]'),
+    commitments: text('commitments').notNull().default('[]'),
+    nextAction: text('next_action').notNull(),
+    urgency: text('urgency', { enum: ['low', 'medium', 'high'] }).notNull().default('low'),
+    updatedAt: text('updated_at').notNull(),
+    createdAt: text('created_at').notNull()
+  },
+  (table) => ({
+    threadUnique: uniqueIndex('thread_summaries_account_thread_unique').on(table.accountId, table.threadKey)
+  })
+);
+
+export const followUpReminders = sqliteTable('follow_up_reminders', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  messageId: integer('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  dueAt: text('due_at').notNull(),
+  reason: text('reason').notNull(),
+  status: text('status', { enum: ['open', 'done', 'dismissed'] }).notNull().default('open'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
+export const outcomeEvents = sqliteTable('outcome_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  messageId: integer('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, { onDelete: 'set null' }),
+  actionQueueId: integer('action_queue_id').references(() => agentActionQueue.id, { onDelete: 'set null' }),
+  outcomeType: text('outcome_type', { enum: ['resolved', 'needs_followup', 'bad_draft', 'wrong_action', 'positive_reply', 'negative_reply'] }).notNull(),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull()
+});
+
 export const agentTools = sqliteTable('agent_tools', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
@@ -258,7 +356,15 @@ export const automationPolicies = sqliteTable('automation_policies', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
   alwaysRequireApproval: integer('always_require_approval', { mode: 'boolean' }).notNull().default(true),
-  autoApproveReadOnlyToolCalls: integer('auto_approve_read_only_tool_calls', { mode: 'boolean' }).notNull().default(false),
+  autoApproveReadOnlyToolCalls: integer('auto_approve_read_only_tool_calls', { mode: 'boolean' }).notNull().default(true),
+  autopilotEnabled: integer('autopilot_enabled', { mode: 'boolean' }).notNull().default(false),
+  dryRunOnly: integer('dry_run_only', { mode: 'boolean' }).notNull().default(true),
+  allowAutoFileLowRisk: integer('allow_auto_file_low_risk', { mode: 'boolean' }).notNull().default(false),
+  allowAutoNoActionLowRisk: integer('allow_auto_no_action_low_risk', { mode: 'boolean' }).notNull().default(false),
+  requireApprovalForSend: integer('require_approval_for_send', { mode: 'boolean' }).notNull().default(true),
+  maxMessagesPerRun: integer('max_messages_per_run').notNull().default(25),
+  maxAutoActionsPerRun: integer('max_auto_actions_per_run').notNull().default(5),
+  followUpDays: integer('follow_up_days').notNull().default(2),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull()
 });
@@ -267,7 +373,7 @@ export const aiProfiles = sqliteTable(
   'ai_profiles',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    profile: text('profile', { enum: ['primary', 'fallback', 'advanced'] }).notNull(),
+    profile: text('profile', { enum: ['primary', 'fallback', 'advanced', 'audio'] }).notNull(),
     label: text('label').notNull(),
     provider: text('provider').notNull(),
     transport: text('transport', { enum: ['openai_compatible', 'anthropic'] }).notNull().default('openai_compatible'),
@@ -284,6 +390,70 @@ export const aiProfiles = sqliteTable(
     profileUnique: uniqueIndex('ai_profiles_profile_unique').on(table.profile)
   })
 );
+
+export const oauthProviders = sqliteTable(
+  'oauth_providers',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    provider: text('provider', { enum: ['google'] }).notNull(),
+    clientId: text('client_id').notNull(),
+    clientSecretEncrypted: text('client_secret_encrypted').notNull(),
+    redirectUri: text('redirect_uri').notNull(),
+    scopes: text('scopes').notNull(),
+    isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    providerUnique: uniqueIndex('oauth_providers_provider_unique').on(table.provider)
+  })
+);
+
+export const memoryProfile = sqliteTable('memory_profile', {
+  id: integer('id').primaryKey(),
+  coreProfile: text('core_profile').notNull(),
+  advancedMode: integer('advanced_mode', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
+export const memoryEvents = sqliteTable('memory_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  eventType: text('event_type', { enum: ['suggestion_edit', 'suggestion_regenerate', 'task_edit'] }).notNull(),
+  messageId: integer('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, { onDelete: 'set null' }),
+  contextJson: text('context_json').notNull(),
+  beforeText: text('before_text').notNull(),
+  afterText: text('after_text').notNull(),
+  note: text('note'),
+  createdAt: text('created_at').notNull()
+});
+
+export const memoryRules = sqliteTable('memory_rules', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind').notNull(),
+  scope: text('scope').notNull(),
+  ruleText: text('rule_text').notNull(),
+  confidence: real('confidence').notNull().default(0.5),
+  usageCount: integer('usage_count').notNull().default(1),
+  lastSeenAt: text('last_seen_at').notNull(),
+  sourceEventId: integer('source_event_id').references(() => memoryEvents.id, { onDelete: 'set null' }),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
+export const memoryExamples = sqliteTable('memory_examples', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  eventId: integer('event_id').references(() => memoryEvents.id, { onDelete: 'set null' }),
+  scope: text('scope').notNull(),
+  beforeText: text('before_text').notNull(),
+  afterText: text('after_text').notNull(),
+  note: text('note'),
+  score: real('score').notNull().default(0.5),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
 
 export const accountRelations = relations(accounts, ({ many }) => ({
   folders: many(folders),
@@ -309,3 +479,7 @@ export type AgentTool = typeof agentTools.$inferSelect;
 export type TaskRun = typeof taskRuns.$inferSelect;
 export type TaskStep = typeof taskSteps.$inferSelect;
 export type AiProfile = typeof aiProfiles.$inferSelect;
+export type MemoryProfile = typeof memoryProfile.$inferSelect;
+export type AgentActionQueue = typeof agentActionQueue.$inferSelect;
+export type AutopilotRun = typeof autopilotRuns.$inferSelect;
+export type ThreadSummary = typeof threadSummaries.$inferSelect;

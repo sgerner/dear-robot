@@ -2,15 +2,22 @@ import nodemailer from 'nodemailer';
 import type { Account } from '../db/schema';
 import { decryptSecret } from '../security';
 import type { SendMailOptions } from './types';
+import { getGoogleAccessToken } from '../oauth/google';
 
 export async function sendSmtp(account: Account, options: SendMailOptions) {
+  const accessToken = await getGoogleAccessToken(account);
   const transporter = nodemailer.createTransport({
     host: account.smtpHost,
     port: account.smtpPort,
     secure: account.smtpPort === 465,
     auth: {
       user: account.smtpUsername,
-      pass: decryptSecret(account.smtpPasswordEncrypted)
+      ...(accessToken
+        ? {
+            type: 'OAuth2',
+            accessToken
+          }
+        : { pass: decryptSecret(account.smtpPasswordEncrypted) })
     }
   });
   const result = await transporter.sendMail({

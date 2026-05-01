@@ -4,11 +4,12 @@ import { db, nowIso } from '../db';
 import { bootstrapDatabase } from '../db/bootstrap';
 import { aiProfiles } from '../db/schema';
 import { decryptSecret, encryptSecret } from '../security';
+import { getSpeechProvider } from '$lib/speech/providers';
 
 bootstrapDatabase();
 
 export const AiProfileSchema = z.object({
-  profile: z.enum(['primary', 'fallback', 'advanced']),
+  profile: z.enum(['primary', 'fallback', 'advanced', 'audio']),
   label: z.string().min(1).max(120),
   provider: z.string().min(1).max(120),
   transport: z.enum(['openai_compatible', 'anthropic']).default('openai_compatible'),
@@ -110,5 +111,15 @@ export function getAiConfigForRuntime(
     preset: saved.preset,
     isEnabled: saved.isEnabled,
     notes: saved.notes
+  };
+}
+
+export function getAudioDictationSettings() {
+  const saved = getAiProfile('audio');
+  const fallbackProvider = getSpeechProvider(saved?.provider || 'deepgram');
+  const fallbackModel = saved?.model || fallbackProvider.defaultModel;
+  return {
+    provider: saved?.provider || fallbackProvider.id,
+    model: fallbackModel
   };
 }

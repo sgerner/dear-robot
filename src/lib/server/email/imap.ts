@@ -5,15 +5,36 @@ import { decryptSecret } from '../security';
 import { sendSmtp } from './smtp';
 import type { MailProvider, ProviderMessage } from './types';
 import type { AddressObject } from 'mailparser';
+import { env } from '../env';
+import { getGoogleAccessToken } from '../oauth/google';
 
-function clientFor(account: Account) {
+const mailboxOpChains = new Map<number, Promise<unknown>>();
+
+async function withMailboxThrottle<T>(accountId: number, op: () => Promise<T>) {
+  const prior = mailboxOpChains.get(accountId) || Promise.resolve();
+  const next = prior
+    .catch(() => undefined)
+    .then(async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, env.MAILBOX_OP_MIN_INTERVAL_MS)));
+      return op();
+    });
+  mailboxOpChains.set(accountId, next);
+  try {
+    return await next;
+  } finally {
+    if (mailboxOpChains.get(accountId) === next) mailboxOpChains.delete(accountId);
+  }
+}
+
+async function clientFor(account: Account) {
+  const accessToken = await getGoogleAccessToken(account);
   return new ImapFlow({
     host: account.host,
     port: account.port,
     secure: account.port === 993,
     auth: {
       user: account.username,
-      pass: decryptSecret(account.passwordEncrypted)
+      ...(accessToken ? { accessToken } : { pass: decryptSecret(account.passwordEncrypted) })
     },
     logger: false
   });
@@ -21,7 +42,7 @@ function clientFor(account: Account) {
 
 export const imapEmailProvider: MailProvider = {
   async test(account) {
-    const client = clientFor(account);
+    const client = await clientFor(account);
     try {
       await client.connect();
       await client.logout();
@@ -31,7 +52,7 @@ export const imapEmailProvider: MailProvider = {
     }
   },
   async listFolders(account) {
-    const client = clientFor(account);
+    const client = await clientFor(account);
     await client.connect();
     try {
       const boxes = await client.list();
@@ -45,7 +66,7 @@ export const imapEmailProvider: MailProvider = {
     }
   },
   async backfill(account, limit = 100, folderPath = 'INBOX') {
-    const client = clientFor(account);
+    const client = await clientFor(account);
     await client.connect();
     const messages: ProviderMessage[] = [];
     try {
@@ -91,7 +112,7 @@ export const imapEmailProvider: MailProvider = {
     return messages;
   },
   async fetchSinceUid(account, folderPath, sinceUidExclusive, limit = 100) {
-    const client = clientFor(account);
+    const client = await clientFor(account);
     await client.connect();
     const messages: ProviderMessage[] = [];
     try {
@@ -138,7 +159,7 @@ export const imapEmailProvider: MailProvider = {
     return messages;
   },
   async folderState(account, folderPath) {
-    const client = clientFor(account);
+    const client = await clientFor(account);
     await client.connect();
     try {
       const status = await client.status(folderPath, { uidNext: true, uidValidity: true, messages: true });
@@ -152,7 +173,7 @@ export const imapEmailProvider: MailProvider = {
   },
   async watchInbox(account, handlers, signal) {
     while (!signal.aborted) {
-      const client = clientFor(account);
+      const client = await clientFor(account);
       try {
         await client.connect();
         const lock = await client.getMailboxLock('INBOX');
@@ -208,67 +229,77 @@ export const imapEmailProvider: MailProvider = {
     }
   },
   async move(account: Account, message: Message, folderPath: string) {
-    const client = clientFor(account);
-    await client.connect();
-    try {
-      const lock = await client.getMailboxLock(message.folderPath);
+    return withMailboxThrottle(account.id, async () => {
+      const client = await clientFor(account);
+      await client.connect();
       try {
-        await client.messageMove(providerUid(message.providerMessageId), folderPath, { uid: true });
+        const lock = await client.getMailboxLock(message.folderPath);
+        try {
+          await client.messageMove(providerUid(message.providerMessageId), folderPath, { uid: true });
+        } finally {
+          lock.release();
+        }
       } finally {
-        lock.release();
+        await client.logout().catch(() => undefined);
       }
-    } finally {
-      await client.logout().catch(() => undefined);
-    }
+    });
   },
   async markAnswered(account: Account, message: Message) {
-    const client = clientFor(account);
-    await client.connect();
-    try {
-      const lock = await client.getMailboxLock(message.folderPath);
+    return withMailboxThrottle(account.id, async () => {
+      const client = await clientFor(account);
+      await client.connect();
       try {
-        await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Answered'], { uid: true });
+        const lock = await client.getMailboxLock(message.folderPath);
+        try {
+          await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Answered'], { uid: true });
+        } finally {
+          lock.release();
+        }
       } finally {
-        lock.release();
+        await client.logout().catch(() => undefined);
       }
-    } finally {
-      await client.logout().catch(() => undefined);
-    }
+    });
   },
   async markRead(account: Account, message: Message, read: boolean) {
-    const client = clientFor(account);
-    await client.connect();
-    try {
-      const lock = await client.getMailboxLock(message.folderPath);
+    return withMailboxThrottle(account.id, async () => {
+      const client = await clientFor(account);
+      await client.connect();
       try {
-        if (read) await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Seen'], { uid: true });
-        else await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Seen'], { uid: true });
+        const lock = await client.getMailboxLock(message.folderPath);
+        try {
+          if (read) await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Seen'], { uid: true });
+          else await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Seen'], { uid: true });
+        } finally {
+          lock.release();
+        }
       } finally {
-        lock.release();
+        await client.logout().catch(() => undefined);
       }
-    } finally {
-      await client.logout().catch(() => undefined);
-    }
+    });
   },
   async setFlagged(account: Account, message: Message, flagged: boolean) {
-    const client = clientFor(account);
-    await client.connect();
-    try {
-      const lock = await client.getMailboxLock(message.folderPath);
+    return withMailboxThrottle(account.id, async () => {
+      const client = await clientFor(account);
+      await client.connect();
       try {
-        if (flagged) await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Flagged'], { uid: true });
-        else await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Flagged'], { uid: true });
+        const lock = await client.getMailboxLock(message.folderPath);
+        try {
+          if (flagged) await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Flagged'], { uid: true });
+          else await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Flagged'], { uid: true });
+        } finally {
+          lock.release();
+        }
       } finally {
-        lock.release();
+        await client.logout().catch(() => undefined);
       }
-    } finally {
-      await client.logout().catch(() => undefined);
-    }
+    });
   },
   async send(account, options) {
-    const sent = await sendSmtp(account, options);
-    await appendToSentFolder(account, options).catch(() => undefined);
-    return sent;
+    return withMailboxThrottle(account.id, async () => {
+      const sent = await sendSmtp(account, options);
+      await appendToSentFolder(account, options).catch(() => undefined);
+      return sent;
+    });
   }
 };
 
@@ -331,7 +362,7 @@ function mapFolderRole(path: string, specialUse: string | null) {
 }
 
 async function appendToSentFolder(account: Account, options: Parameters<typeof sendSmtp>[1]) {
-  const client = clientFor(account);
+  const client = await clientFor(account);
   await client.connect();
   try {
     const sentFolder = await findSentFolder(client);

@@ -115,7 +115,9 @@ describe('Phase 1 email client services', () => {
     const { createAgentTool } = await import('../src/lib/server/agent/tools');
     const { createTaskPlanForMessage, approveTaskRun, executeTaskRun } = await import('../src/lib/server/agent/tasks');
     const { listMessages } = await import('../src/lib/server/services/messages');
-    const message = listMessages({ limit: 1 })[0];
+    const message =
+      listMessages({ limit: 20 }).find((row) => `${row.subject} ${row.snippet}`.toLowerCase().includes('refund')) ||
+      listMessages({ limit: 1 })[0];
     createAgentTool({
       name: 'local-json',
       description: 'returns static JSON for testing',
@@ -126,9 +128,69 @@ describe('Phase 1 email client services', () => {
     });
     const planned = await createTaskPlanForMessage(message.id, { note: 'Use ERP credit memo workflow' });
     expect(planned?.run.id).toBeTruthy();
+    expect(planned?.steps.some((step) => step.kind === 'tool_call' && step.status === 'approved')).toBe(true);
     const approved = approveTaskRun(planned?.run.id || 0, {});
     expect(approved?.run.status).toBe('planned');
     const executed = await executeTaskRun(planned?.run.id || 0);
     expect(executed?.run.status).toBe('completed');
+  });
+
+  it('runs autopilot, queues actions, records observability and outcomes', async () => {
+    const {
+      approveQueueItems,
+      executeQueueItems,
+      listAutopilotDashboard,
+      recordOutcome,
+      runAutopilotNow,
+      updateAutopilotPolicy
+    } = await import('../src/lib/server/agent/autopilot');
+    updateAutopilotPolicy({
+      autopilotEnabled: true,
+      dryRunOnly: true,
+      allowAutoFileLowRisk: false,
+      allowAutoNoActionLowRisk: false,
+      requireApprovalForSend: true,
+      maxMessagesPerRun: 4,
+      maxAutoActionsPerRun: 0,
+      followUpDays: 2,
+      autoApproveReadOnlyToolCalls: false
+    });
+    const run = await runAutopilotNow();
+    expect(run?.scannedCount).toBeGreaterThan(0);
+    const dashboard = listAutopilotDashboard();
+    expect(dashboard.queue.length).toBeGreaterThan(0);
+    expect(dashboard.observability.length).toBeGreaterThan(0);
+    expect(dashboard.summaries.length).toBeGreaterThan(0);
+    const moveItem = dashboard.queue.find((item) => item.actionType === 'move_to_folder');
+    expect(moveItem).toBeTruthy();
+    approveQueueItems([moveItem?.id || 0]);
+    const executed = await executeQueueItems([moveItem?.id || 0]);
+    expect(executed.executed).toBe(1);
+    const outcome = recordOutcome({
+      messageId: moveItem?.messageId || 0,
+      suggestionId: moveItem?.suggestionId || null,
+      actionQueueId: moveItem?.id || null,
+      outcomeType: 'resolved',
+      notes: 'Handled correctly'
+    });
+    expect(outcome.id).toBeTruthy();
+  });
+
+  it('removes seeded demo mail when the first real account is added', async () => {
+    const { createAccount, listAccounts } = await import('../src/lib/server/services/accounts');
+    expect(listAccounts().some((account) => account.host === 'mock')).toBe(true);
+    createAccount({
+      email: 'real@example.com',
+      host: 'imap.example.com',
+      port: 993,
+      username: 'real@example.com',
+      password: 'secret',
+      smtpHost: 'smtp.example.com',
+      smtpPort: 465,
+      smtpUsername: 'real@example.com',
+      smtpPassword: 'secret'
+    });
+    expect(listAccounts().some((account) => account.host === 'mock')).toBe(false);
+    expect(listAccounts().some((account) => account.email === 'real@example.com')).toBe(true);
   });
 });

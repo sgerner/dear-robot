@@ -33,6 +33,9 @@ Safety rules:
 AGENT_INSTRUCTIONS.md:
 ${input.agentInstructions}
 
+Memory context:
+${input.memoryContext || 'None'}
+
 Email:
 Subject: ${input.subject}
 Sender: ${input.sender}

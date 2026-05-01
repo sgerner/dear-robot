@@ -3,12 +3,15 @@ import { z } from 'zod';
 import { db, nowIso } from '../db';
 import { accounts, aiSuggestions, contacts, drafts, executedActions, feedbackLog, folders, messageAttachments, messages } from '../db/schema';
 import { readAgentInstructions } from '../memory';
+import { buildMemoryPromptContext, recordMemoryEvent } from '../memory-learning';
 import { generateEmailSuggestion } from '../ai/provider';
 import { EmailSuggestionSchema, type EmailSuggestion } from '../ai/schema';
 import { providerForAccount } from '../email/provider';
 import { signWebhookPayload } from '../security';
 import { webhookSubscriptions } from '../db/schema';
 import { sanitizeEmailHtml } from '../html';
+import { evaluateAttachmentPolicy } from '../attachment-policy';
+import { promptHash, recordAiObservation } from '../agent/observability';
 
 export const MessageQuerySchema = z.object({
   q: z.string().optional(),
@@ -28,6 +31,13 @@ export const MessageReadSchema = z.object({
 
 export const MessageFlagSchema = z.object({
   flagged: z.boolean()
+});
+
+export const FolderRoleSchema = z.object({
+  role: z
+    .enum(['inbox', 'archive', 'spam', 'trash', 'sent', 'drafts', 'newsletters', 'receipts'])
+    .nullable()
+    .optional()
 });
 
 export const BulkMessageActionSchema = z
@@ -444,7 +454,24 @@ export async function setMessageFlagged(id: number, flagged: boolean) {
   return db.update(messages).set({ isFlagged: flagged, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
 }
 
+export function updateFolderRole(id: number, role: z.infer<typeof FolderRoleSchema>['role']) {
+  return db
+    .update(folders)
+    .set({ role: role || null, updatedAt: nowIso() })
+    .where(eq(folders.id, id))
+    .returning()
+    .get();
+}
+
 export async function sendComposedMessage(input: z.infer<typeof ComposeSendSchema>) {
+  for (const attachment of input.attachments || []) {
+    const policy = evaluateAttachmentPolicy({
+      filename: attachment.filename,
+      contentType: attachment.contentType || null,
+      sizeBytes: Buffer.byteLength(attachment.contentBase64, 'base64')
+    });
+    if (!policy.allowed) throw new Error(policy.reason || 'Attachment blocked by policy');
+  }
   const account = db.select().from(accounts).where(eq(accounts.id, input.accountId)).get();
   if (!account) throw new Error('Account not found');
   const source = input.sourceMessageId ? db.select().from(messages).where(eq(messages.id, input.sourceMessageId)).get() : null;
@@ -476,8 +503,13 @@ export async function suggestForMessage(id: number, options: { note?: string | n
   const detail = getMessageDetail(id);
   if (!detail?.message || !detail.account) throw new Error('Message not found');
   const folderRows = db.select().from(folders).where(eq(folders.accountId, detail.message.accountId)).all();
-  const result = await generateEmailSuggestion({
+  const input = {
     agentInstructions: readAgentInstructions(),
+    memoryContext: buildMemoryPromptContext({
+      subject: detail.message.subject,
+      bodyText: detail.message.bodyText,
+      note: options.note || null
+    }).text,
     subject: detail.message.subject,
     sender: detail.message.from,
     recipients: detail.message.to,
@@ -487,7 +519,9 @@ export async function suggestForMessage(id: number, options: { note?: string | n
     availableFolders: folderRows.map((folder) => folder.path),
     existingSuggestion: options.existing ?? null,
     regenerationNote: options.note ?? null
-  });
+  };
+  const started = Date.now();
+  const result = await generateEmailSuggestion(input);
   const now = nowIso();
   const saved = db
     .insert(aiSuggestions)
@@ -510,6 +544,18 @@ export async function suggestForMessage(id: number, options: { note?: string | n
     })
     .returning()
     .get();
+  recordAiObservation({
+    messageId: id,
+    suggestionId: saved.id,
+    operation: options.existing ? 'regenerate_suggestion' : 'generate_suggestion',
+    provider: result.provider,
+    model: result.model,
+    status: result.errorMessage ? 'error' : 'ok',
+    latencyMs: Date.now() - started,
+    promptHash: promptHash(input),
+    estimatedCostCents: estimateSuggestionCostCents(detail.message.bodyText.length),
+    errorMessage: result.errorMessage
+  });
   return saved;
 }
 
@@ -537,6 +583,14 @@ export async function regenerateSuggestion(messageId: number, note?: string | nu
       createdAt: nowIso()
     })
     .run();
+  recordMemoryEvent({
+    eventType: 'suggestion_regenerate',
+    messageId,
+    suggestionId: saved.id,
+    beforeText: JSON.stringify(original),
+    afterText: saved.draftReply || saved.reasoningSummary,
+    note: note || null
+  });
   return saved;
 }
 
@@ -561,6 +615,14 @@ export function editSuggestion(id: number, input: z.infer<typeof SuggestionEditS
     .where(eq(aiSuggestions.id, id))
     .returning()
     .get();
+  recordMemoryEvent({
+    eventType: 'suggestion_edit',
+    messageId: existing.messageId,
+    suggestionId: updated.id,
+    beforeText: existing.draftReply || existing.reasoningSummary,
+    afterText: updated.draftReply || updated.reasoningSummary,
+    note: null
+  });
   return updated;
 }
 
@@ -750,6 +812,10 @@ function splitCsvLine(line: string) {
   }
   out.push(current);
   return out;
+}
+
+function estimateSuggestionCostCents(bodyLength: number) {
+  return Math.max(0.001, Math.round((bodyLength / 4000) * 10) / 100);
 }
 
 function parseNullableInt(value: string | undefined) {

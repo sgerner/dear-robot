@@ -1,0 +1,82 @@
+import { error, json } from '@sveltejs/kit';
+import { z } from 'zod';
+import { env } from '$lib/server/env';
+import { getAiConfigForRuntime } from '$lib/server/ai/settings';
+import { getMessageDetail } from '$lib/server/services/messages';
+
+const GenerateComposeSchema = z.object({
+  prompt: z.string().min(1),
+  to: z.string().optional().default(''),
+  subject: z.string().optional().default(''),
+  context: z.object({ messageId: z.number().int().positive() }).nullable().optional()
+});
+
+type ChatMessage = { role: 'system' | 'user'; content: string };
+
+async function generateWithOpenAiCompatible(
+  profile: ReturnType<typeof getAiConfigForRuntime>,
+  messages: ChatMessage[]
+) {
+  if (!profile.apiKey) throw new Error('Primary AI profile has no API key');
+  const endpoint = `${profile.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${profile.apiKey}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: profile.model,
+        messages,
+        temperature: 0.6
+      })
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${profile.provider} ${response.status}: ${text.slice(0, 240)}`);
+    const parsed = JSON.parse(text);
+    return String(parsed?.choices?.[0]?.message?.content || '').trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function profileForCompose() {
+  return getAiConfigForRuntime('primary', {
+    profile: 'primary',
+    label: 'Primary',
+    provider: env.AI_PROVIDER || 'deepseek',
+    transport: 'openai_compatible',
+    model: env.AI_MODEL || 'deepseek-v4-flash',
+    baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
+    apiKey: env.AI_API_KEY || undefined,
+    preset: env.AI_PROVIDER || 'deepseek',
+    isEnabled: true,
+    notes: null
+  });
+}
+
+export async function POST({ request }) {
+  const { prompt, to, subject, context } = GenerateComposeSchema.parse(await request.json());
+  const profile = profileForCompose();
+  if (!profile.isEnabled) throw error(400, 'Primary AI profile is disabled');
+  if (profile.transport !== 'openai_compatible') throw error(400, 'Compose generation currently supports OpenAI-compatible profiles only');
+  let contextText = '';
+  if (context?.messageId) {
+    const detail = getMessageDetail(context.messageId);
+    if (detail?.message) {
+      contextText = `\n\nOriginal message context:\nFrom: ${detail.message.from}\nSubject: ${detail.message.subject}\nBody: ${(detail.message.bodyText || '').slice(0, 1200)}`;
+    }
+  }
+  const systemPrompt = `You are an email assistant. Write professional, concise emails based on the user's request.
+Generate only the email body text with no markdown.${contextText}`;
+  const userPrompt = `Instructions:\n${prompt}\n\nRecipient: ${to || 'Unknown'}\nSubject: ${subject || 'None specified'}`;
+  const body = await generateWithOpenAiCompatible(profile, [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ]);
+  return json({ body, subject: subject || undefined });
+}

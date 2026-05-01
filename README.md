@@ -31,6 +31,7 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 - Zod schema validation on model output
 - One JSON repair attempt before fallback
 - AI provider details are editable in the UI under Config -> AI Profiles
+- Onboarding banner guides AI setup first, then email account setup
 
 ### Data + files
 
@@ -45,6 +46,7 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 ### Implemented
 
 - Multi-account add/list/test/enable/disable/remove
+- Seeded demo mailbox auto-prunes when the first real mailbox is added
 - Sync status + last sync timestamps per account
 - IMAP backfill + active inbox watch loop using IMAP IDLE
 - SMTP send for reply/forward actions
@@ -65,6 +67,7 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 - Safe HTML rendering mode for email bodies (sanitized server-side)
 - PWA manifest/service worker and local IndexedDB cache for messages/folders/contacts
 - Memory editor for `AGENT_INSTRUCTIONS.md`
+- Memory system with core profile, learned rules, examples, and event log
 - Webhook delegate execution with optional signature
 - MCP endpoint with auth token
 - Incremental folder sync cursors + UIDVALIDITY tracking table
@@ -104,6 +107,7 @@ npm run dev
 4. Start dev server with `npm run dev`.
 5. Sign in at `/login` with `APP_PASSWORD`.
 6. Open Config -> AI Profiles and save the provider, model, base URL, and API key for each profile you want active.
+7. After the AI profiles are saved, add a real IMAP/SMTP account. The seeded demo mailbox is removed automatically the first time a real account is added.
 
 ### Daily feature branch workflow
 
@@ -359,6 +363,21 @@ Passwords:
 - never shown after save
 - never logged
 
+### 7b) Gmail OAuth From UI
+
+You can connect Gmail without relying on `.env` OAuth keys:
+
+1. Open `Accounts` view.
+2. In `Connect Gmail (Google OAuth)`, enter:
+   - Google OAuth Client ID
+   - Google OAuth Client Secret
+   - Redirect URI (typically `https://your-host/api/accounts/google/callback`)
+   - Scopes (default includes `https://mail.google.com/`)
+3. Click `Save OAuth Settings`.
+4. Click `Connect Gmail Account` and complete Google consent.
+
+After callback, the app saves the Gmail account with OAuth auth (`oauth_gmail`) and uses token refresh for IMAP/SMTP automatically.
+
 ---
 
 ## 8) AI configuration
@@ -391,6 +410,62 @@ Behavior summary:
 - If malformed output: one repair attempt
 - If primary fails: fallback profile, if configured
 - If all fail: safe error suggestion saved, no action executed
+
+### 8c) Audio Dictation Profile
+
+The app also supports an `audio` AI profile for voice-to-text:
+
+- Configure it under `Config -> AI Profiles` (profile key: `audio`).
+- Recommended model: `gpt-4o-mini-transcribe` (OpenAI-compatible audio endpoint).
+- The UI shows a floating `Dictate` button when a text input or textarea is focused.
+- Recording is transcribed server-side via `/api/audio/transcribe` and inserted at the cursor.
+
+---
+
+## 8b) Memory configuration
+
+Memory now uses a layered model:
+
+- Core Profile: compact always-on instructions
+- Learned Rules: auto-promoted behavioral patterns from edits/regenerations
+- Examples: compact before/after snapshots
+- Advanced Memory File: optional direct editing of `/data/AGENT_INSTRUCTIONS.md` behind Advanced mode
+
+In the `Memory` route:
+
+- edit and save Core Profile
+- review/remove learned rules
+- optionally enable Advanced mode for direct file editing
+
+Learning triggers:
+
+- suggestion edit
+- suggestion regenerate with note
+- task planning prompt retrieval uses the same memory context
+
+## 8d) AI Autopilot
+
+The AI-first workflow is intentionally simple and inspectable:
+
+- `Run Autopilot` scans recent mail.
+- When enabled, the server also runs the same autopilot pass on a simple interval (`AUTOPILOT_INTERVAL_MINUTES`, default `15`).
+- Existing and newly generated AI suggestions are placed into one approval queue.
+- The queue supports bulk approve, reject, and execute.
+- Sends, forwards, and delegation stay approval-gated by default.
+- Optional low-risk auto-filing can be enabled in policy settings.
+- Every AI call records provider/model/status/latency/prompt hash in `ai_observability`.
+- Thread summaries, open questions, commitments, and follow-up reminders are stored in SQLite.
+
+Autopilot tables:
+
+- `agent_action_queue`
+- `autopilot_runs`
+- `ai_observability`
+- `thread_summaries`
+- `follow_up_reminders`
+- `outcome_events`
+
+The implementation plan is documented in `AI_AGENT_IMPLEMENTATION_PLAN.md`.
 
 ---
 
@@ -503,10 +578,37 @@ Auth:
 Authorization: Bearer ${MCP_AUTH_TOKEN}
 ```
 
+Connect from another agent/runtime:
+
+1. Read available tools (SSE-ready payload):
+
+```bash
+curl -s \
+  -H "Authorization: Bearer ${MCP_AUTH_TOKEN}" \
+  http://localhost:3000/api/mcp/sse
+```
+
+2. Invoke a tool:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer ${MCP_AUTH_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -X POST http://localhost:3000/api/mcp/sse \
+  -d '{"tool":"search_emails","args":{"query":"invoice"}}'
+```
+
 Supported tools:
 
 - `search_emails` with `{ "query": "..." }`
-- `get_email_context` with `{ "message_id": "..." }`
+- `get_email_context` with `{ "message_id": 123 }`
+- `list_folders` with `{ "account_id": 1 }` (optional `account_id`)
+- `move_message` with `{ "message_id": 123, "folder_path": "Archive" }`
+- `set_read` with `{ "message_id": 123, "read": true }`
+- `set_flagged` with `{ "message_id": 123, "flagged": true }`
+- `generate_suggestion` with `{ "message_id": 123 }`
+- `regenerate_suggestion` with `{ "message_id": 123, "note": "make it shorter" }`
+- `execute_suggestion` with `{ "suggestion_id": 456 }`
 
 ---
 

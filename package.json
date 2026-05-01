@@ -13,6 +13,8 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "eval:ai": "tsx scripts/eval-ai.ts",
+    "backup:create": "tsx scripts/backup-data.ts",
+    "backup:restore": "tsx scripts/restore-data.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },

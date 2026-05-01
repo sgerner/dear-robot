@@ -15,7 +15,8 @@ test('triages and executes a mock reply action', async ({ page }) => {
   await page.getByTestId('execute-suggestion').click();
   await expect(page.getByText('Executed')).toBeVisible();
 
-  await page.getByTitle('Executed').click();
+  await page.getByTitle('Operations').click();
+  await page.getByRole('button', { name: 'Executed' }).first().click();
   await expect(page.getByText('reply').first()).toBeVisible();
 });
 
@@ -23,7 +24,7 @@ test('manages mock account lifecycle controls', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Password').fill('test-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.getByTitle('Accounts').click();
+  await page.getByTitle('Settings').click();
   await expect(page.getByText('Email Accounts')).toBeVisible();
   await page.getByRole('button', { name: 'Test' }).first().click();
   await expect(page.getByText('Account test complete')).toBeVisible();
@@ -35,14 +36,25 @@ test('uses email-client folder, flag, read, and compose controls', async ({ page
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await page.getByTestId('message-row').filter({ hasText: 'Still no update on my refund' }).first().click();
-  await page.getByTestId('toggle-star').click();
-  await expect(page.getByTestId('toggle-star')).toContainText('Starred');
-  await page.getByTestId('toggle-read').click();
+  await expect(page.getByTestId('quick-action-archive')).toBeVisible();
   await page.getByTestId('reply-all').click();
   await expect(page.getByText('AI-ready compose')).toBeVisible();
   await page.getByPlaceholder('Write the message...').fill('Thanks, I am handling this from the client workflow.');
   await page.getByTestId('send-compose').click();
   await expect(page.getByText('Sent')).toBeVisible();
+});
+
+test('interface settings expose quick actions, swipes, and folder roles', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel('Password').fill('test-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+
+  await page.getByTitle('Settings').click();
+  await page.getByRole('button', { name: 'Interface' }).click();
+  await expect(page.getByText('Quick Action Bar')).toBeVisible();
+  await expect(page.getByText('Mobile Swipe Gestures')).toBeVisible();
+  await expect(page.getByText('Folder Role Mapping')).toBeVisible();
+  await expect(page.getByText('Short swipe left')).toBeVisible();
 });
 
 test('phase2 compose supports attachments and draft save', async ({ page }) => {
@@ -66,16 +78,23 @@ test('phase2 compose supports attachments and draft save', async ({ page }) => {
   await expect(page.getByText('Sent')).toBeVisible();
 });
 
-test('phase3 bulk toolbar updates selected messages', async ({ page }) => {
+test('phase3 inbox filters stay visible and shortcuts help opens', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Password').fill('test-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  const rows = page.getByTestId('message-row');
-  await rows.nth(0).locator('input[type="checkbox"]').check();
-  await rows.nth(1).locator('input[type="checkbox"]').check();
-  await page.getByTestId('bulk-read').click();
-  await expect(page.getByText('Bulk action complete')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Unread', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Starred', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pending', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Show keyboard shortcuts' }).click();
+  await expect(page.getByText('Keyboard shortcuts')).toBeVisible();
+  await page.getByRole('button', { name: 'Unread', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder('Search mail...')).toBeVisible();
+  await expect(page.locator('select').first()).toBeVisible();
+  await expect(page.locator('button').filter({ hasText: 'Folders' }).first()).toBeVisible();
 });
 
 test('phase4 agent planning flow creates, approves, and executes task', async ({ page }) => {
