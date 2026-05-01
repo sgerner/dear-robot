@@ -1,11 +1,12 @@
 <script lang="ts">
   import {
     Bot,
-    Check,
-    CheckSquare2,
+    Archive,
     ChevronLeft,
-    Clock3,
     Download,
+    MoreVertical,
+    Keyboard,
+    Menu,
     Eye,
     EyeOff,
     FolderOpen,
@@ -21,20 +22,40 @@
     Search,
     Send,
     Settings,
-    Shield,
-    Square,
     Star,
     Paperclip,
+    ShieldAlert,
     Trash2,
     Upload,
-    X
+    X,
+    Copy
   } from 'lucide-svelte';
   import { goto, invalidateAll } from '$app/navigation';
+  import { onDestroy, onMount, tick } from 'svelte';
+  import { flip } from 'svelte/animate';
   import { fade, fly } from 'svelte/transition';
-  import { deleteOutbox, enqueueOutbox, listOutbox, putLocalDraft, replaceCache, setCacheMeta } from '$lib/client/local-cache';
+  import {
+    cacheEncryptionEnabled,
+    deleteOutbox,
+    enqueueOutbox,
+    listOutbox,
+    loadCacheEncryptionPassphrase,
+    putLocalDraft,
+    replaceCache,
+    setCacheEncryptionPassphrase,
+    setCacheMeta
+  } from '$lib/client/local-cache';
+  import DictationButton from '$lib/components/DictationButton.svelte';
 
   let { data } = $props();
-  let view = $state('inbox');
+  type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
+  type SettingsCategory = 'accounts' | 'models' | 'memory' | 'tools' | 'interface' | 'advanced';
+  type QuickActionId = 'reply' | 'reply_all' | 'forward' | 'archive' | 'delete' | 'spam' | 'toggle_read' | 'star';
+  type SwipeActionId = 'archive' | 'delete' | 'spam' | 'toggle_read' | 'star' | 'none';
+  type FolderRole = 'inbox' | 'archive' | 'spam' | 'trash' | 'sent' | 'drafts' | 'newsletters' | 'receipts';
+  let view = $state<AppView>('inbox');
+  let settingsCategory = $state<SettingsCategory>('accounts');
+  let operationsCategory = $state<'autopilot' | 'executed'>('autopilot');
   let isLoading = $state(false);
   let search = $state('');
   let accountFilter = $state<string>('');
@@ -52,14 +73,64 @@
   let draftText = $state('');
   let regenNote = $state('');
   let memoryText = $state('');
+  let coreProfileText = $state('');
+  let memoryAdvancedMode = $state(false);
+  let showAdvancedMemory = $state(false);
   let webhookTarget = $state('');
   let status = $state('');
   let taskNote = $state('');
-  const aiProfileKeys = ['primary', 'fallback', 'advanced'] as const;
-  function seedAiProfileForm(profile: 'primary' | 'fallback' | 'advanced') {
+  let memoryAssistantPrompt = $state('');
+  const aiProfileKeys = ['primary', 'fallback', 'advanced', 'audio'] as const;
+  const coreAiProfileKeys = ['primary', 'fallback', 'advanced'] as const;
+  const settingsCategories = [
+    { key: 'accounts', label: 'Accounts', detail: 'Mailboxes and Gmail OAuth' },
+    { key: 'models', label: 'Models', detail: 'Primary, fallback, advanced, audio' },
+    { key: 'memory', label: 'Memory', detail: 'Core profile and learned rules' },
+    { key: 'tools', label: 'Agent Tools', detail: 'MCP, CLI, delegate hooks' },
+    { key: 'interface', label: 'Interface', detail: 'Quick actions, swipes, folder roles' },
+    { key: 'advanced', label: 'Advanced', detail: 'Cache, backups, audit, contacts' }
+  ] as const;
+  const settingsCategoryKeys = settingsCategories.map((category) => category.key);
+  const quickActionCatalog: Array<{ id: QuickActionId; label: string; tone?: 'danger' | 'accent' }> = [
+    { id: 'reply', label: 'Reply', tone: 'accent' },
+    { id: 'reply_all', label: 'Reply all' },
+    { id: 'forward', label: 'Forward' },
+    { id: 'archive', label: 'Archive' },
+    { id: 'delete', label: 'Trash', tone: 'danger' },
+    { id: 'spam', label: 'Spam', tone: 'danger' },
+    { id: 'toggle_read', label: 'Read/unread' },
+    { id: 'star', label: 'Star' }
+  ];
+  const swipeActionCatalog: Array<{ id: SwipeActionId; label: string }> = [
+    { id: 'archive', label: 'Archive' },
+    { id: 'delete', label: 'Trash' },
+    { id: 'spam', label: 'Spam' },
+    { id: 'toggle_read', label: 'Read/unread' },
+    { id: 'star', label: 'Star' },
+    { id: 'none', label: 'No action' }
+  ];
+  const folderRoleOptions: Array<{ value: '' | FolderRole; label: string }> = [
+    { value: '', label: 'No role' },
+    { value: 'inbox', label: 'Inbox' },
+    { value: 'archive', label: 'Archive' },
+    { value: 'spam', label: 'Spam/Junk' },
+    { value: 'trash', label: 'Trash' },
+    { value: 'sent', label: 'Sent' },
+    { value: 'drafts', label: 'Drafts' },
+    { value: 'newsletters', label: 'Newsletters' },
+    { value: 'receipts', label: 'Receipts' }
+  ];
+  const inboxViews = ['inbox', 'unread', 'starred', 'pending'] as const;
+  function isInboxView(next: string): next is (typeof inboxViews)[number] {
+    return inboxViews.includes(next as (typeof inboxViews)[number]);
+  }
+  function seedAiProfileForm(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     const saved = data.aiProfiles?.find((item: { profile: string }) => item.profile === profile);
-    const preset = data.aiPresets?.find((item: { id: string; provider: string }) => item.id === saved?.preset || item.provider === saved?.provider);
-    const fallbackPreset = data.aiPresets?.find((item: { id: string }) => item.id === profile) || data.aiPresets?.[0];
+    const aiPresets = ((data as any).aiPresets || []) as Array<Record<string, any>>;
+    const preset = aiPresets.find((item) => item.id === saved?.preset || item.provider === saved?.provider);
+    const fallbackPreset =
+      aiPresets.find((item) => item.id === (profile === 'audio' ? 'openai-audio' : profile)) ||
+      aiPresets[0];
     const chosen = preset || fallbackPreset;
     return {
       profile,
@@ -75,7 +146,7 @@
     };
   }
   let aiProfileForms = $state<Record<string, {
-    profile: 'primary' | 'fallback' | 'advanced';
+    profile: 'primary' | 'fallback' | 'advanced' | 'audio';
     label: string;
     provider: string;
     transport: 'openai_compatible' | 'anthropic';
@@ -86,6 +157,36 @@
     isEnabled: boolean;
     notes: string;
   }>>({});
+  let aiCatalogOptions = $state<Record<string, Array<{ id: string; label: string }>>>({});
+  let modelsDevProviders = $state<Array<{
+    id: string;
+    name: string;
+    npm: string | null;
+    api: string | null;
+    env: string[];
+    doc: string | null;
+    models: Array<{ id: string; label: string }>;
+  }>>([]);
+  let modelsDevLoaded = $state(false);
+  let modelsDevLoading = $state(false);
+  let profileMode = $state<Record<string, 'catalog' | 'manual'>>({
+    primary: 'catalog',
+    fallback: 'catalog',
+    advanced: 'catalog',
+    audio: 'manual'
+  });
+  let profileEnvValues = $state<Record<string, Record<string, string>>>({
+    primary: {},
+    fallback: {},
+    advanced: {},
+    audio: {}
+  });
+  const aiProfileRecommendations: Record<string, string[]> = {
+    primary: ['DeepSeek `deepseek-v4-flash`', 'OpenAI `gpt-5.5`', 'Google `gemini-3.1-pro-preview`'],
+    fallback: ['OpenAI `gpt-5.4-mini`', 'Anthropic `claude-sonnet-4-6`', 'Google `gemini-3.1-flash-lite-preview`'],
+    advanced: ['DeepSeek `deepseek-v4-pro`', 'OpenAI `gpt-5.5-pro`', 'Anthropic `claude-opus-4-7`'],
+    audio: ['Deepgram `nova-3`', 'OpenAI `gpt-4o-mini-transcribe`', 'Groq `whisper-large-v3-turbo`']
+  };
   let agentToolForm = $state({
     name: '',
     description: '',
@@ -99,14 +200,56 @@
     requireApprovalForWrite: true
   });
   let bodyMode = $state<'text' | 'html'>('text');
-  let searchInput: HTMLInputElement | undefined;
+  let searchInput = $state<HTMLInputElement | undefined>(undefined);
   let composeOpen = $state(false);
   let composeMode = $state<'compose' | 'reply' | 'reply_all' | 'forward'>('compose');
   let composeEditorMode = $state<'plain' | 'rich'>('plain');
   let composeHtml = $state('');
   let composeAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
-  let selectedMessageIds = $state<number[]>([]);
+  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+  let mobileMenuOpen = $state(false);
+  let selectedMessageId = $state<number | null>(null);
   let contactsImportCsv = $state('');
+  let cachePassphrase = $state('');
+  let cacheEncrypted = $state(false);
+  let backups = $state<Array<{ id: string; createdAt: string }>>([]);
+  let auditSnapshot = $state<{ actions: number; toolCalls: number; memoryEvents: number } | null>(null);
+  let selectedQueueIds = $state<number[]>([]);
+  let showShortcutHelp = $state(false);
+  let autopilotPolicy = $state({
+    autopilotEnabled: false,
+    dryRunOnly: true,
+    allowAutoFileLowRisk: false,
+    allowAutoNoActionLowRisk: false,
+    requireApprovalForSend: true,
+    maxMessagesPerRun: 25,
+    maxAutoActionsPerRun: 5,
+    followUpDays: 2,
+    autoApproveReadOnlyToolCalls: true
+  });
+  let googleOauthSettings = $state({
+    clientId: '',
+    clientSecret: '',
+    redirectUri: '',
+    scopes: ['openid', 'email', 'profile', 'https://mail.google.com/'].join('\n'),
+    isEnabled: true
+  });
+  let googleOauthHasSecret = $state(false);
+  let googleOauthConnectedEmail = $state('');
+  let dictationTarget = $state<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  let dictationActive = $state(false);
+  let dictationLevel = $state(0);
+  let dictationUnavailable = $state(false);
+  let mediaRecorder: MediaRecorder | null = null;
+  let recordingChunks: BlobPart[] = [];
+  let recordingStream: MediaStream | null = null;
+  let dictationAudioContext: AudioContext | null = null;
+  let dictationAudioSource: MediaStreamAudioSourceNode | null = null;
+  let dictationAnalyser: AnalyserNode | null = null;
+  let dictationAnimationFrame: number | null = null;
+  let audioProviderId = $state('deepgram');
+  let audioModelId = $state('nova-3');
+  let audioApiKey = $state('');
   let compose = $state({
     draftId: null as number | null,
     accountId: 0,
@@ -118,6 +261,26 @@
     attachments: [] as Array<{ filename: string; contentType: string; contentBase64: string }>,
     sourceMessageId: null as number | null
   });
+  let composeAiPrompt = $state('');
+  let isGeneratingCompose = $state(false);
+  let foldersExpanded = $state(false);
+  let quickActionIds = $state<QuickActionId[]>(['reply', 'reply_all', 'forward', 'archive', 'delete', 'spam']);
+  let swipeSettings = $state({
+    leftShort: 'delete' as SwipeActionId,
+    leftLong: 'spam' as SwipeActionId,
+    rightShort: 'archive' as SwipeActionId,
+    rightLong: 'toggle_read' as SwipeActionId
+  });
+  let swiping = $state<{
+    id: number;
+    startX: number;
+    deltaX: number;
+    pointerId: number;
+    dragging: boolean;
+  } | null>(null);
+  let quickActionOverflowOpen = $state(false);
+  let isMobileViewport = $state(false);
+  let mobileSettingsDetailOpen = $state(false);
 
   type DraftView = {
     id: number;
@@ -135,25 +298,126 @@
   };
 
   $effect(() => {
-    view = data.query?.view || 'inbox';
+    const nextView = data.query?.view;
+    view = typeof nextView === 'string' && ['inbox', 'unread', 'starred', 'pending', 'operations', 'settings'].includes(nextView)
+      ? (nextView as AppView)
+      : 'inbox';
+    const nextSettings = data.query?.settings;
+    settingsCategory = settingsCategoryKeys.includes(nextSettings as SettingsCategory) ? (nextSettings as SettingsCategory) : 'accounts';
+    const nextOps = data.query?.ops;
+    operationsCategory = nextOps === 'executed' ? 'executed' : 'autopilot';
     search = data.query?.q || '';
     accountFilter = data.query?.accountId ? String(data.query.accountId) : '';
     draftText = data.selected?.suggestion?.draftReply || '';
     memoryText = data.memory;
+    coreProfileText = data.memoryOverview?.profile?.coreProfile || '';
+    memoryAdvancedMode = data.memoryOverview?.profile?.advancedMode || false;
     bodyMode = data.selected?.message?.safeBodyHtml ? 'html' : 'text';
+    const currentSelectedMessageId = data.selected?.message?.id ?? null;
+    if (selectedMessageId !== currentSelectedMessageId) {
+      selectedMessageId = currentSelectedMessageId;
+    }
     if (!compose.accountId) compose.accountId = data.selected?.message?.accountId || data.accounts[0]?.id || 0;
     void replaceCache('messages', data.messages);
     void replaceCache('folders', data.folders);
     void replaceCache('contacts', data.contacts);
     void setCacheMeta('lastPageCacheAt', new Date().toISOString());
+    cacheEncrypted = cacheEncryptionEnabled();
+    googleOauthSettings = {
+      clientId: data.googleOauthSettings?.clientId || '',
+      clientSecret: '',
+      redirectUri:
+        data.googleOauthSettings?.redirectUri ||
+        (typeof window !== 'undefined' ? `${window.location.origin}/api/accounts/google/callback` : ''),
+      scopes: (data.googleOauthSettings?.scopes || ['openid', 'email', 'profile', 'https://mail.google.com/']).join('\n'),
+      isEnabled: data.googleOauthSettings?.isEnabled ?? true
+    };
+    googleOauthHasSecret = Boolean(data.googleOauthSettings?.hasClientSecret);
+    googleOauthConnectedEmail = data.query?.oauth === 'connected' ? data.query?.email || '' : '';
+    if (data.autopilot?.policy) {
+      autopilotPolicy = {
+        autopilotEnabled: Boolean(data.autopilot.policy.autopilotEnabled),
+        dryRunOnly: Boolean(data.autopilot.policy.dryRunOnly),
+        allowAutoFileLowRisk: Boolean(data.autopilot.policy.allowAutoFileLowRisk),
+        allowAutoNoActionLowRisk: Boolean(data.autopilot.policy.allowAutoNoActionLowRisk),
+        requireApprovalForSend: Boolean(data.autopilot.policy.requireApprovalForSend),
+        maxMessagesPerRun: data.autopilot.policy.maxMessagesPerRun || 25,
+        maxAutoActionsPerRun: data.autopilot.policy.maxAutoActionsPerRun || 5,
+        followUpDays: data.autopilot.policy.followUpDays || 2,
+        autoApproveReadOnlyToolCalls: Boolean(data.autopilot.policy.autoApproveReadOnlyToolCalls)
+      };
+    }
   });
 
   aiProfileForms = {
     primary: seedAiProfileForm('primary'),
     fallback: seedAiProfileForm('fallback'),
-    advanced: seedAiProfileForm('advanced')
+    advanced: seedAiProfileForm('advanced'),
+    audio: seedAiProfileForm('audio')
   } as typeof aiProfileForms;
 
+  $effect(() => {
+    const audioProfile = aiProfileForms.audio;
+    const providerFromSettings = data.audioDictationSettings?.provider || audioProfile?.provider || 'deepgram';
+    audioProviderId = providerFromSettings;
+    const provider = data.speechProviders?.find((item: { id: string }) => item.id === providerFromSettings) || data.speechProviders?.[0];
+    const desiredModel = data.audioDictationSettings?.model || audioProfile?.model || provider?.defaultModel || 'nova-3';
+    const matchedModel = provider?.models?.some((model: { id: string }) => model.id === desiredModel)
+      ? desiredModel
+      : provider?.defaultModel || desiredModel;
+    audioModelId = matchedModel;
+  });
+
+  $effect(() => {
+    for (const profile of coreAiProfileKeys) {
+      const form = aiProfileForms[profile];
+      const currentMode = profileMode[profile];
+      const nextMode: 'catalog' | 'manual' = form?.preset === 'modeldev' ? 'catalog' : currentMode || 'catalog';
+      if (currentMode !== nextMode) {
+        profileMode = { ...profileMode, [profile]: nextMode };
+      }
+      if (form?.notes && form.notes.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(form.notes) as { env?: Record<string, string> };
+          if (parsed.env && typeof parsed.env === 'object') {
+            profileEnvValues = { ...profileEnvValues, [profile]: parsed.env };
+          }
+        } catch {
+          // keep existing
+        }
+      }
+    }
+  });
+
+  onMount(() => {
+    loadUiPreferences();
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(max-width: 767px)');
+    const applyViewport = () => {
+      isMobileViewport = media.matches;
+      if (!media.matches) mobileSettingsDetailOpen = false;
+    };
+    applyViewport();
+    media.addEventListener('change', applyViewport);
+    return () => media.removeEventListener('change', applyViewport);
+  });
+
+  const onboardingTitle = $derived(
+    data.onboarding?.needsAiSetup
+      ? 'Step 1: add your AI profiles'
+      : data.onboarding?.needsEmailSetup
+        ? 'Step 2: add your first email account'
+        : null
+  );
+  const onboardingBody = $derived(
+    data.onboarding?.needsAiSetup
+      ? 'Configure the primary, fallback, and advanced AI profiles in Config. Once the AI profiles are saved, the app will guide you to add a mailbox.'
+      : data.onboarding?.needsEmailSetup
+        ? 'Your AI profiles are ready. Add a real IMAP/SMTP account next. The seeded demo mailbox will be removed automatically the first time you save a real account.'
+        : data.onboarding?.demoDataWillBePrunedOnRealAccount
+          ? 'Demo messages are still loaded. They will be removed automatically when you save your first real mailbox.'
+          : null
+  );
   $effect(() => {
     if (!composeOpen) return;
     if (composeAutosaveTimer) clearTimeout(composeAutosaveTimer);
@@ -166,16 +430,105 @@
   });
 
   $effect(() => {
+    if (view !== 'settings') return;
+    void refreshBackups();
+  });
+
+  function stopDictationMeter() {
+    if (dictationAnimationFrame !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(dictationAnimationFrame);
+    }
+    dictationAnimationFrame = null;
+    dictationAnalyser?.disconnect();
+    dictationAudioSource?.disconnect();
+    if (dictationAudioContext && dictationAudioContext.state !== 'closed') {
+      void dictationAudioContext.close();
+    }
+    dictationAnalyser = null;
+    dictationAudioSource = null;
+    dictationAudioContext = null;
+    dictationLevel = 0;
+  }
+
+  function openSettings(category: SettingsCategory = 'accounts') {
+    mobileMenuOpen = false;
+    mobileSettingsDetailOpen = false;
+    if (isMobileViewport) {
+      void navigateView('settings', { clearMessage: true });
+      return;
+    }
+    void navigateView('settings', { settings: category, clearMessage: true });
+  }
+
+  function openSettingsCategory(category: SettingsCategory) {
+    mobileMenuOpen = false;
+    if (isMobileViewport) mobileSettingsDetailOpen = true;
+    void navigateView('settings', { settings: category, clearMessage: true });
+  }
+
+  function audioProvider() {
+    return data.speechProviders?.find((provider: { id: string }) => provider.id === audioProviderId) || data.speechProviders?.[0];
+  }
+
+  function audioModels() {
+    return audioProvider()?.models || [];
+  }
+
+  function browserSpeechSupported() {
+    if (typeof window === 'undefined') return false;
+    const maybeWindow = window as Window & { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+    return Boolean(maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition);
+  }
+
+
+  function openOperations(category: 'autopilot' | 'executed' = 'autopilot') {
+    mobileMenuOpen = false;
+    void navigateView('operations', { ops: category, clearMessage: true });
+  }
+
+  async function navigateView(
+    nextView: AppView,
+    options: { settings?: SettingsCategory; ops?: 'autopilot' | 'executed'; clearMessage?: boolean } = {}
+  ) {
+    mobileMenuOpen = false;
+    showShortcutHelp = false;
+    const params = new URLSearchParams(location.search);
+    if (nextView === 'inbox') params.delete('view');
+    else params.set('view', nextView);
+    if (options.clearMessage || nextView === 'settings' || nextView === 'operations') params.delete('message');
+    if (nextView !== 'settings') params.delete('settings');
+    if (nextView !== 'operations') params.delete('ops');
+    if (options.settings) params.set('settings', options.settings);
+    if (options.ops) params.set('ops', options.ops);
+    if (nextView === 'settings' || nextView === 'operations') {
+      params.delete('folder');
+      params.delete('accountId');
+    }
+    await goto(`/?${params.toString()}`);
+  }
+
+  $effect(() => {
     if (typeof window === 'undefined') return;
+    const recognitionAvailable =
+      typeof navigator !== 'undefined' &&
+      !!(window as Window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+    dictationUnavailable = !recognitionAvailable && typeof MediaRecorder === 'undefined';
+    loadCacheEncryptionPassphrase();
+    cacheEncrypted = cacheEncryptionEnabled();
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const typing =
         target?.tagName === 'INPUT' ||
         target?.tagName === 'TEXTAREA' ||
         target?.getAttribute('contenteditable') === 'true';
-      if (!typing && event.key === '/') {
+      if (!typing && event.key === '/' && isInboxView(view)) {
         event.preventDefault();
         searchInput?.focus();
+        return;
+      }
+      if (!typing && event.key === '?' && isInboxView(view)) {
+        event.preventDefault();
+        showShortcutHelp = !showShortcutHelp;
         return;
       }
       if (typing) return;
@@ -184,8 +537,9 @@
         openCompose('compose');
         return;
       }
-      if (!['inbox', 'pending'].includes(view)) return;
+      if (!isInboxView(view)) return;
       const selectedId = data.selected?.message?.id ?? data.messages[0]?.id;
+      const current = data.selected?.message || data.messages.find((message: { id: number }) => message.id === selectedId);
       const index = data.messages.findIndex((message: { id: number }) => message.id === selectedId);
       if (event.key === 'j') {
         const next = data.messages[Math.min(index + 1, data.messages.length - 1)];
@@ -193,6 +547,27 @@
       } else if (event.key === 'k') {
         const prev = data.messages[Math.max(index - 1, 0)];
         if (prev) void selectMessage(prev.id);
+      } else if (event.key === 'r' && current) {
+        event.preventDefault();
+        openCompose('reply');
+      } else if (event.key === 'a' && current) {
+        event.preventDefault();
+        openCompose('reply_all');
+      } else if (event.key === 'f' && current) {
+        event.preventDefault();
+        openCompose('forward');
+      } else if (event.key === 's' && current) {
+        event.preventDefault();
+        void toggleFlagged();
+      } else if (event.key === 'u' && current) {
+        event.preventDefault();
+        void toggleRead();
+      } else if (event.key === 'e' && current) {
+        event.preventDefault();
+        void archiveSelected();
+      } else if (event.key === '#') {
+        event.preventDefault();
+        void deleteSelected();
       }
     };
     const onOnline = () => void flushOutbox();
@@ -223,9 +598,73 @@
     }
   }
 
+  function loadUiPreferences() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const savedQuickActions = JSON.parse(localStorage.getItem('triage.quickActions') || 'null') as QuickActionId[] | null;
+      if (Array.isArray(savedQuickActions)) {
+        const allowed = savedQuickActions.filter((id): id is QuickActionId => quickActionCatalog.some((action) => action.id === id));
+        if (allowed.length) quickActionIds = allowed;
+      }
+      const savedSwipes = JSON.parse(localStorage.getItem('triage.swipeActions') || 'null') as Partial<typeof swipeSettings> | null;
+      if (savedSwipes) {
+        swipeSettings = {
+          leftShort: coerceSwipeAction(savedSwipes.leftShort, 'delete'),
+          leftLong: coerceSwipeAction(savedSwipes.leftLong, 'spam'),
+          rightShort: coerceSwipeAction(savedSwipes.rightShort, 'archive'),
+          rightLong: coerceSwipeAction(savedSwipes.rightLong, 'toggle_read')
+        };
+      }
+    } catch {
+      quickActionIds = ['reply', 'reply_all', 'forward', 'archive', 'delete', 'spam'];
+    }
+  }
+
+  function coerceSwipeAction(value: unknown, fallback: SwipeActionId): SwipeActionId {
+    return swipeActionCatalog.some((action) => action.id === value) ? (value as SwipeActionId) : fallback;
+  }
+
+  function saveUiPreferences() {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem('triage.quickActions', JSON.stringify(quickActionIds));
+    localStorage.setItem('triage.swipeActions', JSON.stringify(swipeSettings));
+  }
+
+  function setQuickActionEnabled(actionId: QuickActionId, enabled: boolean) {
+    if (enabled && !quickActionIds.includes(actionId)) {
+      quickActionIds = [...quickActionIds, actionId];
+    } else if (!enabled) {
+      quickActionIds = quickActionIds.filter((id) => id !== actionId);
+    }
+    saveUiPreferences();
+  }
+
+  function moveQuickAction(actionId: QuickActionId, direction: -1 | 1) {
+    const index = quickActionIds.indexOf(actionId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= quickActionIds.length) return;
+    const next = [...quickActionIds];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    quickActionIds = next;
+    saveUiPreferences();
+  }
+
+  function updateSwipeSetting(key: keyof typeof swipeSettings, action: SwipeActionId) {
+    swipeSettings = { ...swipeSettings, [key]: action };
+    saveUiPreferences();
+  }
+
+  function resetInterfacePreferences() {
+    quickActionIds = ['reply', 'reply_all', 'forward', 'archive', 'delete', 'spam'];
+    swipeSettings = { leftShort: 'delete', leftLong: 'spam', rightShort: 'archive', rightLong: 'toggle_read' };
+    saveUiPreferences();
+    status = 'Interface preferences reset';
+  }
+
   async function selectMessage(id: number) {
     isLoading = true;
     try {
+      showShortcutHelp = false;
       const params = new URLSearchParams(location.search);
       params.set('message', String(id));
       if (view !== 'inbox') params.set('view', view);
@@ -241,6 +680,7 @@
   async function deselectMessage() {
     isLoading = true;
     try {
+      showShortcutHelp = false;
       const params = new URLSearchParams(location.search);
       params.delete('message');
       await goto(`/?${params.toString()}`);
@@ -249,19 +689,63 @@
     }
   }
 
-  async function applySearch() {
+  async function mobileBack() {
+    if (view === 'settings') {
+      if (isMobileViewport && mobileSettingsDetailOpen) {
+        mobileSettingsDetailOpen = false;
+        const params = new URLSearchParams(location.search);
+        params.delete('settings');
+        params.delete('message');
+        await goto(`/?${params.toString()}`);
+        return;
+      }
+      await navigateView('inbox', { clearMessage: true });
+      return;
+    }
+    if (view === 'operations') {
+      await navigateView('inbox', { clearMessage: true });
+      return;
+    }
+    await deselectMessage();
+  }
+
+  async function applySearch(options: { clearMessage?: boolean } = {}) {
     isLoading = true;
     try {
+      const active = typeof document !== 'undefined' ? document.activeElement === searchInput : false;
+      const selectionStart = active ? searchInput?.selectionStart ?? null : null;
+      const selectionEnd = active ? searchInput?.selectionEnd ?? null : null;
       const params = new URLSearchParams();
       if (search) params.set('q', search);
       if (view !== 'inbox') params.set('view', view);
       if (accountFilter) params.set('accountId', accountFilter);
       if (data.query?.folder) params.set('folder', data.query.folder);
+      if (options.clearMessage) params.delete('message');
       await goto(`/?${params.toString()}`);
+      if (active) {
+        await tick();
+        searchInput?.focus({ preventScroll: true });
+        if (selectionStart !== null && selectionEnd !== null) {
+          searchInput?.setSelectionRange(selectionStart, selectionEnd);
+        }
+      }
     } finally {
       isLoading = false;
     }
   }
+
+  function scheduleSearch() {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    if (!['inbox', 'unread', 'starred', 'pending'].includes(view)) return;
+    searchDebounce = setTimeout(() => {
+      void applySearch({ clearMessage: true });
+    }, 250);
+  }
+
+  onDestroy(() => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    stopDictationMeter();
+  });
 
   async function executeSuggestion() {
     if (!data.selected?.suggestion) return;
@@ -323,6 +807,210 @@
     await invalidateAll();
   }
 
+  async function saveGoogleOauthSettings() {
+    const scopes = googleOauthSettings.scopes
+      .split('\n')
+      .map((scope) => scope.trim())
+      .filter(Boolean);
+    await api('/api/oauth/google/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        clientId: googleOauthSettings.clientId,
+        clientSecret: googleOauthSettings.clientSecret,
+        redirectUri: googleOauthSettings.redirectUri,
+        scopes,
+        isEnabled: googleOauthSettings.isEnabled
+      })
+    });
+    googleOauthSettings.clientSecret = '';
+    googleOauthHasSecret = true;
+    status = 'Google OAuth settings saved';
+  }
+
+  async function testAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+    status = `Testing ${profile} profile...`;
+    const result = await api('/api/ai-profiles/test', {
+      method: 'POST',
+      body: JSON.stringify({ profile })
+    });
+    status = result.message || `${profile} profile test passed`;
+  }
+
+  async function loadModelsDevCatalog() {
+    if (modelsDevLoaded || modelsDevLoading) return;
+    modelsDevLoading = true;
+    try {
+      const result = await api('/api/ai-profiles/modelsdev');
+      modelsDevProviders = result.providers || [];
+      modelsDevLoaded = true;
+    } finally {
+      modelsDevLoading = false;
+    }
+  }
+
+  function modelsDevProviderByInput(input: string) {
+    const normalized = input.trim().toLowerCase();
+    return modelsDevProviders.find((provider) => provider.id.toLowerCase() === normalized || provider.name.toLowerCase() === normalized) || null;
+  }
+
+  function selectedCatalogProvider(profile: 'primary' | 'fallback' | 'advanced') {
+    return modelsDevProviderByInput(aiProfileForms[profile]?.provider || '');
+  }
+
+  function selectedCatalogModels(profile: 'primary' | 'fallback' | 'advanced') {
+    return selectedCatalogProvider(profile)?.models || [];
+  }
+
+  function requiredEnvVars(profile: 'primary' | 'fallback' | 'advanced') {
+    return selectedCatalogProvider(profile)?.env || ['API_KEY'];
+  }
+
+  function setProfileMode(profile: 'primary' | 'fallback' | 'advanced', mode: 'catalog' | 'manual') {
+    if (mode === 'manual') {
+      aiProfileForms = {
+        ...aiProfileForms,
+        [profile]: {
+          ...aiProfileForms[profile],
+          transport: 'openai_compatible'
+        }
+      };
+    }
+    profileMode = {
+      ...profileMode,
+      [profile]: mode
+    };
+    if (mode === 'catalog') void loadModelsDevCatalog();
+  }
+
+  function selectCatalogProviderForProfile(profile: 'primary' | 'fallback' | 'advanced', input: string) {
+    const provider = modelsDevProviderByInput(input);
+    if (!provider) {
+      aiProfileForms = {
+        ...aiProfileForms,
+        [profile]: {
+          ...aiProfileForms[profile],
+          provider: input
+        }
+      };
+      return;
+    }
+    const defaultModel = provider.models[0]?.id || aiProfileForms[profile].model || '';
+    const knownBaseByProvider: Record<string, string> = {
+      deepseek: 'https://api.deepseek.com',
+      gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      openai: 'https://api.openai.com/v1',
+      openrouter: 'https://openrouter.ai/api/v1',
+      groq: 'https://api.groq.com/openai/v1'
+    };
+    const fallbackBase = provider.api || knownBaseByProvider[provider.id] || aiProfileForms[profile].baseUrl || '';
+    aiProfileForms = {
+      ...aiProfileForms,
+      [profile]: {
+        ...aiProfileForms[profile],
+        provider: provider.id,
+        model: defaultModel,
+        baseUrl: fallbackBase,
+        transport: provider.id === 'anthropic' ? 'anthropic' : 'openai_compatible',
+        preset: 'modeldev',
+        label: profile === 'advanced' ? 'Advanced Planner' : profile[0].toUpperCase() + profile.slice(1)
+      }
+    };
+  }
+
+  function profileDefaultModelOptions(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+    const presetId = aiProfileForms[profile]?.preset;
+    const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find((item) => item.id === presetId);
+    return (preset?.modelOptions || []).map((id: string) => ({ id, label: id }));
+  }
+
+  function resolvedModelOptions(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+    const dynamic = aiCatalogOptions[profile];
+    if (dynamic?.length) return dynamic;
+    return profileDefaultModelOptions(profile);
+  }
+
+  async function fetchAiModelCatalog(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+    const form = aiProfileForms[profile];
+    if (!form) return;
+    if (form.provider === 'modeldev' && form.baseUrl.includes('api.model.dev')) {
+      form.baseUrl = form.baseUrl.replace('api.model.dev', 'model.dev');
+      aiProfileForms = { ...aiProfileForms, [profile]: { ...form } };
+    }
+    status = `Fetching model catalog for ${form.label}...`;
+    const result = await api('/api/ai-profiles/catalog', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile,
+        provider: form.provider,
+        transport: form.transport,
+        baseUrl: form.baseUrl,
+        apiKey: form.apiKey.trim() ? form.apiKey : undefined
+      })
+    });
+    aiCatalogOptions = {
+      ...aiCatalogOptions,
+      [profile]: result.models || []
+    };
+    status = `Loaded ${(result.models || []).length} models`;
+  }
+
+  async function runAutopilot() {
+    status = 'Running autopilot...';
+    await api('/api/autopilot', { method: 'POST', body: JSON.stringify({ action: 'run' }) });
+    selectedQueueIds = [];
+    status = 'Autopilot run complete';
+    await invalidateAll();
+  }
+
+  async function saveAutopilotPolicy() {
+    await api('/api/autopilot', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_policy', policy: autopilotPolicy })
+    });
+    status = 'Autopilot policy saved';
+    await invalidateAll();
+  }
+
+  function toggleQueueItem(id: number, selected: boolean) {
+    selectedQueueIds = selected ? Array.from(new Set([...selectedQueueIds, id])) : selectedQueueIds.filter((value) => value !== id);
+  }
+
+  function selectAllQueue() {
+    const ids = (data.autopilot?.queue || []).filter((item: { status: string }) => item.status === 'proposed').map((item: { id: number }) => item.id);
+    selectedQueueIds = selectedQueueIds.length === ids.length ? [] : ids;
+  }
+
+  async function queueAction(action: 'approve' | 'reject' | 'execute') {
+    if (!selectedQueueIds.length) return;
+    status = `${action} queue items...`;
+    await api(`/api/autopilot/queue/${action}`, {
+      method: 'POST',
+      body: JSON.stringify({ ids: selectedQueueIds })
+    });
+    selectedQueueIds = [];
+    status = `Queue ${action} complete`;
+    await invalidateAll();
+  }
+
+  async function recordMessageOutcome(outcomeType: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') {
+    if (!data.selected?.message) return;
+    await api('/api/autopilot/outcomes', {
+      method: 'POST',
+      body: JSON.stringify({
+        messageId: data.selected.message.id,
+        suggestionId: data.selected.suggestion?.id || null,
+        outcomeType
+      })
+    });
+    status = 'Outcome recorded';
+    await invalidateAll();
+  }
+
+  function startGoogleConnect() {
+    window.location.href = '/api/accounts/google/start';
+  }
+
   async function accountAction(id: number, action: 'test' | 'enable' | 'disable' | 'delete') {
     status = `${action} account...`;
     if (action === 'delete') await api(`/api/accounts/${id}`, { method: 'DELETE' });
@@ -332,9 +1020,178 @@
   }
 
   async function saveMemory() {
-    await api('/api/memory', { method: 'POST', body: JSON.stringify({ markdown: memoryText }) });
+    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'save_markdown', markdown: memoryText }) });
     status = 'Memory saved';
     await invalidateAll();
+  }
+
+  async function saveCoreProfile() {
+    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'save_core_profile', coreProfile: coreProfileText }) });
+    status = 'Core profile saved';
+    await invalidateAll();
+  }
+
+  async function setAdvancedMemoryMode(enabled: boolean) {
+    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'set_advanced_mode', enabled }) });
+    memoryAdvancedMode = enabled;
+    status = enabled ? 'Advanced memory mode enabled' : 'Advanced memory mode disabled';
+    await invalidateAll();
+  }
+
+  async function removeMemoryRule(id: number) {
+    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'delete_rule', id }) });
+    status = 'Rule removed';
+    await invalidateAll();
+  }
+
+  async function applyMemoryAssistant() {
+    if (!memoryAssistantPrompt.trim()) return;
+    status = 'Updating memory...';
+    const result = await api('/api/memory/assistant', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: memoryAssistantPrompt })
+    });
+    memoryAssistantPrompt = '';
+    coreProfileText = result.memoryOverview?.profile?.coreProfile || coreProfileText;
+    memoryAdvancedMode = Boolean(result.memoryOverview?.profile?.advancedMode ?? memoryAdvancedMode);
+    status = result.action?.summary || 'Memory updated';
+    await invalidateAll();
+  }
+
+  async function refreshBackups() {
+    const response = await api('/api/admin/backups');
+    backups = response.backups || [];
+  }
+
+  async function createBackupNow() {
+    status = 'Creating backup...';
+    await api('/api/admin/backups', { method: 'POST', body: '{}' });
+    await refreshBackups();
+    status = 'Backup created';
+  }
+
+  async function loadAuditSnapshot() {
+    const audit = await api('/api/admin/audit');
+    auditSnapshot = {
+      actions: audit.actions?.length || 0,
+      toolCalls: audit.toolCalls?.length || 0,
+      memoryEvents: audit.memoryEvents?.length || 0
+    };
+  }
+
+  async function restoreBackupNow(id: string) {
+    status = 'Restoring backup...';
+    await api(`/api/admin/backups/${encodeURIComponent(id)}/restore`, { method: 'POST', body: '{}' });
+    status = 'Backup restored';
+    await invalidateAll();
+  }
+
+  function saveCacheEncryption() {
+    setCacheEncryptionPassphrase(cachePassphrase || null);
+    cacheEncrypted = cacheEncryptionEnabled();
+    status = cacheEncrypted ? 'Encrypted browser cache enabled' : 'Encrypted browser cache disabled';
+  }
+
+  function getDictationTarget(targetId: string) {
+    return document.getElementById(targetId) as HTMLTextAreaElement | HTMLInputElement | null;
+  }
+
+  async function toggleDictation(targetId: string) {
+    const target = getDictationTarget(targetId);
+    if (dictationActive) {
+      if (dictationTarget?.id === targetId) {
+        mediaRecorder?.stop();
+      }
+      return;
+    }
+    if (!target) return;
+    if (typeof MediaRecorder === 'undefined') {
+      status = 'Dictation unavailable in this browser';
+      return;
+    }
+    try {
+      dictationTarget = target;
+      dictationLevel = 0;
+      recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingChunks = [];
+      mediaRecorder = new MediaRecorder(recordingStream, { mimeType: 'audio/webm' });
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunks.push(event.data);
+      };
+      mediaRecorder.onstop = async () => {
+        dictationActive = false;
+        stopDictationMeter();
+        const blob = new Blob(recordingChunks, { type: 'audio/webm' });
+        recordingStream?.getTracks().forEach((track) => track.stop());
+        recordingStream = null;
+        mediaRecorder = null;
+        if (blob.size === 0) return;
+        status = 'Transcribing audio...';
+        const form = new FormData();
+        form.set('file', blob, 'dictation.webm');
+        const response = await fetch('/api/audio/transcribe', {
+          method: 'POST',
+          headers: { 'x-csrf-token': data.csrfToken },
+          body: form
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const json = await response.json();
+        if (typeof json.text === 'string' && json.text.trim()) {
+          const currentTarget = dictationTarget;
+          if (currentTarget) {
+            const start = currentTarget.selectionStart ?? currentTarget.value.length;
+            const end = currentTarget.selectionEnd ?? currentTarget.value.length;
+            const before = currentTarget.value.slice(0, start);
+            const after = currentTarget.value.slice(end);
+            const separator = before && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : '';
+            currentTarget.value = `${before}${separator}${json.text.trim()}${after}`;
+            currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          status = 'Transcription inserted';
+        } else {
+          status = 'No speech detected';
+        }
+        dictationTarget = null;
+        recordingChunks = [];
+      };
+      const AudioContextCtor =
+        window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextCtor) {
+        dictationAudioContext = new AudioContextCtor();
+        if (dictationAudioContext.state === 'suspended') {
+          await dictationAudioContext.resume();
+        }
+        dictationAudioSource = dictationAudioContext.createMediaStreamSource(recordingStream);
+        dictationAnalyser = dictationAudioContext.createAnalyser();
+        dictationAnalyser.fftSize = 256;
+        dictationAnalyser.smoothingTimeConstant = 0.7;
+        dictationAudioSource.connect(dictationAnalyser);
+        const buffer = new Uint8Array(dictationAnalyser.fftSize);
+        const updateLevel = () => {
+          if (!dictationAnalyser) return;
+          dictationAnalyser.getByteTimeDomainData(buffer);
+          let sum = 0;
+          for (const sample of buffer) {
+            const normalized = (sample - 128) / 128;
+            sum += normalized * normalized;
+          }
+          const rms = Math.sqrt(sum / buffer.length);
+          dictationLevel = Math.min(1, Math.max(0, Math.pow(rms * 5.5, 0.82)));
+          dictationAnimationFrame = window.requestAnimationFrame(updateLevel);
+        };
+        updateLevel();
+      }
+      mediaRecorder.start();
+      dictationActive = true;
+      status = 'Recording... click stop when done';
+    } catch (err) {
+      dictationActive = false;
+      stopDictationMeter();
+      dictationTarget = null;
+      status = err instanceof Error ? err.message : 'Unable to start recording';
+      recordingStream?.getTracks().forEach((track) => track.stop());
+      recordingStream = null;
+    }
   }
 
   async function resetMemory() {
@@ -394,22 +1251,28 @@
   }
 
   async function selectFolder(accountId: number, folderPath: string) {
+    mobileMenuOpen = false;
+    showShortcutHelp = false;
     const params = new URLSearchParams();
     params.set('accountId', String(accountId));
     params.set('folder', folderPath);
     await goto(`/?${params.toString()}`);
   }
 
-  async function setQuickView(nextView: string) {
-    const params = new URLSearchParams();
-    if (nextView !== 'inbox') params.set('view', nextView);
-    await goto(`/?${params.toString()}`);
+  async function setQuickView(nextView: AppView) {
+    mobileMenuOpen = false;
+    showShortcutHelp = false;
+    await navigateView(nextView, { clearMessage: true });
   }
 
   async function moveSelected(folderPath: string) {
     if (!data.selected?.message) return;
+    await moveMessageToFolder(data.selected.message.id, folderPath);
+  }
+
+  async function moveMessageToFolder(messageId: number, folderPath: string) {
     status = 'Moving message...';
-    await api(`/api/messages/${data.selected.message.id}/move`, {
+    await api(`/api/messages/${messageId}/move`, {
       method: 'POST',
       body: JSON.stringify({ folderPath })
     });
@@ -417,49 +1280,143 @@
     await invalidateAll();
   }
 
-  function toggleBulkMessage(id: number, selected: boolean) {
-    if (selected) {
-      if (!selectedMessageIds.includes(id)) selectedMessageIds = [...selectedMessageIds, id];
-      return;
-    }
-    selectedMessageIds = selectedMessageIds.filter((value) => value !== id);
+  async function archiveSelected() {
+    if (!data.selected?.message) return;
+    await archiveMessage(data.selected.message.id);
   }
 
-  function toggleSelectAllVisible(selected: boolean) {
-    if (!selected) {
-      selectedMessageIds = [];
+  async function archiveMessage(messageId: number) {
+    const accountId = messageForAction(messageId)?.accountId;
+    const archiveFolder = resolveFolderPath(accountId, ['archive']);
+    if (!archiveFolder) {
+      status = 'No archive folder configured for this account';
       return;
     }
-    selectedMessageIds = data.messages.map((message: { id: number }) => message.id);
+    await moveMessageToFolder(messageId, archiveFolder);
   }
 
-  async function runBulkAction(action: 'move' | 'mark_read' | 'mark_unread' | 'flag' | 'unflag', folderPath?: string) {
-    if (!selectedMessageIds.length) return;
-    status = `Applying ${action.replace('_', ' ')}...`;
-    await api('/api/messages', {
-      method: 'POST',
-      body: JSON.stringify({ action, folderPath, messageIds: selectedMessageIds })
-    });
-    selectedMessageIds = [];
-    status = 'Bulk action complete';
-    await invalidateAll();
+  function resolveFolderPath(accountId: number | null | undefined, names: string[]) {
+    if (!accountId) return null;
+    const folders = data.folders.filter((folder: { accountId: number; path: string; role?: string | null }) => folder.accountId === accountId);
+    const normalized = names.map((name) => name.toLowerCase());
+    const exact = folders.find((folder: { path: string; role?: string | null }) => normalized.includes(folder.path.toLowerCase()) || (folder.role ? normalized.includes(folder.role.toLowerCase()) : false));
+    if (exact) return exact.path;
+    const loose = folders.find((folder: { path: string; role?: string | null }) =>
+      normalized.some((name) => folder.path.toLowerCase().includes(name) || (folder.role ? folder.role.toLowerCase().includes(name) : false))
+    );
+    return loose?.path || null;
+  }
+
+  async function markSpam() {
+    if (!data.selected?.message) return;
+    await markMessageSpam(data.selected.message.id);
+  }
+
+  async function markMessageSpam(messageId: number) {
+    const accountId = messageForAction(messageId)?.accountId;
+    const spamFolder = resolveFolderPath(accountId, ['spam', 'junk', 'spam review']);
+    if (!spamFolder) {
+      status = 'No spam folder configured for this account';
+      return;
+    }
+    await moveMessageToFolder(messageId, spamFolder);
+  }
+
+  async function deleteSelected() {
+    if (!data.selected?.message) return;
+    await deleteMessage(data.selected.message.id);
+  }
+
+  async function deleteMessage(messageId: number) {
+    const accountId = messageForAction(messageId)?.accountId;
+    const trashFolder = resolveFolderPath(accountId, ['trash', 'deleted items', 'deleted messages', 'bin']);
+    if (!trashFolder) {
+      status = 'No trash folder configured for this account';
+      return;
+    }
+    await moveMessageToFolder(messageId, trashFolder);
+  }
+
+  function messageForAction(messageId: number) {
+    if (data.selected?.message?.id === messageId) return data.selected.message;
+    return data.messages.find((message: { id: number }) => message.id === messageId);
   }
 
   async function toggleRead() {
     if (!data.selected?.message) return;
-    await api(`/api/messages/${data.selected.message.id}/read`, {
+    const messageId = data.selected.message.id;
+    const nextRead = !data.selected.message.isRead;
+    data = {
+      ...data,
+      selected: {
+        ...data.selected,
+        message: { ...data.selected.message, isRead: nextRead }
+      }
+    };
+    await tick();
+    const result = await api(`/api/messages/${messageId}/read`, {
       method: 'POST',
-      body: JSON.stringify({ read: !data.selected.message.isRead })
+      body: JSON.stringify({ read: nextRead })
     });
+    if (result?.message && data.selected) {
+      data = {
+        ...data,
+        selected: {
+          ...data.selected,
+          message: result.message
+        }
+      };
+    }
+    await invalidateAll();
+  }
+
+  async function toggleMessageRead(messageId: number) {
+    const row = messageForAction(messageId);
+    if (!row) return;
+    await api(`/api/messages/${messageId}/read`, {
+      method: 'POST',
+      body: JSON.stringify({ read: !row.isRead })
+    });
+    status = row.isRead ? 'Marked unread' : 'Marked read';
     await invalidateAll();
   }
 
   async function toggleFlagged() {
     if (!data.selected?.message) return;
-    await api(`/api/messages/${data.selected.message.id}/flag`, {
+    const messageId = data.selected.message.id;
+    const nextFlagged = !data.selected.message.isFlagged;
+    data = {
+      ...data,
+      selected: {
+        ...data.selected,
+        message: { ...data.selected.message, isFlagged: nextFlagged }
+      }
+    };
+    await tick();
+    const result = await api(`/api/messages/${messageId}/flag`, {
       method: 'POST',
-      body: JSON.stringify({ flagged: !data.selected.message.isFlagged })
+      body: JSON.stringify({ flagged: nextFlagged })
     });
+    if (result?.message && data.selected) {
+      data = {
+        ...data,
+        selected: {
+          ...data.selected,
+          message: result.message
+        }
+      };
+    }
+    await invalidateAll();
+  }
+
+  async function toggleMessageFlagged(messageId: number) {
+    const row = messageForAction(messageId);
+    if (!row) return;
+    await api(`/api/messages/${messageId}/flag`, {
+      method: 'POST',
+      body: JSON.stringify({ flagged: !row.isFlagged })
+    });
+    status = row.isFlagged ? 'Unstarred' : 'Starred';
     await invalidateAll();
   }
 
@@ -489,6 +1446,19 @@
     status = `Imported ${result.imported} contacts`;
     contactsImportCsv = '';
     await invalidateAll();
+  }
+
+  async function copyToClipboard(value: string, label = 'Copied') {
+    if (!value) {
+      status = 'Nothing to copy';
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      status = 'Clipboard unavailable in this browser';
+      return;
+    }
+    await navigator.clipboard.writeText(value);
+    status = `${label} copied`;
   }
 
   async function addAgentTool() {
@@ -550,8 +1520,8 @@
     await invalidateAll();
   }
 
-  function applyAiPreset(profile: 'primary' | 'fallback' | 'advanced', presetId: string) {
-    const preset = data.aiPresets?.find((item: { id: string }) => item.id === presetId);
+  function applyAiPreset(profile: 'primary' | 'fallback' | 'advanced' | 'audio', presetId: string) {
+    const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find((item) => item.id === presetId);
     const current = aiProfileForms[profile];
     if (!current) return;
     if (!preset || preset.id === 'manual') {
@@ -562,6 +1532,7 @@
           preset: 'manual'
         }
       };
+      aiCatalogOptions = { ...aiCatalogOptions, [profile]: [] };
       return;
     }
     aiProfileForms = {
@@ -577,11 +1548,111 @@
         notes: preset.notes
       }
     };
+    aiCatalogOptions = { ...aiCatalogOptions, [profile]: [] };
   }
 
-  async function saveAiProfile(profile: 'primary' | 'fallback' | 'advanced') {
+  function selectAudioProvider(providerId: string) {
+    audioProviderId = providerId;
+    const provider = data.speechProviders?.find((item: { id: string }) => item.id === providerId);
+    if (!provider) return;
+    audioModelId = provider.defaultModel;
+    if (provider.authType === 'none') {
+      audioApiKey = '';
+    }
+  }
+
+  function syncAudioProviderIntoProfile() {
+    const provider = audioProvider();
+    if (!provider) return;
+    aiProfileForms = {
+      ...aiProfileForms,
+      audio: {
+        ...aiProfileForms.audio,
+        provider: provider.id,
+        model: audioModelId,
+        preset: provider.id
+      }
+    };
+  }
+
+  async function saveAudioDictationProfile() {
+    const provider = audioProvider();
+    if (!provider) return;
+    const model = audioModels().find((item: { id: string }) => item.id === audioModelId)?.id || provider.defaultModel;
+    syncAudioProviderIntoProfile();
+    status = `Saving dictation provider (${provider.label})...`;
+    await api('/api/ai-profiles', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile: 'audio',
+        label: `Dictation: ${provider.label}`,
+        provider: provider.id,
+        transport: 'openai_compatible',
+        model,
+        baseUrl:
+          provider.id === 'deepgram'
+            ? 'https://api.deepgram.com'
+            : provider.id === 'groq'
+              ? 'https://api.groq.com/openai/v1'
+              : provider.id === 'openai'
+                ? 'https://api.openai.com/v1'
+                : provider.id === 'assemblyai'
+                  ? 'https://api.assemblyai.com'
+                  : provider.id === 'elevenlabs'
+                    ? 'https://api.elevenlabs.io'
+                    : provider.id === 'soniox'
+                      ? 'https://stt-rt.soniox.com'
+                      : provider.id === 'google_cloud_stt'
+                        ? 'https://speech.googleapis.com'
+                        : 'browser://speech-recognition',
+        apiKey: provider.authType === 'none' ? null : audioApiKey.trim() ? audioApiKey : undefined,
+        preset: provider.id,
+        isEnabled: true,
+        notes: 'Speech-to-text dictation provider'
+      })
+    });
+    status = 'Dictation provider saved';
+    if (provider.authType !== 'none') audioApiKey = '';
+    await invalidateAll();
+  }
+
+  async function saveAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     const form = aiProfileForms[profile];
     if (!form) return;
+    if (form.provider === 'modeldev' && form.baseUrl.includes('api.model.dev')) {
+      form.baseUrl = form.baseUrl.replace('api.model.dev', 'model.dev');
+      aiProfileForms = { ...aiProfileForms, [profile]: { ...form } };
+    }
+    const isCoreProfile = coreAiProfileKeys.includes(profile as (typeof coreAiProfileKeys)[number]);
+    if (isCoreProfile && profileMode[profile] === 'catalog') {
+      const envKeys = requiredEnvVars(profile as 'primary' | 'fallback' | 'advanced');
+      const envPayload: Record<string, string> = {};
+      for (const envKey of envKeys) {
+        const value = profileEnvValues[profile]?.[envKey] || '';
+        if (value.trim()) envPayload[envKey] = value.trim();
+      }
+      await api('/api/ai-profiles', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile: form.profile,
+          label: form.label,
+          provider: form.provider,
+          transport: form.transport,
+          model: form.model,
+          baseUrl: form.baseUrl,
+          apiKey: envKeys.length ? envPayload[envKeys[0]] || undefined : undefined,
+          preset: 'modeldev',
+          isEnabled: form.isEnabled,
+          notes: JSON.stringify({
+            source: 'modelsdev',
+            env: envPayload
+          })
+        })
+      });
+      status = `${form.label} saved`;
+      await invalidateAll();
+      return;
+    }
     status = `Saving ${form.label}...`;
     await api('/api/ai-profiles', {
       method: 'POST',
@@ -681,32 +1752,63 @@
     composeOpen = true;
   }
 
-  async function sendCompose() {
-    const bodyText = composeEditorMode === 'rich' ? stripHtml(composeHtml) : compose.body;
-    const payload = {
-      ...compose,
-      body: bodyText,
-      bodyHtml: composeEditorMode === 'rich' ? composeHtml : null,
-      mode: composeMode
-    };
-    status = navigator.onLine ? 'Sending...' : 'Offline: queuing';
-    try {
-      await api('/api/compose', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-      composeOpen = false;
-      status = 'Sent';
-      await invalidateAll();
-    } catch (error) {
-      if (!navigator.onLine || error instanceof TypeError) {
-        const queued = await enqueueOutbox(payload as Record<string, unknown>);
-        status = queued ? 'Queued for send when online' : 'Unable to queue';
-      } else {
-        throw error;
-      }
+async function sendCompose() {
+  const bodyText = composeEditorMode === 'rich' ? stripHtml(composeHtml) : compose.body;
+  const payload = {
+    ...compose,
+    body: bodyText,
+    bodyHtml: composeEditorMode === 'rich' ? composeHtml : null,
+    mode: composeMode
+  };
+  status = navigator.onLine ? 'Sending...' : 'Offline: queuing';
+  try {
+    await api('/api/compose', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    composeOpen = false;
+    status = 'Sent';
+    await invalidateAll();
+  } catch (error) {
+    if (!navigator.onLine || error instanceof TypeError) {
+      const queued = await enqueueOutbox(payload as Record<string, unknown>);
+      status = queued ? 'Queued for send when online' : 'Unable to queue';
+    } else {
+      throw error;
     }
   }
+}
+
+async function generateComposeBody() {
+  if (!composeAiPrompt.trim()) return;
+  isGeneratingCompose = true;
+  status = 'Generating email...';
+  try {
+    const result = await api('/api/compose/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: composeAiPrompt,
+        to: compose.to,
+        subject: compose.subject,
+        context: composeMode !== 'compose' && compose.sourceMessageId ? { messageId: compose.sourceMessageId } : null
+      })
+    });
+    if (result.body) {
+      compose.body = result.body;
+      composeHtml = result.bodyHtml || result.body;
+      if (result.subject && !compose.subject) {
+        compose.subject = result.subject;
+      }
+    }
+    composeAiPrompt = '';
+    status = 'Email generated';
+  } catch (error) {
+    status = 'Failed to generate email';
+    console.error(error);
+  } finally {
+    isGeneratingCompose = false;
+  }
+}
 
   async function saveDraft() {
     try {
@@ -815,13 +1917,132 @@
     if (risk === 'medium') return 'border-amber-300/40 bg-amber-300/10 text-amber-100';
     return 'border-accent-line bg-accent-soft text-accent';
   }
+
+  function quickActionMeta(actionId: QuickActionId | SwipeActionId) {
+    return quickActionCatalog.find((action) => action.id === actionId) || swipeActionCatalog.find((action) => action.id === actionId);
+  }
+
+  function visibleMobileQuickActions() {
+    return quickActionIds.length > 6 ? quickActionIds.slice(0, 5) : quickActionIds;
+  }
+
+  function overflowMobileQuickActions() {
+    return quickActionIds.length > 6 ? quickActionIds.slice(5) : [];
+  }
+
+  function quickActionButtonClass(actionId: QuickActionId, compact = false) {
+    const meta = quickActionCatalog.find((action) => action.id === actionId);
+    const base = compact
+      ? 'grid place-items-center rounded-md border p-2 transition-all duration-150 active:scale-95'
+      : 'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0';
+    if (meta?.tone === 'danger') return `${base} border-red-400/30 bg-red-400/[0.04] text-red-100 hover:bg-red-400/10`;
+    if (meta?.tone === 'accent') return `${base} border-accent/40 bg-accent text-black shadow-sm shadow-accent/20 hover:shadow-accent/30`;
+    return `${base} border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.08]`;
+  }
+
+  async function runQuickAction(actionId: QuickActionId, messageId = data.selected?.message?.id) {
+    if (!messageId) return;
+    quickActionOverflowOpen = false;
+    if (actionId === 'reply') return openCompose('reply');
+    if (actionId === 'reply_all') return openCompose('reply_all');
+    if (actionId === 'forward') return openCompose('forward');
+    if (actionId === 'archive') return archiveMessage(messageId);
+    if (actionId === 'delete') return deleteMessage(messageId);
+    if (actionId === 'spam') return markMessageSpam(messageId);
+    if (actionId === 'toggle_read') return toggleMessageRead(messageId);
+    if (actionId === 'star') return toggleMessageFlagged(messageId);
+  }
+
+  async function saveFolderRole(folderId: number, role: '' | FolderRole) {
+    await api(`/api/folders/${folderId}`, {
+      method: 'POST',
+      body: JSON.stringify({ role: role || null })
+    });
+    status = 'Folder role saved';
+    await invalidateAll();
+  }
+
+  function clampSwipe(delta: number) {
+    return Math.max(-164, Math.min(164, delta));
+  }
+
+  function swipeActionForDelta(delta: number) {
+    const abs = Math.abs(delta);
+    if (abs < 56) return null;
+    if (delta < 0) return abs > 128 ? swipeSettings.leftLong : swipeSettings.leftShort;
+    return abs > 128 ? swipeSettings.rightLong : swipeSettings.rightShort;
+  }
+
+  function swipeLabel(actionId: SwipeActionId | null) {
+    if (!actionId || actionId === 'none') return 'Release';
+    return quickActionMeta(actionId)?.label || 'Release';
+  }
+
+  function startSwipe(event: PointerEvent, messageId: number) {
+    if (event.pointerType === 'mouse') return;
+    swiping = { id: messageId, startX: event.clientX, deltaX: 0, pointerId: event.pointerId, dragging: false };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function updateSwipe(event: PointerEvent) {
+    if (!swiping || swiping.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - swiping.startX;
+    swiping = { ...swiping, deltaX: clampSwipe(deltaX), dragging: Math.abs(deltaX) > 8 };
+  }
+
+  async function finishSwipe(event: PointerEvent, messageId: number) {
+    if (!swiping || swiping.pointerId !== event.pointerId) {
+      await selectMessage(messageId);
+      return;
+    }
+    const { deltaX, dragging } = swiping;
+    swiping = null;
+    if (!dragging || Math.abs(deltaX) < 56) {
+      await selectMessage(messageId);
+      return;
+    }
+    const action = swipeActionForDelta(deltaX);
+    if (!action || action === 'none') return;
+    if (action === 'archive') await archiveMessage(messageId);
+    if (action === 'delete') await deleteMessage(messageId);
+    if (action === 'spam') await markMessageSpam(messageId);
+    if (action === 'toggle_read') await toggleMessageRead(messageId);
+    if (action === 'star') await toggleMessageFlagged(messageId);
+  }
+
+  function cancelSwipe() {
+    swiping = null;
+  }
+
+  function folderGroups() {
+    const groups = new Map<number, { accountId: number; accountEmail: string; folders: typeof data.folders }>();
+    for (const folder of data.folders) {
+      if (!groups.has(folder.accountId)) {
+        groups.set(folder.accountId, { accountId: folder.accountId, accountEmail: folder.accountEmail, folders: [] });
+      }
+      groups.get(folder.accountId)?.folders.push(folder);
+    }
+    return Array.from(groups.values()).sort((left, right) => left.accountEmail.localeCompare(right.accountEmail));
+  }
+
+  const mobileHeaderTitle = $derived(
+    view === 'operations'
+      ? 'AI Operations'
+      : view === 'settings'
+        ? isMobileViewport && mobileSettingsDetailOpen
+          ? settingsCategories.find((category) => category.key === settingsCategory)?.label || 'Settings'
+          : 'Settings'
+        : data.query?.messageId
+          ? data.selected?.message?.subject || 'Triage'
+          : 'Triage'
+  );
 </script>
 
 <svelte:head>
   <title>Triage</title>
 </svelte:head>
 
-<main class="relative grid h-screen grid-cols-1 md:grid-cols-[76px_minmax(320px,430px)_1fr] overflow-hidden text-zinc-100">
+<main class="relative grid h-screen grid-cols-1 overflow-hidden pt-16 text-zinc-100 md:grid-cols-[76px_minmax(320px,430px)_1fr] md:pt-0">
   {#if isLoading}
     <div class="fixed left-0 right-0 top-0 z-50 h-1 bg-accent/20" transition:fade>
       <div class="h-full bg-accent animate-pulse" style="width: 30%"></div>
@@ -832,233 +2053,313 @@
     </div>
   {/if}
 
+  {#if mobileMenuOpen}
+    <button class="fixed inset-0 z-40 bg-black/70 md:hidden" aria-label="Close navigation drawer" onclick={() => (mobileMenuOpen = false)}></button>
+    <aside class="fixed left-0 top-0 z-50 h-full w-[82vw] max-w-xs border-r border-white/10 bg-black/95 p-4 backdrop-blur-md md:hidden" in:fly={{ x: -24, duration: 180 }}>
+      <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-zinc-100">Navigate</p>
+          <p class="truncate text-[11px] text-zinc-500">{view === 'operations' ? 'AI operations' : view === 'settings' ? 'Settings' : 'Inbox'}</p>
+        </div>
+        <button class="rounded-md border border-white/10 p-2 text-zinc-300" onclick={() => (mobileMenuOpen = false)}>
+          <X size={16} />
+        </button>
+      </div>
+      <div class="mt-4 space-y-2 overflow-y-auto pr-1">
+        <button class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`} onclick={() => setQuickView('inbox')}>
+          <Inbox size={18} />
+          <span class="text-sm font-medium">Inbox</span>
+        </button>
+        <button class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'operations' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`} onclick={() => openOperations('autopilot')}>
+          <Bot size={18} />
+          <span class="text-sm font-medium">AI Operations</span>
+        </button>
+        <button class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'settings' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`} onclick={() => openSettings('accounts')}>
+          <Settings size={18} />
+          <span class="text-sm font-medium">Settings</span>
+        </button>
+        {#if ['inbox', 'unread', 'starred', 'pending'].includes(view)}
+          <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+            <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Inbox filters</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('inbox')}>All</button>
+              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('unread')}>Unread</button>
+              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('starred')}>Starred</button>
+              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('pending')}>Pending</button>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </aside>
+  {/if}
+
+  <header class="fixed left-0 right-0 top-0 z-30 flex h-12 items-center gap-2 border-b border-white/10 bg-black/90 px-2 backdrop-blur-md md:hidden">
+    <div class="flex items-center gap-1">
+      <button class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200" aria-label="Open navigation" onclick={() => (mobileMenuOpen = true)}>
+        <Menu size={18} />
+      </button>
+      {#if view === 'settings' || view === 'operations' || data.query?.messageId}
+        <button class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200" aria-label="Back" onclick={mobileBack}>
+          <ChevronLeft size={18} />
+        </button>
+      {/if}
+    </div>
+    <div class="min-w-0 flex-1 text-center">
+      <p class="truncate text-sm font-medium text-zinc-100">{mobileHeaderTitle}</p>
+    </div>
+    <button class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200" aria-label="Compose" title="Compose" onclick={() => openCompose('compose')}>
+      <PenLine size={18} />
+    </button>
+  </header>
+
   <!-- Desktop Sidebar -->
   <nav class="glass z-10 hidden flex-col items-center gap-3 border-y-0 border-l-0 px-3 py-4 md:flex">
     <div class="mb-4 grid h-10 w-10 place-items-center rounded-md bg-accent text-black">
       <Mail size={20} />
     </div>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'inbox' ? 'bg-white/10' : ''}`} title="Inbox" onclick={() => setQuickView('inbox')}>
+    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${isInboxView(view) ? 'bg-white/10' : ''}`} title="Inbox" onclick={() => setQuickView('inbox')}>
       <Inbox size={20} />
     </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'unread' ? 'bg-white/10' : ''}`} title="Unread" onclick={() => setQuickView('unread')}>
-      <EyeOff size={20} />
+    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'operations' ? 'bg-white/10' : ''}`} title="Operations" onclick={() => openOperations('autopilot')}>
+      <Bot size={20} />
     </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'starred' ? 'bg-white/10' : ''}`} title="Starred" onclick={() => setQuickView('starred')}>
-      <Star size={20} />
-    </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'pending' ? 'bg-white/10' : ''}`} title="Pending" onclick={() => setQuickView('pending')}>
-      <Clock3 size={20} />
-    </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'executed' ? 'bg-white/10' : ''}`} title="Executed" onclick={() => setQuickView('executed')}>
-      <Check size={20} />
-    </button>
-    <button class="focus-ring rounded-md p-3 text-zinc-300" title="Compose" onclick={() => openCompose('compose')}>
-      <PenLine size={20} />
-    </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'accounts' ? 'bg-white/10' : ''}`} title="Accounts" onclick={() => (view = 'accounts')}>
+    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'settings' ? 'bg-white/10' : ''}`} title="Settings" onclick={() => openSettings()}>
       <Settings size={20} />
-    </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'memory' ? 'bg-white/10' : ''}`} title="Memory" onclick={() => (view = 'memory')}>
-      <Shield size={20} />
     </button>
   </nav>
 
-  <!-- Mobile Bottom Rail -->
-  <nav class="glass fixed bottom-0 left-0 right-0 z-20 flex h-16 items-center justify-around border-x-0 border-b-0 px-2 md:hidden">
-    <button class={`flex flex-col items-center gap-1 p-2 text-zinc-300 ${view === 'inbox' ? 'text-accent' : ''}`} onclick={() => { view = 'inbox'; deselectMessage(); }}>
-      <Inbox size={20} />
-      <span class="text-[10px]">Inbox</span>
-    </button>
-    <button class={`flex flex-col items-center gap-1 p-2 text-zinc-300 ${view === 'pending' ? 'text-accent' : ''}`} onclick={() => { view = 'pending'; deselectMessage(); goto('/?view=pending'); }}>
-      <Clock3 size={20} />
-      <span class="text-[10px]">Pending</span>
-    </button>
-    <button class={`flex flex-col items-center gap-1 p-2 text-zinc-300 ${view === 'executed' ? 'text-accent' : ''}`} onclick={() => { view = 'executed'; deselectMessage(); goto('/?view=executed'); }}>
-      <Check size={20} />
-      <span class="text-[10px]">Done</span>
-    </button>
-    <button class={`flex flex-col items-center gap-1 p-2 text-zinc-300 ${view === 'accounts' ? 'text-accent' : ''}`} onclick={() => { view = 'accounts'; deselectMessage(); }}>
-      <Settings size={20} />
-      <span class="text-[10px]">Config</span>
-    </button>
-    <button class={`flex flex-col items-center gap-1 p-2 text-zinc-300 ${view === 'memory' ? 'text-accent' : ''}`} onclick={() => { view = 'memory'; deselectMessage(); }}>
-      <Shield size={20} />
-      <span class="text-[10px]">Memory</span>
-    </button>
-  </nav>
+  <!-- Floating Compose Button -->
+  <button
+    class="fixed bottom-6 right-6 z-30 hidden h-14 w-14 items-center justify-center rounded-full bg-accent text-black shadow-lg shadow-accent/30 transition-transform hover:scale-105 focus-ring md:flex"
+    aria-label="Compose"
+    title="Compose (c)"
+    onclick={() => openCompose('compose')}
+  >
+    <PenLine size={24} />
+  </button>
 
-  <section class={`border-r border-white/10 bg-black/30 pb-16 md:pb-0 ${data.query.messageId ? 'hidden md:block' : 'block'}`}>
+  <section class={`border-r border-white/10 bg-black/30 pb-16 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:block' : 'block'}`}>
     <div class="border-b border-white/10 p-4">
-      <div class="flex items-center justify-between">
-        <h1 class="text-lg font-semibold">Triage</h1>
-        <span class="rounded-full border border-accent-line bg-accent-soft px-2 py-1 text-xs text-accent">review-first</span>
-      </div>
-      <div class="mt-4 flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-3 py-2">
-        <Search size={16} class="text-zinc-500" />
-        <input
-          bind:this={searchInput}
-          class="w-full bg-transparent text-sm outline-none"
-          placeholder="Search mail..."
-          bind:value={search}
-          onkeydown={(event) => event.key === 'Enter' && applySearch()}
-        />
-      </div>
-      <div class="mt-2 grid grid-cols-[1fr_auto] gap-2">
-        <select
-          class="w-full rounded-md border border-white/10 bg-black/30 px-2 py-2 text-xs text-zinc-300 outline-none"
-          bind:value={accountFilter}
-          onchange={applySearch}
-        >
-          <option value="">All accounts</option>
-          {#each data.accounts as account (account.id)}
-            <option value={String(account.id)}>{account.email}</option>
-          {/each}
-        </select>
-        <button class="rounded-md border border-white/10 px-2 py-2 text-xs text-zinc-400" onclick={applySearch}>Apply</button>
-      </div>
-      <p class="mt-2 text-[11px] text-zinc-500">Shortcut: <kbd class="rounded border border-white/10 px-1 py-0.5">/</kbd> search, <kbd class="rounded border border-white/10 px-1 py-0.5">j</kbd>/<kbd class="rounded border border-white/10 px-1 py-0.5">k</kbd> move selection</p>
+      {#if onboardingTitle && onboardingBody}
+        <div class="mb-3 rounded-lg border border-accent/25 bg-accent/10 p-3 text-sm">
+          <p class="font-medium text-accent">{onboardingTitle}</p>
+          <p class="mt-1 text-xs leading-5 text-zinc-300">{onboardingBody}</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={() => openSettings()}>
+              Open config
+            </button>
+            {#if data.onboarding?.needsEmailSetup}
+              <button class="rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300" onclick={() => openSettings()}>
+                Add mailbox
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/if}
+      <h1 class="hidden text-lg font-semibold md:block">Triage</h1>
+      {#if isInboxView(view)}
+        <div class="mt-4 flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-3 py-2">
+          <Search size={16} class="text-zinc-500" />
+          <input
+            bind:this={searchInput}
+            class="w-full bg-transparent text-sm outline-none"
+            placeholder="Search mail..."
+            bind:value={search}
+            oninput={scheduleSearch}
+            onkeydown={(event) => event.key === 'Enter' && applySearch({ clearMessage: true })}
+          />
+          <button
+            type="button"
+            class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-300 hover:bg-white/[0.06]"
+            title={showShortcutHelp ? 'Hide keyboard shortcuts' : 'Show keyboard shortcuts'}
+            aria-label={showShortcutHelp ? 'Hide keyboard shortcuts' : 'Show keyboard shortcuts'}
+            onclick={() => (showShortcutHelp = !showShortcutHelp)}
+          >
+            <Keyboard size={14} />
+          </button>
+        </div>
+        <div class="mt-2">
+          <select
+            class="w-full rounded-md border border-white/10 bg-black/30 px-2 py-2 text-xs text-zinc-300 outline-none"
+            bind:value={accountFilter}
+            onchange={() => applySearch({ clearMessage: true })}
+          >
+            <option value="">All accounts</option>
+            {#each data.accounts as account (account.id)}
+              <option value={String(account.id)}>{account.email}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="mt-2">
+          <button
+            class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-white/[0.05]"
+            onclick={() => (foldersExpanded = !foldersExpanded)}
+            aria-expanded={foldersExpanded}
+          >
+            <span class="flex min-w-0 items-center gap-2">
+              <FolderOpen size={14} class="shrink-0" />
+              <span class="truncate">Folders</span>
+            </span>
+            <span class="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
+              {foldersExpanded ? 'Hide' : `Show ${data.folders.length}`}
+              <ChevronLeft size={12} class={foldersExpanded ? 'rotate-90' : '-rotate-90'} />
+            </span>
+          </button>
+          {#if foldersExpanded}
+            <div class="space-y-1 pl-1">
+              {#each folderGroups() as group (group.accountId)}
+                <div class="rounded-md border border-white/10 bg-white/[0.03] p-1">
+                  <div class="flex items-center justify-between gap-2 px-2 py-1">
+                    <p class="truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">{group.accountEmail}</p>
+                    {#if accountFilter}
+                      <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-500">{group.folders.length}</span>
+                    {/if}
+                  </div>
+                  <div class="space-y-1">
+                    {#each group.folders as folder (folder.id)}
+                      <button
+                        class={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-white/[0.05] ${data.query?.folder === folder.path && String(data.query?.accountId || '') === String(folder.accountId) ? 'bg-white/[0.08] text-accent' : 'text-zinc-400'}`}
+                        onclick={() => selectFolder(folder.accountId, folder.path)}
+                      >
+                        <span class="flex min-w-0 items-center gap-2">
+                          <FolderOpen size={14} class="shrink-0" />
+                          <span class="truncate">{folder.path}</span>
+                        </span>
+                        <span class="shrink-0 text-[11px] text-zinc-500">{folder.unread ? `${folder.unread}/` : ''}{folder.total}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+      {#if isInboxView(view)}
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('inbox')}>All</button>
+          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('unread')}>Unread</button>
+          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('starred')}>Starred</button>
+          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('pending')}>Pending</button>
+        </div>
+        {#if showShortcutHelp}
+          <div class="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-zinc-300">
+            <div class="flex items-center gap-2 text-zinc-200">
+              <Keyboard size={14} class="text-accent" />
+              <span class="font-medium">Keyboard shortcuts</span>
+            </div>
+            <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">/</kbd> search</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">j</kbd>/<kbd class="rounded border border-white/10 px-1.5 py-0.5">k</kbd> move</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">c</kbd> compose</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">r</kbd> reply</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">a</kbd> reply all</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">f</kbd> forward</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">s</kbd> star</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">u</kbd> unread/read</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">e</kbd> archive</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">#</kbd> trash</div>
+              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">?</kbd> toggle help</div>
+            </div>
+          </div>
+        {/if}
+      {/if}
       {#if status}
         <p class="mt-3 text-xs text-accent">{status}</p>
       {/if}
     </div>
 
-    {#if view === 'accounts'}
-      <div class="space-y-4 overflow-y-auto p-4" in:fade={{ duration: 150 }}>
-        <h2 class="text-sm font-medium text-zinc-300">Email Accounts</h2>
-        {#each data.accounts as account (account.id)}
-          <article class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="font-medium">{account.email}</p>
-                <p class="text-xs text-zinc-500">{account.host}:{account.port} -> {account.smtpHost}:{account.smtpPort}</p>
-                <p class="mt-1 text-xs text-zinc-400">{account.syncStatus}{account.lastSyncAt ? ` · ${new Date(account.lastSyncAt).toLocaleString()}` : ''}</p>
-              </div>
-              <span class="rounded-full border border-white/10 px-2 py-1 text-xs">{account.isEnabled ? 'enabled' : 'disabled'}</span>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => accountAction(account.id, 'test')}>Test</button>
-              <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}>{account.isEnabled ? 'Disable' : 'Enable'}</button>
-              <button class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200" onclick={() => accountAction(account.id, 'delete')}>Remove</button>
-            </div>
-          </article>
-        {/each}
-        <form class="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3" onsubmit={(event) => { event.preventDefault(); addAccount(); }}>
-          <h3 class="text-sm font-medium">Add IMAP/SMTP</h3>
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Email" bind:value={accountForm.email} />
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP host" bind:value={accountForm.host} />
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP username" bind:value={accountForm.username} />
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP password" type="password" bind:value={accountForm.password} />
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP host" bind:value={accountForm.smtpHost} />
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP username" bind:value={accountForm.smtpUsername} />
-          <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP password" type="password" bind:value={accountForm.smtpPassword} />
-          <button class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"><Plus size={16} /> Add account</button>
-        </form>
-      </div>
-    {:else if view === 'memory'}
-      <div class="flex h-[calc(100vh-108px)] flex-col p-4" in:fade={{ duration: 150 }}>
-        <h2 class="text-sm font-medium text-zinc-300">AGENT_INSTRUCTIONS.md</h2>
-        <p class="mt-1 text-xs text-zinc-500">These instructions are included in every AI triage prompt.</p>
-        <textarea class="mt-4 min-h-0 flex-1 resize-none rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-sm leading-6 outline-none" bind:value={memoryText}></textarea>
-        <div class="mt-3 flex gap-2">
-          <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveMemory}>Save</button>
-          <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={resetMemory}>Reset</button>
+    {#if view === 'operations'}
+      <div class="space-y-3 overflow-y-auto p-4" in:fade={{ duration: 150 }}>
+        <div class="flex rounded-md border border-white/10 p-1 text-xs">
+          <button class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('autopilot')}>Autopilot</button>
+          <button class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('executed')}>Executed</button>
         </div>
+        <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">AI Operations</p>
+          <h2 class="mt-2 text-sm font-medium text-zinc-200">{operationsCategory === 'autopilot' ? 'Autopilot' : 'Executed actions'}</h2>
+          <p class="mt-1 text-xs leading-5 text-zinc-500">
+            {operationsCategory === 'autopilot'
+              ? `Review pending AI actions and run the agent when needed. ${data.autopilot?.stats?.proposed || 0} items are waiting.`
+              : `Review the execution log and audit trail. ${data.executed?.length || 0} actions recorded.`}
+          </p>
+          <div class="mt-3 flex gap-2">
+            <button class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300" onclick={() => openOperations(operationsCategory)}>
+              Refresh
+            </button>
+            {#if operationsCategory === 'autopilot'}
+              <button class="rounded-md bg-accent px-3 py-1 text-[11px] font-medium text-black" onclick={runAutopilot}>Run</button>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {:else if view === 'settings'}
+      <div class="space-y-2 overflow-y-auto p-4" in:fade={{ duration: 150 }}>
+        <h2 class="text-sm font-medium text-zinc-300">Settings</h2>
+        {#each settingsCategories as category (category.key)}
+          <button
+            class={`w-full rounded-lg border px-3 py-2 text-left transition-all duration-150 hover:-translate-y-0.5 ${settingsCategory === category.key ? 'border-accent/40 bg-accent/10 text-accent shadow-sm shadow-accent/10' : 'border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]'}`}
+            onclick={() => openSettingsCategory(category.key)}
+          >
+            <p class="text-sm font-medium">{category.label}</p>
+            <p class="mt-1 text-xs text-zinc-500">{category.detail}</p>
+          </button>
+        {/each}
       </div>
     {:else}
       <div class="h-[calc(100vh-108px)] overflow-y-auto" in:fade={{ duration: 150 }}>
-      <div class="border-b border-white/10 p-3">
-        <div class="mb-2 flex items-center justify-between">
-          <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Folders</p>
-          <button class="rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300" onclick={() => openCompose('compose')}>Compose</button>
-        </div>
-        <div class="mb-2 flex flex-wrap items-center gap-1.5">
-          <button
-            class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300"
-            onclick={() => toggleSelectAllVisible(selectedMessageIds.length !== data.messages.length)}
-          >
-            {#if selectedMessageIds.length === data.messages.length && data.messages.length}
-              <span class="inline-flex items-center gap-1"><CheckSquare2 size={12} /> All</span>
-            {:else}
-              <span class="inline-flex items-center gap-1"><Square size={12} /> Select</span>
-            {/if}
-          </button>
-          <button data-testid="bulk-read" class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300 disabled:opacity-40" disabled={!selectedMessageIds.length} onclick={() => runBulkAction('mark_read')}>Read</button>
-          <button data-testid="bulk-unread" class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300 disabled:opacity-40" disabled={!selectedMessageIds.length} onclick={() => runBulkAction('mark_unread')}>Unread</button>
-          <button data-testid="bulk-star" class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300 disabled:opacity-40" disabled={!selectedMessageIds.length} onclick={() => runBulkAction('flag')}>Star</button>
-          <button data-testid="bulk-unstar" class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300 disabled:opacity-40" disabled={!selectedMessageIds.length} onclick={() => runBulkAction('unflag')}>Unstar</button>
-          <button data-testid="bulk-trash" class="rounded-md border border-red-400/30 px-2 py-1 text-[11px] text-red-200 disabled:opacity-40" disabled={!selectedMessageIds.length} onclick={() => runBulkAction('move', 'Trash')}>Trash</button>
-        </div>
-        <div class="max-h-44 space-y-1 overflow-y-auto">
-          {#each data.folders as folder (folder.id)}
-            <button
-                class={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-white/[0.05] ${data.query?.folder === folder.path && data.query?.accountId === folder.accountId ? 'bg-white/[0.08] text-accent' : 'text-zinc-400'}`}
-                onclick={() => selectFolder(folder.accountId, folder.path)}
-              >
-                <span class="flex min-w-0 items-center gap-2">
-                  <FolderOpen size={14} class="shrink-0" />
-                  <span class="truncate">{folder.path}</span>
-                </span>
-                <span class="shrink-0 text-[11px] text-zinc-500">{folder.unread ? `${folder.unread}/` : ''}{folder.total}</span>
-              </button>
-            {/each}
-          </div>
-          {#if data.drafts?.length}
-            <div class="mt-3 border-t border-white/10 pt-2">
-              <p class="mb-2 text-xs uppercase tracking-[0.18em] text-zinc-500">Drafts</p>
-              <div class="max-h-24 space-y-1 overflow-y-auto">
-                {#each data.drafts.slice(0, 6) as draft (draft.id)}
-                  <button class="w-full rounded-md border border-white/10 px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-white/[0.05]" onclick={() => openDraft(draft)}>
-                    <p class="truncate">{draft.subject || '(no subject)'}</p>
-                    <p class="truncate text-zinc-500">{draft.to || 'unsent draft'}</p>
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
         {#each data.messages as message (message.id)}
-          <button
-            data-testid="message-row"
-            class={`block w-full border-b border-white/5 px-4 py-3 text-left transition hover:bg-white/[0.04] ${data.selected?.message?.id === message.id ? 'bg-white/[0.06]' : ''}`}
-            onclick={() => selectMessage(message.id)}
+          <div
+            class="relative overflow-hidden border-b border-white/5"
+            animate:flip={{ duration: 180 }}
           >
-            <div class="flex items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-2">
-                <input
-                  type="checkbox"
-                  class="h-3.5 w-3.5 rounded border-white/20 bg-black/50 accent-[var(--accent)]"
-                  checked={selectedMessageIds.includes(message.id)}
-                  onclick={(event) => event.stopPropagation()}
-                  onchange={(event) => toggleBulkMessage(message.id, (event.currentTarget as HTMLInputElement).checked)}
-                />
-                <p class={`truncate text-sm ${message.isRead ? 'font-medium text-zinc-400' : 'font-semibold text-zinc-100'}`}>{message.from}</p>
+            <div class="absolute inset-y-0 left-0 flex w-44 items-center gap-2 bg-accent/15 px-4 text-xs text-accent transition-opacity duration-150" style={`opacity: ${swiping?.id === message.id && swiping.deltaX > 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}>
+              <Archive size={15} />
+              <span>{swipeLabel(swiping?.id === message.id && swiping.deltaX > 0 ? swipeActionForDelta(swiping.deltaX) : swipeSettings.rightShort)}</span>
+            </div>
+            <div class="absolute inset-y-0 right-0 flex w-44 items-center justify-end gap-2 bg-red-500/15 px-4 text-xs text-red-100 transition-opacity duration-150" style={`opacity: ${swiping?.id === message.id && swiping.deltaX < 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}>
+              <span>{swipeLabel(swiping?.id === message.id && swiping.deltaX < 0 ? swipeActionForDelta(swiping.deltaX) : swipeSettings.leftShort)}</span>
+              <Trash2 size={15} />
+            </div>
+            <button
+              data-testid="message-row"
+              class={`relative block w-full touch-pan-y bg-black px-4 py-3 text-left transition-[background,transform,box-shadow] duration-150 hover:bg-white/[0.04] ${data.selected?.message?.id === message.id ? 'bg-white/[0.06]' : ''}`}
+              style={`transform: translateX(${swiping?.id === message.id ? swiping.deltaX : 0}px); box-shadow: ${swiping?.id === message.id && Math.abs(swiping.deltaX) > 56 ? '0 10px 30px rgba(0,0,0,0.28)' : 'none'}`}
+              onpointerdown={(event) => startSwipe(event, message.id)}
+              onpointermove={updateSwipe}
+              onpointerup={(event) => finishSwipe(event, message.id)}
+              onpointercancel={cancelSwipe}
+              onkeydown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  selectMessage(message.id);
+                }
+              }}
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-2">
+                  <p class={`truncate text-sm ${message.isRead ? 'font-medium text-zinc-400' : 'font-semibold text-zinc-100'}`}>{message.from}</p>
+                </div>
+                <time class="shrink-0 text-xs text-zinc-500">{new Date(message.date).toLocaleDateString()}</time>
               </div>
-              <time class="shrink-0 text-xs text-zinc-500">{new Date(message.date).toLocaleDateString()}</time>
-            </div>
-            <p class={`mt-1 truncate text-sm ${message.isRead ? 'text-zinc-300' : 'font-medium text-white'}`}>{message.isFlagged ? '★ ' : ''}{message.subject}</p>
-            <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{message.snippet}</p>
-            <div class="mt-2 flex items-center gap-2">
-              <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{message.folderPath}</span>
-              <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-400">{message.accountEmail}</span>
-              {#if message.suggestionStatus}
-                <span class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(message.riskLevel)}`}>{message.recommendedAction}</span>
-              {/if}
-            </div>
-          </button>
+              <p class={`mt-1 truncate text-sm ${message.isRead ? 'text-zinc-300' : 'font-medium text-white'}`}>{message.isFlagged ? '★ ' : ''}{message.subject}</p>
+              <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{message.snippet}</p>
+              <div class="mt-2 flex items-center gap-2">
+                <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{message.folderPath}</span>
+                <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-400">{message.accountEmail}</span>
+                {#if message.suggestionStatus}
+                  <span class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(message.riskLevel)}`}>{message.recommendedAction}</span>
+                {/if}
+              </div>
+            </button>
+          </div>
         {/each}
       </div>
     {/if}
   </section>
 
-  <section class={`min-w-0 overflow-y-auto pb-20 md:pb-0 ${data.selected || view === 'executed' || view === 'accounts' || view === 'memory' ? 'block' : 'hidden md:block'}`}>
-    {#if data.selected}
-      <div class="sticky top-0 z-10 flex border-b border-white/10 bg-black/80 p-2 backdrop-blur-md md:hidden">
-        <button class="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-zinc-300" onclick={deselectMessage}>
-          <ChevronLeft size={20} />
-          <span>Back</span>
-        </button>
-      </div>
-
+  <section class={`min-w-0 overflow-y-auto pb-40 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}>
+    {#if data.selected && !['settings', 'operations'].includes(view)}
       <article class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         <header class="border-b border-white/10 pb-6">
           <div class="flex flex-wrap items-center gap-2">
@@ -1069,36 +2370,31 @@
           <p class="mt-3 text-sm text-zinc-400">From {data.selected.message.from} to {data.selected.message.to} · {new Date(data.selected.message.date).toLocaleString()}</p>
         </header>
 
-        {#if data.selected.attachments?.length}
-          <section class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-            <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Attachments</p>
-            <div class="mt-2 flex flex-wrap gap-2">
-              {#each data.selected.attachments as attachment (attachment.id)}
-                <a class="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]" href={`/api/messages/${data.selected.message.id}/attachments/${attachment.id}`}>
-                  <Paperclip size={13} />
-                  <span>{attachment.filename}</span>
-                  <span class="text-zinc-500">{Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB</span>
-                </a>
-              {/each}
-            </div>
-          </section>
-        {/if}
-
-        <div class="sticky top-0 z-10 mt-4 flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/70 py-3 backdrop-blur-md">
-          <button class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={() => openCompose('reply')}><Reply size={16} /> Reply</button>
-          <button data-testid="reply-all" class="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => openCompose('reply_all')}><ReplyAll size={16} /> Reply all</button>
-          <button class="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => openCompose('forward')}><Forward size={16} /> Forward</button>
-          <button data-testid="toggle-star" class={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${data.selected.message.isFlagged ? 'border-accent/50 text-accent' : 'border-white/10 text-zinc-200'}`} onclick={toggleFlagged}><Star size={16} /> {data.selected.message.isFlagged ? 'Starred' : 'Star'}</button>
-          <button data-testid="toggle-read" class="flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={toggleRead}>
-            {#if data.selected.message.isRead}<EyeOff size={16} /> Mark unread{:else}<Eye size={16} /> Mark read{/if}
-          </button>
+        <div class="sticky top-0 z-10 hidden flex-wrap items-center gap-2 border-b border-white/10 bg-black/75 py-3 backdrop-blur-md md:flex" in:fly={{ y: -6, duration: 180 }}>
+          {#each quickActionIds as actionId (actionId)}
+            <button
+              data-testid={actionId === 'reply_all' ? 'reply-all' : actionId === 'archive' ? 'quick-action-archive' : undefined}
+              class={quickActionButtonClass(actionId)}
+              onclick={() => runQuickAction(actionId)}
+            >
+              {#if actionId === 'reply'}<Reply size={16} />
+              {:else if actionId === 'reply_all'}<ReplyAll size={16} />
+              {:else if actionId === 'forward'}<Forward size={16} />
+              {:else if actionId === 'archive'}<Archive size={16} />
+              {:else if actionId === 'delete'}<Trash2 size={16} />
+              {:else if actionId === 'spam'}<ShieldAlert size={16} />
+              {:else if actionId === 'toggle_read'}
+                {#if data.selected.message.isRead}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
+              {:else if actionId === 'star'}<Star size={16} />{/if}
+              {quickActionMeta(actionId)?.label}
+            </button>
+          {/each}
           <select class="min-w-44 rounded-md border border-white/10 bg-black/60 px-3 py-2 text-sm text-zinc-200 outline-none" onchange={(event) => moveSelected(event.currentTarget.value)}>
             <option value="">Move...</option>
             {#each data.folders.filter((folder) => folder.accountId === data.selected?.message.accountId) as folder (folder.id)}
               <option value={folder.path}>{folder.path}</option>
             {/each}
           </select>
-          <button class="flex items-center gap-2 rounded-md border border-red-400/30 px-3 py-2 text-sm text-red-200" onclick={() => moveSelected('Trash')}><Trash2 size={16} /> Trash</button>
         </div>
 
         {#if data.selected.suggestion}
@@ -1109,11 +2405,10 @@
                 <h3 class="mt-2 text-xl font-semibold">{data.selected.suggestion.category}</h3>
                 <p class="mt-2 text-sm opacity-90">{data.selected.suggestion.reasoningSummary}</p>
               </div>
-              <div class="flex flex-wrap gap-2 text-xs">
-                <span class="rounded-full border border-current/20 px-2 py-1">{data.selected.suggestion.recommendedAction}</span>
-                <span class="rounded-full border border-current/20 px-2 py-1">{Math.round(data.selected.suggestion.confidence * 100)}%</span>
-                <span class="rounded-full border border-current/20 px-2 py-1">{data.selected.suggestion.riskLevel} risk</span>
-              </div>
+<div class="flex flex-wrap gap-2 text-xs">
+          <span class="rounded-full border border-current/20 px-2 py-1">{data.selected.suggestion.recommendedAction}</span>
+          <span class="rounded-full border border-current/20 px-2 py-1">{data.selected.suggestion.riskLevel} risk</span>
+        </div>
             </div>
             {#if data.selected.suggestion.targetFolder}
               <p class="mt-4 text-sm">Target folder: {data.selected.suggestion.targetFolder}</p>
@@ -1122,15 +2417,23 @@
               <p class="mt-4 text-sm">Delegate: {data.selected.suggestion.delegateInstructions}</p>
             {/if}
             {#if data.selected.suggestion.draftReply || ['reply', 'forward'].includes(data.selected.suggestion.recommendedAction)}
-              <label class="mt-5 block text-sm font-medium" for="draft">Draft</label>
-              <textarea id="draft" data-testid="draft-reply" class="mt-2 min-h-44 w-full resize-y rounded-md border border-current/20 bg-black/30 p-3 text-sm text-white outline-none" bind:value={draftText}></textarea>
+              <label class="mt-5 block text-sm font-medium" for="draft-reply">Draft</label>
+              <div class="relative mt-2">
+                <textarea id="draft-reply" data-testid="draft-reply" class="min-h-44 w-full resize-y rounded-md border border-current/20 bg-black/30 p-3 pr-12 text-sm text-white outline-none" bind:value={draftText}></textarea>
+                <div class="absolute right-2 top-2">
+                  <DictationButton targetId="draft-reply" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+                </div>
+              </div>
             {/if}
             <div class="mt-5 flex flex-wrap items-center gap-2">
               <button data-testid="execute-suggestion" class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={executeSuggestion}><Send size={16} /> Execute</button>
               <button class="rounded-md border border-current/20 px-3 py-2 text-sm" onclick={saveEdit}>Save Edit</button>
               <button class="rounded-md border border-current/20 px-3 py-2 text-sm" onclick={rejectSuggestion}>Reject</button>
               <div class="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto md:flex-1">
-                 <input class="min-w-0 flex-1 rounded-md border border-current/20 bg-black/30 px-3 py-2 text-sm text-white" placeholder="Tweak this suggestion..." bind:value={regenNote} />
+                 <div class="flex min-w-0 flex-1 items-center gap-2">
+                   <input id="regen-note" class="min-w-0 flex-1 rounded-md border border-current/20 bg-black/30 px-3 py-2 text-sm text-white" placeholder="Tweak this suggestion..." bind:value={regenNote} />
+                   <DictationButton targetId="regen-note" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+                 </div>
                  <button class="flex items-center gap-2 rounded-md border border-current/20 px-3 py-2 text-sm" onclick={regenerate}><RefreshCw size={16} /> Regenerate</button>
               </div>
             </div>
@@ -1140,6 +2443,16 @@
             <button class="mt-6 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={() => generateSuggestion(data.selected?.message.id ?? 0)}>Generate suggestion</button>
           </div>
         {/if}
+
+        <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
+          <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Outcome Learning</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('resolved')}>Resolved</button>
+            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('needs_followup')}>Needs follow-up</button>
+            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('bad_draft')}>Bad draft</button>
+            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('wrong_action')}>Wrong action</button>
+          </div>
+        </section>
 
         <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5" data-testid="agent-task-card">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1153,7 +2466,10 @@
             </button>
           </div>
           <div class="mt-3 flex gap-2">
-            <input class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" placeholder="Add planning note (optional)..." bind:value={taskNote} />
+            <div class="flex min-w-0 flex-1 items-center gap-2">
+              <input id="task-note" class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" placeholder="Add planning note (optional)..." bind:value={taskNote} />
+              <DictationButton targetId="task-note" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+            </div>
           </div>
           {#if data.tasks?.length}
             <div class="mt-4 space-y-3">
@@ -1249,90 +2565,685 @@
             <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-zinc-200">{data.selected.message.bodyText}</pre>
           {/if}
         </section>
+
+        {#if data.selected.attachments?.length}
+          <details class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm text-zinc-300">
+              <span class="inline-flex items-center gap-2">
+                <Paperclip size={14} class="text-zinc-500" />
+                <span>Attachments</span>
+                <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{data.selected.attachments.length}</span>
+              </span>
+              <span class="text-xs text-zinc-500">Show files</span>
+            </summary>
+            <div class="mt-3 flex flex-wrap gap-2">
+              {#each data.selected.attachments as attachment (attachment.id)}
+                <a class="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]" href={`/api/messages/${data.selected.message.id}/attachments/${attachment.id}`}>
+                  <Paperclip size={13} />
+                  <span>{attachment.filename}</span>
+                  <span class="text-zinc-500">{Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB</span>
+                </a>
+              {/each}
+            </div>
+          </details>
+        {/if}
       </article>
-    {:else if view === 'executed'}
-      <div class="mx-auto max-w-4xl p-8" in:fade={{ duration: 150 }}>
-        <h2 class="text-2xl font-semibold">Executed Actions</h2>
-        <div class="mt-6 space-y-3">
-          {#each data.executed as action (action.id)}
-            <article class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="font-medium">{action.actionType}</p>
-              <p class="text-sm text-zinc-500">{action.status} · {new Date(action.createdAt).toLocaleString()}</p>
-              <pre class="mt-3 overflow-auto rounded-md bg-black/30 p-3 text-xs text-zinc-400">{action.detailsJson}</pre>
-            </article>
-          {/each}
+    {:else if view === 'operations'}
+      <div class="mx-auto max-w-5xl p-8" in:fade={{ duration: 150 }}>
+        <div class="mb-4 flex rounded-md border border-white/10 p-1 text-xs">
+          <button class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('autopilot')}>Autopilot</button>
+          <button class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('executed')}>Executed</button>
         </div>
+        {#if operationsCategory === 'autopilot'}
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-accent">AI Operations</p>
+              <h2 class="mt-2 text-2xl font-semibold">Autopilot Control Room</h2>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">The agent scans mail, proposes actions, tracks follow-ups, and keeps a decision log. Sends, forwards, and delegation stay approval-gated.</p>
+            </div>
+            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={runAutopilot}>Run Autopilot</button>
+          </div>
+
+          <section class="mt-6 grid gap-3 md:grid-cols-4">
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+              <p class="text-2xl font-semibold">{data.autopilot?.stats?.proposed || 0}</p>
+              <p class="mt-1 text-xs text-zinc-500">Awaiting review</p>
+            </div>
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+              <p class="text-2xl font-semibold">{data.autopilot?.stats?.approved || 0}</p>
+              <p class="mt-1 text-xs text-zinc-500">Approved</p>
+            </div>
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+              <p class="text-2xl font-semibold">{data.autopilot?.stats?.openFollowUps || 0}</p>
+              <p class="mt-1 text-xs text-zinc-500">Open follow-ups</p>
+            </div>
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+              <p class="text-2xl font-semibold">{data.autopilot?.stats?.avgLatencyMs || 0}ms</p>
+              <p class="mt-1 text-xs text-zinc-500">AI latency</p>
+            </div>
+          </section>
+
+          <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="font-medium">Policy</h3>
+                <p class="mt-1 text-sm text-zinc-400">Keep this boring: simulation first, explicit sends always.</p>
+              </div>
+              <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveAutopilotPolicy}>Save Policy</button>
+            </div>
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+                <span>Autopilot enabled</span>
+                <input type="checkbox" bind:checked={autopilotPolicy.autopilotEnabled} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+                <span>Dry-run only</span>
+                <input type="checkbox" bind:checked={autopilotPolicy.dryRunOnly} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+                <span>Auto-file low-risk mail</span>
+                <input type="checkbox" bind:checked={autopilotPolicy.allowAutoFileLowRisk} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+                <span>Auto-handle low-risk no-action</span>
+                <input type="checkbox" bind:checked={autopilotPolicy.allowAutoNoActionLowRisk} />
+              </label>
+              <label class="rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+                <span>Messages per run</span>
+                <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2" type="number" min="1" max="200" bind:value={autopilotPolicy.maxMessagesPerRun} />
+              </label>
+              <label class="rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+                <span>Max auto actions per run</span>
+                <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2" type="number" min="0" max="100" bind:value={autopilotPolicy.maxAutoActionsPerRun} />
+              </label>
+            </div>
+          </section>
+
+          <section class="mt-6 grid gap-4 xl:grid-cols-2">
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+              <h3 class="font-medium">Recent Runs</h3>
+              <div class="mt-4 space-y-2">
+                {#each data.autopilot?.runs || [] as run (run.id)}
+                  <div class="rounded-md border border-white/10 bg-black/20 p-3">
+                    <p class="text-sm">{run.status} · {run.mode}</p>
+                    <p class="mt-1 text-xs text-zinc-500">Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}</p>
+                    {#if run.errorMessage}<p class="mt-1 text-xs text-red-200">{run.errorMessage}</p>{/if}
+                  </div>
+                {:else}
+                  <p class="text-sm text-zinc-500">No runs yet.</p>
+                {/each}
+              </div>
+            </div>
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+              <h3 class="font-medium">Thread Intelligence</h3>
+              <div class="mt-4 space-y-2">
+                {#each data.autopilot?.summaries || [] as summary (summary.id)}
+                  <article class="rounded-md border border-white/10 bg-black/20 p-3">
+                    <p class="truncate text-sm font-medium">{summary.subject}</p>
+                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{summary.summary}</p>
+                    <p class="mt-2 text-xs text-accent">{summary.nextAction}</p>
+                  </article>
+                {:else}
+                  <p class="text-sm text-zinc-500">Run autopilot to build thread summaries.</p>
+                {/each}
+              </div>
+            </div>
+          </section>
+
+          <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+            <h3 class="font-medium">AI Observability</h3>
+            <div class="mt-4 overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="text-zinc-500">
+                  <tr><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th><th>Prompt</th></tr>
+                </thead>
+                <tbody>
+                  {#each data.autopilot?.observability || [] as item (item.id)}
+                    <tr class="border-t border-white/10">
+                      <td class="py-2">{item.operation}</td>
+                      <td>{item.provider}/{item.model}</td>
+                      <td>{item.status}</td>
+                      <td>{item.latencyMs}ms</td>
+                      <td>{item.promptHash}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        {:else if operationsCategory === 'executed'}
+          <h2 class="text-2xl font-semibold">Executed Actions</h2>
+          <div class="mt-6 space-y-3">
+            {#each data.executed as action (action.id)}
+              <article class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                <p class="font-medium">{action.actionType}</p>
+                <p class="text-sm text-zinc-500">{action.status} · {new Date(action.createdAt).toLocaleString()}</p>
+                <pre class="mt-3 overflow-auto rounded-md bg-black/30 p-3 text-xs text-zinc-400">{action.detailsJson}</pre>
+              </article>
+            {:else}
+              <p class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-zinc-500">No executed actions yet.</p>
+            {/each}
+          </div>
+        {/if}
       </div>
-    {:else if view === 'accounts'}
-      <div class="mx-auto max-w-3xl p-8" in:fade={{ duration: 150 }}>
+    {:else if view === 'settings'}
+      <div class="h-[calc(100dvh-3rem)] overflow-y-auto p-4 md:h-auto md:p-8" in:fade={{ duration: 150 }}>
+        {#if isMobileViewport && !mobileSettingsDetailOpen}
+          <h2 class="text-2xl font-semibold">Settings</h2>
+          <p class="mt-2 text-zinc-400">Choose what you want to configure.</p>
+          <div class="mt-6 space-y-2">
+            {#each settingsCategories as category (category.key)}
+              <button
+                class={`w-full rounded-lg border px-3 py-3 text-left transition-all duration-150 hover:-translate-y-0.5 ${settingsCategory === category.key ? 'border-accent/40 bg-accent/10 text-accent shadow-sm shadow-accent/10' : 'border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]'}`}
+                onclick={() => openSettingsCategory(category.key)}
+              >
+                <p class="text-sm font-medium">{category.label}</p>
+                <p class="mt-1 text-xs text-zinc-500">{category.detail}</p>
+              </button>
+            {/each}
+          </div>
+        {:else}
         <h2 class="text-2xl font-semibold">Configuration</h2>
-        <p class="mt-2 text-zinc-400">Passwords are encrypted at rest and are never displayed after saving.</p>
-        <div class="mt-8 grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+        {#if settingsCategory === 'accounts'}
+          <div class="mt-6 space-y-4">
+            <h3 class="text-sm font-medium text-zinc-300">Email Accounts</h3>
+            {#each data.accounts as account (account.id)}
+              <article class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="font-medium">{account.email}</p>
+                    <p class="text-xs text-zinc-500">{account.host}:{account.port} -> {account.smtpHost}:{account.smtpPort}</p>
+                    <p class="mt-1 text-xs text-zinc-400">{account.syncStatus}{account.lastSyncAt ? ` · ${new Date(account.lastSyncAt).toLocaleString()}` : ''} · {account.authType === 'oauth_gmail' ? 'gmail oauth' : 'password auth'}</p>
+                  </div>
+                  <span class="rounded-full border border-white/10 px-2 py-1 text-xs">{account.isEnabled ? 'enabled' : 'disabled'}</span>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => accountAction(account.id, 'test')}>Test</button>
+                  <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}>{account.isEnabled ? 'Disable' : 'Enable'}</button>
+                  <button class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200" onclick={() => accountAction(account.id, 'delete')}>Remove</button>
+                </div>
+              </article>
+            {/each}
+            <form class="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3" onsubmit={(event) => { event.preventDefault(); addAccount(); }}>
+              <h3 class="text-sm font-medium">Add IMAP/SMTP</h3>
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Email" bind:value={accountForm.email} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP host" bind:value={accountForm.host} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP username" bind:value={accountForm.username} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP password" type="password" bind:value={accountForm.password} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP host" bind:value={accountForm.smtpHost} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP username" bind:value={accountForm.smtpUsername} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP password" type="password" bind:value={accountForm.smtpPassword} />
+              <button class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"><Plus size={16} /> Add account</button>
+            </form>
+            <section class="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+              <h3 class="text-sm font-medium">Connect Gmail (Google OAuth)</h3>
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Google OAuth Client ID" bind:value={googleOauthSettings.clientId} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder={googleOauthHasSecret ? 'Client secret (leave blank to rotate)' : 'Google OAuth Client Secret'} type="password" bind:value={googleOauthSettings.clientSecret} />
+              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Redirect URI" bind:value={googleOauthSettings.redirectUri} />
+              <div class="relative">
+                <textarea id="google-oauth-scopes" class="min-h-20 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none" placeholder="One scope per line" bind:value={googleOauthSettings.scopes}></textarea>
+                <div class="absolute right-2 top-2">
+                  <DictationButton targetId="google-oauth-scopes" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+                </div>
+              </div>
+              <label class="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+                <input type="checkbox" bind:checked={googleOauthSettings.isEnabled} />
+                Enabled
+              </label>
+              <div class="flex flex-wrap gap-2">
+                <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={saveGoogleOauthSettings}>Save OAuth Settings</button>
+                <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={startGoogleConnect}>Connect Gmail Account</button>
+              </div>
+              {#if googleOauthConnectedEmail}
+                <p class="text-xs text-accent">Connected: {googleOauthConnectedEmail}</p>
+              {/if}
+            </section>
+          </div>
+        {/if}
+        {#if settingsCategory === 'memory'}
+          <div class="mt-6 space-y-4">
+            <h3 class="text-xl font-semibold">Memory</h3>
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+              <p class="text-sm font-medium">Memory Assistant</p>
+              <p class="mt-1 text-xs text-zinc-500">Describe how memory should change. The assistant will update profile and rules for you.</p>
+              <div class="mt-3 flex gap-2">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
+                  <input id="memory-assistant-prompt" class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Example: prioritize short replies for wholesale quotes and keep greetings warm" bind:value={memoryAssistantPrompt} />
+                  <DictationButton targetId="memory-assistant-prompt" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+                </div>
+                <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={applyMemoryAssistant}>Apply</button>
+              </div>
+            </div>
+            <div class="relative">
+              <textarea id="memory-core-profile" class="min-h-40 w-full resize-y rounded-lg border border-white/10 bg-black/40 p-3 pr-12 text-sm leading-6 outline-none" bind:value={coreProfileText}></textarea>
+              <div class="absolute right-2 top-2">
+                <DictationButton targetId="memory-core-profile" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveCoreProfile}>Save Core Profile</button>
+              <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300">
+                <input type="checkbox" bind:checked={memoryAdvancedMode} onchange={(event) => setAdvancedMemoryMode((event.currentTarget as HTMLInputElement).checked)} />
+                Advanced mode
+              </label>
+            </div>
+            {#if memoryAdvancedMode}
+              <div class="relative">
+                <textarea id="memory-advanced" class="min-h-36 w-full rounded-lg border border-white/10 bg-black/40 p-3 pr-12 font-mono text-xs leading-6 outline-none" bind:value={memoryText}></textarea>
+                <div class="absolute right-2 top-2">
+                  <DictationButton targetId="memory-advanced" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={saveMemory}>Save Memory File</button>
+                <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={resetMemory}>Reset Default</button>
+              </div>
+            {/if}
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                <p class="text-sm font-medium">Learned Rules</p>
+                <div class="mt-3 space-y-2">
+                  {#each data.memoryOverview?.rules || [] as rule (rule.id)}
+                    <article class="rounded-md border border-white/10 bg-black/20 p-2">
+                      <p class="text-xs text-zinc-300">{rule.ruleText}</p>
+                      <p class="mt-1 text-[11px] text-zinc-500">{rule.scope} · conf {Number(rule.confidence).toFixed(2)} · used {rule.usageCount}x</p>
+                      <button class="mt-2 rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-400" onclick={() => removeMemoryRule(rule.id)}>Disable</button>
+                    </article>
+                  {/each}
+                </div>
+              </div>
+              <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                <p class="text-sm font-medium">Recent Memory Events</p>
+                <div class="mt-3 space-y-2">
+                  {#each data.memoryOverview?.events || [] as event (event.id)}
+                    <article class="rounded-md border border-white/10 bg-black/20 p-2">
+                      <p class="text-xs text-zinc-300">{event.eventType}</p>
+                      <p class="mt-1 text-[11px] text-zinc-500">{new Date(event.createdAt).toLocaleString()}</p>
+                    </article>
+                  {/each}
+                </div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+              <p class="text-sm font-medium">Top Learned Examples</p>
+              <div class="mt-3 space-y-2">
+                {#each data.memoryOverview?.examples || [] as example (example.id)}
+                  <article class="rounded-md border border-white/10 bg-black/20 p-2">
+                    <p class="text-[11px] text-zinc-500">{example.scope} · score {Number(example.score).toFixed(2)}</p>
+                    <p class="mt-1 text-xs text-zinc-400 line-clamp-2">Before: {example.beforeText}</p>
+                    <p class="mt-1 text-xs text-zinc-300 line-clamp-2">After: {example.afterText}</p>
+                  </article>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
+        {#if settingsCategory === 'models'}
+        <div class="mt-8 gap-4 max-w-3xl mx-auto">
           <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 class="font-medium">AI Profiles</h3>
-                <p class="mt-1 text-sm text-zinc-400">Primary, fallback, and advanced planner settings live here. Leave the API key blank to keep the existing saved key.</p>
+                <p class="mt-1 text-sm text-zinc-400">Primary, fallback, advanced planner, and audio models.</p>
               </div>
-              <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-400">UI-managed</span>
             </div>
             <div class="mt-4 space-y-3">
-              {#each aiProfileKeys as profileKey (profileKey)}
+              {#each coreAiProfileKeys as profileKey (profileKey)}
                 <article class="rounded-md border border-white/10 bg-black/20 p-3">
                   <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p class="text-sm font-medium">{aiProfileForms[profileKey].label}</p>
                       <p class="text-xs text-zinc-500">{profileKey} · {aiProfileForms[profileKey].provider} · {aiProfileForms[profileKey].model}</p>
+                      <p class="mt-1 text-[11px] text-zinc-500">Recommended: {aiProfileRecommendations[profileKey].join(' · ')}</p>
                     </div>
-                    <label class="inline-flex items-center gap-2 text-xs text-zinc-300">
-                      <input type="checkbox" bind:checked={aiProfileForms[profileKey].isEnabled} />
+                    <label class="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300 hover:text-zinc-200">
+                      <span class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors" class:bg-accent={aiProfileForms[profileKey].isEnabled}>
+                        <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" class:translate-x-5={aiProfileForms[profileKey].isEnabled} class:translate-x-1={!aiProfileForms[profileKey].isEnabled}></span>
+                        <input type="checkbox" class="sr-only" bind:checked={aiProfileForms[profileKey].isEnabled} />
+                      </span>
                       Enabled
                     </label>
                   </div>
-                  <div class="mt-3 grid gap-2 md:grid-cols-2">
-                    <select class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={aiProfileForms[profileKey].preset} onchange={(event) => applyAiPreset(profileKey, (event.currentTarget as HTMLSelectElement).value)}>
-                      {#each data.aiPresets as preset (preset.id)}
-                        <option value={preset.id}>{preset.label}</option>
+                  <div class="mt-3 flex items-center gap-2 text-xs">
+                    <button class={`rounded-md border px-2 py-1 ${profileMode[profileKey] === 'catalog' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setProfileMode(profileKey, 'catalog')}>Catalog</button>
+                    <button class={`rounded-md border px-2 py-1 ${profileMode[profileKey] === 'manual' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setProfileMode(profileKey, 'manual')}>Manual</button>
+                  </div>
+
+                  {#if profileMode[profileKey] === 'catalog'}
+                    <div class="mt-3 grid gap-2 md:grid-cols-2">
+                      <div>
+                        <input
+                          list={`provider-options-${profileKey}`}
+                          class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                          placeholder="Search provider (DeepSeek recommended)"
+                          bind:value={aiProfileForms[profileKey].provider}
+                          onfocus={loadModelsDevCatalog}
+                          onchange={(event) => selectCatalogProviderForProfile(profileKey, (event.currentTarget as HTMLInputElement).value)}
+                        />
+                        <datalist id={`provider-options-${profileKey}`}>
+                          {#each modelsDevProviders as provider (provider.id)}
+                            <option value={provider.id}>{provider.name}</option>
+                          {/each}
+                        </datalist>
+                      </div>
+                      <div>
+                        <input
+                          list={`model-options-${profileKey}`}
+                          class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                          placeholder="Search model"
+                          bind:value={aiProfileForms[profileKey].model}
+                        />
+                        <datalist id={`model-options-${profileKey}`}>
+                          {#each selectedCatalogModels(profileKey) as model (model.id)}
+                            <option value={model.id}>{model.label}</option>
+                          {/each}
+                        </datalist>
+                      </div>
+                    </div>
+                    {#if selectedCatalogProvider(profileKey)?.doc}
+                      <p class="mt-2 text-xs text-zinc-500">Docs: <a class="underline hover:text-zinc-300" href={selectedCatalogProvider(profileKey)?.doc || '#'} target="_blank" rel="noreferrer">{selectedCatalogProvider(profileKey)?.doc}</a></p>
+                    {/if}
+                    <div class="mt-2 grid gap-2">
+                      {#each requiredEnvVars(profileKey) as envKey (envKey)}
+                        <input
+                          class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                          placeholder={`${envKey} value`}
+                          type="password"
+                          value={profileEnvValues[profileKey]?.[envKey] || ''}
+                          oninput={(event) => {
+                            const value = (event.currentTarget as HTMLInputElement).value;
+                            profileEnvValues = {
+                              ...profileEnvValues,
+                              [profileKey]: {
+                                ...(profileEnvValues[profileKey] || {}),
+                                [envKey]: value
+                              }
+                            };
+                          }}
+                        />
                       {/each}
-                    </select>
-                    <select class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={aiProfileForms[profileKey].transport}>
-                      <option value="openai_compatible">OpenAI compatible</option>
-                      <option value="anthropic">Anthropic</option>
-                    </select>
-                  </div>
-                  <div class="mt-2 grid gap-2 md:grid-cols-2">
-                    <input class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Label" bind:value={aiProfileForms[profileKey].label} />
-                    <input class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Provider" bind:value={aiProfileForms[profileKey].provider} />
-                    <input class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Model" bind:value={aiProfileForms[profileKey].model} />
-                    <input class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Base URL" bind:value={aiProfileForms[profileKey].baseUrl} />
-                  </div>
-                  <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="API key or bearer token" type="password" bind:value={aiProfileForms[profileKey].apiKey} />
-                  <textarea class="mt-2 min-h-20 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Notes" bind:value={aiProfileForms[profileKey].notes}></textarea>
+                    </div>
+                  {:else}
+                    <div class="mt-2 grid gap-2 md:grid-cols-2">
+                      <label class="block">
+                        <span class="text-xs text-zinc-500">Provider</span>
+                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Provider label" bind:value={aiProfileForms[profileKey].provider} />
+                      </label>
+                      <label class="block">
+                        <span class="text-xs text-zinc-500">Base URL</span>
+                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="OpenAI-compatible endpoint" bind:value={aiProfileForms[profileKey].baseUrl} />
+                      </label>
+                      <label class="block">
+                        <span class="text-xs text-zinc-500">Model ID</span>
+                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Model identifier" bind:value={aiProfileForms[profileKey].model} />
+                      </label>
+                      <label class="block">
+                        <span class="text-xs text-zinc-500">API Key / Bearer Token</span>
+                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Secret key" type="password" bind:value={aiProfileForms[profileKey].apiKey} />
+                      </label>
+                    </div>
+                  {/if}
                   <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <p class="text-xs text-zinc-500">{data.aiProfiles.find((item: { profile: string }) => item.profile === profileKey)?.hasApiKey ? 'Saved key present' : 'No saved key'}</p>
                     <div class="flex gap-2">
-                      <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={() => applyAiPreset(profileKey, 'manual')}>Manual</button>
+                      {#if profileMode[profileKey] === 'catalog'}
+                        <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={loadModelsDevCatalog}>{modelsDevLoading ? 'Loading...' : 'Refresh catalog'}</button>
+                      {/if}
+                      <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={() => testAiProfile(profileKey)}>Test</button>
                       <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={() => saveAiProfile(profileKey)}>Save</button>
                     </div>
                   </div>
                 </article>
               {/each}
+              <article class="rounded-md border border-white/10 bg-black/20 p-3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p class="text-sm font-medium">Dictation Provider</p>
+                    <p class="text-xs text-zinc-500">audio · {audioProvider()?.label || audioProviderId} · {audioModelId}</p>
+                    <p class="mt-1 text-[11px] text-zinc-500">Recommended: {aiProfileRecommendations.audio.join(' · ')}</p>
+                  </div>
+                  <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-400">Audio profile</span>
+                </div>
+                <div class="mt-4 grid gap-3 md:grid-cols-2">
+                  <label class="block">
+                    <span class="text-xs text-zinc-500">Provider</span>
+                    <select class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={audioProviderId} onchange={(event) => selectAudioProvider((event.currentTarget as HTMLSelectElement).value)}>
+                      {#each data.speechProviders.filter((provider) => !provider.hiddenByDefault) as provider (provider.id)}
+                        <option value={provider.id}>{provider.label}{provider.recommended ? ' (Recommended)' : ''}</option>
+                      {/each}
+                    </select>
+                  </label>
+                  <label class="block">
+                    <span class="text-xs text-zinc-500">Model</span>
+                    <select class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={audioModelId}>
+                      {#each audioModels() as model (model.id)}
+                        <option value={model.id}>{model.label}</option>
+                      {/each}
+                    </select>
+                  </label>
+                </div>
+                <div class="mt-3 rounded-md border border-white/10 bg-black/20 p-3">
+                  <p class="text-xs text-zinc-300">{audioModels().find((model) => model.id === audioModelId)?.blurb || 'Select a model to view details.'}</p>
+                  {#if audioProvider()?.docsUrl || audioProvider()?.signupUrl}
+                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                      {#if audioProvider()?.docsUrl}
+                        <a class="rounded border border-white/10 px-2 py-1 text-zinc-300 hover:bg-white/[0.06]" href={audioProvider()?.docsUrl} target="_blank" rel="noreferrer">Docs</a>
+                      {/if}
+                      {#if audioProvider()?.signupUrl}
+                        <a class="rounded border border-white/10 px-2 py-1 text-zinc-300 hover:bg-white/[0.06]" href={audioProvider()?.signupUrl} target="_blank" rel="noreferrer">Pricing/Signup</a>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+                {#if audioProvider()?.authType !== 'none'}
+                  <input class="mt-3 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" type="password" placeholder="API key (leave blank to keep saved key)" bind:value={audioApiKey} />
+                {:else}
+                  <p class="mt-3 rounded-md border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">Browser fallback requires no API key.</p>
+                {/if}
+                {#if audioProviderId === 'browser_web_speech'}
+                  <p class="mt-2 text-xs text-zinc-500">Browser dictation is not supported in Firefox and may vary by browser.</p>
+                {/if}
+                <div class="mt-4 flex flex-wrap gap-2">
+                  <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={() => testAiProfile('audio')}>Test microphone / transcription</button>
+                  <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={saveAudioDictationProfile}>Save dictation settings</button>
+                </div>
+              </article>
             </div>
           </div>
-          <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
-            <h3 class="font-medium">Model Picks</h3>
-            <p class="mt-1 text-sm text-zinc-400">Good starting points for common setups.</p>
-            <div class="mt-4 space-y-3">
-              {#each data.aiRecommendations as recommendation (recommendation.model)}
-                <article class="rounded-md border border-white/10 bg-black/20 p-3">
-                  <p class="text-sm font-medium">{recommendation.label}</p>
-                  <p class="text-xs text-accent">{recommendation.model}</p>
-                  <p class="mt-1 text-xs leading-5 text-zinc-400">{recommendation.reason}</p>
-                </article>
+          
+          
+        </div>
+        {/if}
+        {#if settingsCategory === 'tools'}
+        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 class="font-medium">MCP Server</h3>
+              <p class="mt-2 text-sm text-zinc-400">External agents can connect to this mailbox over the built-in MCP-compatible endpoint.</p>
+            </div>
+            <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-400">Bearer auth required</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            <div class="rounded-md border border-white/10 bg-black/20 p-3">
+              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Endpoint</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200">{data.mcp?.endpoint || data.mcp?.path || '/api/mcp/sse'}</code>
+                <button class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300" onclick={() => copyToClipboard(data.mcp?.endpoint || data.mcp?.path || '/api/mcp/sse', 'MCP endpoint')}>
+                  <Copy size={12} />
+                  Copy
+                </button>
+              </div>
+            </div>
+            <div class="rounded-md border border-white/10 bg-black/20 p-3">
+              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Authorization Header</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200">{data.mcp?.authHeader || 'Authorization: Bearer <MCP_AUTH_TOKEN>'}</code>
+                <button class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300" onclick={() => copyToClipboard(data.mcp?.authHeader || '', 'Auth header')}>
+                  <Copy size={12} />
+                  Copy
+                </button>
+              </div>
+            </div>
+            <div class="rounded-md border border-white/10 bg-black/20 p-3">
+              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">MCP Auth Token</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200">{data.mcp?.authToken || '(not configured)'}</code>
+                <button class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 disabled:opacity-40" onclick={() => copyToClipboard(data.mcp?.authToken || '', 'MCP token')} disabled={!data.mcp?.authToken}>
+                  <Copy size={12} />
+                  Copy
+                </button>
+              </div>
+            </div>
+            <div class="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
+              <p class="font-medium text-zinc-300">Tool names</p>
+              <p class="mt-1">search_emails, get_email_context, list_folders, move_message, set_read, set_flagged, generate_suggestion, regenerate_suggestion, execute_suggestion.</p>
+            </div>
+          </div>
+        </div>
+        {/if}
+        {#if settingsCategory === 'interface'}
+        <div class="mt-6 space-y-4" in:fade={{ duration: 150 }}>
+          <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 class="font-medium">Quick Action Bar</h3>
+                <p class="mt-1 text-sm text-zinc-400">Choose the actions shown on mobile and desktop message views. Mobile shows overflow behind the three-dot menu when the row is full.</p>
+              </div>
+              <button class="rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]" onclick={resetInterfacePreferences}>Reset</button>
+            </div>
+            <div class="mt-4 space-y-2">
+              {#each quickActionCatalog as action (action.id)}
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3" in:fly={{ y: 8, duration: 140 }}>
+                  <div class="flex min-w-0 items-center gap-3">
+                    <button
+                      type="button"
+                      class={`relative h-6 w-11 rounded-full transition-colors duration-200 ${quickActionIds.includes(action.id) ? 'bg-accent' : 'bg-zinc-700'}`}
+                      aria-pressed={quickActionIds.includes(action.id)}
+                      aria-label={`Toggle ${action.label}`}
+                      onclick={() => setQuickActionEnabled(action.id, !quickActionIds.includes(action.id))}
+                    >
+                      <span class={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${quickActionIds.includes(action.id) ? 'translate-x-5' : 'translate-x-1'}`}></span>
+                    </button>
+                    <div>
+                      <p class="text-sm font-medium text-zinc-200">{action.label}</p>
+                      <p class="text-xs text-zinc-500">{quickActionIds.includes(action.id) ? `Position ${quickActionIds.indexOf(action.id) + 1}` : 'Hidden'}</p>
+                    </div>
+                  </div>
+                  {#if quickActionIds.includes(action.id)}
+                    <div class="flex gap-1">
+                      <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]" onclick={() => moveQuickAction(action.id, -1)}>Up</button>
+                      <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]" onclick={() => moveQuickAction(action.id, 1)}>Down</button>
+                    </div>
+                  {/if}
+                </div>
               {/each}
             </div>
-            <p class="mt-4 text-xs leading-5 text-zinc-500">DeepSeek Flash is the fastest triage default. Use a stronger model such as DeepSeek Pro or Claude Sonnet for complex task planning and multi-step work.</p>
+          </section>
+
+          <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+            <h3 class="font-medium">Mobile Swipe Gestures</h3>
+            <p class="mt-1 text-sm text-zinc-400">Short swipes trigger at about a thumb-width. Longer swipes use the second action.</p>
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+              {#each [
+                { key: 'leftShort', label: 'Short swipe left' },
+                { key: 'leftLong', label: 'Long swipe left' },
+                { key: 'rightShort', label: 'Short swipe right' },
+                { key: 'rightLong', label: 'Long swipe right' }
+              ] as gesture (gesture.key)}
+                <label class="block rounded-md border border-white/10 bg-black/20 p-3">
+                  <span class="text-xs text-zinc-500">{gesture.label}</span>
+                  <select
+                    class="mt-2 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
+                    value={swipeSettings[gesture.key as keyof typeof swipeSettings]}
+                    onchange={(event) => updateSwipeSetting(gesture.key as keyof typeof swipeSettings, (event.currentTarget as HTMLSelectElement).value as SwipeActionId)}
+                  >
+                    {#each swipeActionCatalog as action (action.id)}
+                      <option value={action.id}>{action.label}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/each}
+            </div>
+          </section>
+
+          <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+            <h3 class="font-medium">Folder Role Mapping</h3>
+            <p class="mt-1 text-sm text-zinc-400">IMAP and Gmail special-use folders are discovered during sync. Override roles here when a provider uses unusual names.</p>
+            <div class="mt-4 space-y-3">
+              {#each folderGroups() as group (group.accountId)}
+                <div class="rounded-md border border-white/10 bg-black/20 p-3" in:fly={{ y: 8, duration: 140 }}>
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="truncate text-sm font-medium text-zinc-200">{group.accountEmail}</p>
+                    <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{group.folders.length} folders</span>
+                  </div>
+                  <div class="mt-3 grid gap-2 md:grid-cols-2">
+                    {#each group.folders as folder (folder.id)}
+                      <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                        <span class="min-w-0">
+                          <span class="block truncate text-xs text-zinc-300">{folder.path}</span>
+                          <span class="text-[11px] text-zinc-500">{folder.total} messages</span>
+                        </span>
+                        <select
+                          class="w-32 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
+                          value={folder.role || ''}
+                          onchange={(event) => saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value as '' | FolderRole)}
+                        >
+                          {#each folderRoleOptions as option (option.value)}
+                            <option value={option.value}>{option.label}</option>
+                          {/each}
+                        </select>
+                      </label>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </section>
+        </div>
+        {/if}
+        {#if settingsCategory === 'advanced'}
+        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+          <h3 class="font-medium">Encrypted Browser Cache</h3>
+          <p class="mt-2 text-sm text-zinc-400">Optional client-side encryption for IndexedDB cache on shared devices. Use a local passphrase.</p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm md:w-auto md:flex-1" placeholder="Cache passphrase (local browser only)" type="password" bind:value={cachePassphrase} />
+            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveCacheEncryption}>Save</button>
           </div>
+          <p class="mt-2 text-xs text-zinc-500">Status: {cacheEncrypted ? 'enabled' : 'disabled'}</p>
+        </div>
+        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+          <h3 class="font-medium">Backups</h3>
+          <p class="mt-2 text-sm text-zinc-400">Create and restore `/data` snapshots for disaster recovery. Restore rewrites current DB state.</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={createBackupNow}>Create Backup</button>
+            <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={refreshBackups}>Refresh</button>
+          </div>
+          <div class="mt-3 max-h-44 space-y-2 overflow-y-auto">
+            {#if backups.length}
+              {#each backups as backup (backup.id)}
+                <div class="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <p class="text-xs text-zinc-300">{new Date(backup.createdAt).toLocaleString()}</p>
+                  <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300" onclick={() => restoreBackupNow(backup.id)}>Restore</button>
+                </div>
+              {/each}
+            {:else}
+              <p class="text-xs text-zinc-500">No backups created yet.</p>
+            {/if}
+          </div>
+        </div>
+        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+          <h3 class="font-medium">Admin Audit Snapshot</h3>
+          <p class="mt-2 text-sm text-zinc-400">Quick visibility into executed actions, tool calls, and memory learning events.</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={loadAuditSnapshot}>Load Snapshot</button>
+          </div>
+          {#if auditSnapshot}
+            <div class="mt-3 grid gap-2 md:grid-cols-3">
+              <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Executed actions: {auditSnapshot.actions}</div>
+              <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Tool calls: {auditSnapshot.toolCalls}</div>
+              <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Memory events: {auditSnapshot.memoryEvents}</div>
+            </div>
+          {/if}
         </div>
         <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
           <h3 class="font-medium">Contacts Import/Export</h3>
@@ -1341,8 +3252,15 @@
             <button class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm" onclick={exportContacts}><Download size={15} /> Export CSV</button>
             <button class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm" onclick={importContacts}><Upload size={15} /> Import CSV</button>
           </div>
-          <textarea class="mt-3 min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 text-xs outline-none" placeholder="email,name&#10;person@example.com,Person Name" bind:value={contactsImportCsv}></textarea>
+          <div class="relative mt-3">
+            <textarea id="contacts-import-csv" class="min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none" placeholder="email,name&#10;person@example.com,Person Name" bind:value={contactsImportCsv}></textarea>
+            <div class="absolute right-2 top-2">
+              <DictationButton targetId="contacts-import-csv" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+            </div>
+          </div>
         </div>
+        {/if}
+        {#if settingsCategory === 'tools'}
         <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
           <h3 class="font-medium">Agent Tools (Bring Your Own)</h3>
           <p class="mt-2 text-sm text-zinc-400">Default mode is owner-trusted. Tools can run with full access for this instance.</p>
@@ -1377,10 +3295,22 @@
             <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="CLI args csv, e.g. -e,console.log(1)" bind:value={agentToolForm.argsCsv} />
             <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Auth headers JSON map" bind:value={agentToolForm.headersJson} />
             <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Env JSON map" bind:value={agentToolForm.envJson} />
-            <div class="flex flex-wrap items-center gap-3 text-xs text-zinc-300">
-              <label class="inline-flex items-center gap-2"><input type="checkbox" bind:checked={agentToolForm.readOnly} /> Read-only</label>
-              <label class="inline-flex items-center gap-2"><input type="checkbox" bind:checked={agentToolForm.requireApprovalForWrite} /> Require approval for writes</label>
-            </div>
+<div class="flex flex-wrap items-center gap-4 text-xs text-zinc-300">
+      <label class="inline-flex cursor-pointer items-center gap-2 hover:text-zinc-200">
+        <span class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors" class:bg-accent={agentToolForm.readOnly}>
+          <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" class:translate-x-5={agentToolForm.readOnly} class:translate-x-1={!agentToolForm.readOnly}></span>
+          <input type="checkbox" class="sr-only" bind:checked={agentToolForm.readOnly} />
+        </span>
+        Read-only
+      </label>
+      <label class="inline-flex cursor-pointer items-center gap-2 hover:text-zinc-200">
+        <span class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors" class:bg-accent={agentToolForm.requireApprovalForWrite}>
+          <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" class:translate-x-5={agentToolForm.requireApprovalForWrite} class:translate-x-1={!agentToolForm.requireApprovalForWrite}></span>
+          <input type="checkbox" class="sr-only" bind:checked={agentToolForm.requireApprovalForWrite} />
+        </span>
+        Require approval for writes
+      </label>
+    </div>
             <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add tool</button>
           </form>
         </div>
@@ -1388,16 +3318,55 @@
           <input class="flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Delegate webhook URL" bind:value={webhookTarget} />
           <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add webhook</button>
         </form>
-      </div>
-    {:else if view === 'memory'}
-      <div class="mx-auto max-w-3xl p-8" in:fade={{ duration: 150 }}>
-        <h2 class="text-2xl font-semibold">Living Memory</h2>
-        <p class="mt-3 text-zinc-400">The editor on the left writes to <code>/data/AGENT_INSTRUCTIONS.md</code>. New suggestions use the latest saved version.</p>
+        {/if}
+        {/if}
       </div>
     {:else}
       <div class="grid h-full place-items-center text-zinc-500" in:fade>No message selected</div>
     {/if}
   </section>
+
+  {#if data.query?.messageId && data.selected?.message && !['settings', 'operations'].includes(view)}
+    <nav class="fixed bottom-0 left-0 right-0 z-30 grid gap-1 border-t border-white/10 bg-black/95 px-2 py-2 backdrop-blur-md md:hidden" style={`grid-template-columns: repeat(${visibleMobileQuickActions().length + (overflowMobileQuickActions().length ? 1 : 0)}, minmax(0, 1fr));`} in:fly={{ y: 20, duration: 180 }} out:fade={{ duration: 120 }}>
+      {#each visibleMobileQuickActions() as actionId (actionId)}
+        <button class={quickActionButtonClass(actionId, true)} aria-label={quickActionMeta(actionId)?.label} title={quickActionMeta(actionId)?.label} onclick={() => runQuickAction(actionId)}>
+          {#if actionId === 'reply'}<Reply size={16} />
+          {:else if actionId === 'reply_all'}<ReplyAll size={16} />
+          {:else if actionId === 'forward'}<Forward size={16} />
+          {:else if actionId === 'archive'}<Archive size={16} />
+          {:else if actionId === 'delete'}<Trash2 size={16} />
+          {:else if actionId === 'spam'}<ShieldAlert size={16} />
+          {:else if actionId === 'toggle_read'}
+            {#if data.selected.message.isRead}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
+          {:else if actionId === 'star'}<Star size={16} />{/if}
+        </button>
+      {/each}
+      {#if overflowMobileQuickActions().length}
+        <div class="relative">
+          <button class="grid w-full place-items-center rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200 transition-all duration-150 active:scale-95" aria-label="More actions" title="More actions" onclick={() => (quickActionOverflowOpen = !quickActionOverflowOpen)}>
+            <MoreVertical size={16} />
+          </button>
+          {#if quickActionOverflowOpen}
+            <div class="absolute bottom-12 right-0 min-w-40 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 p-1 shadow-2xl shadow-black/60" in:fly={{ y: 8, duration: 140 }} out:fade={{ duration: 100 }}>
+              {#each overflowMobileQuickActions() as actionId (actionId)}
+                <button class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-zinc-200 transition-colors duration-150 hover:bg-white/[0.08]" onclick={() => runQuickAction(actionId)}>
+                  {#if actionId === 'reply'}<Reply size={14} />
+                  {:else if actionId === 'reply_all'}<ReplyAll size={14} />
+                  {:else if actionId === 'forward'}<Forward size={14} />
+                  {:else if actionId === 'archive'}<Archive size={14} />
+                  {:else if actionId === 'delete'}<Trash2 size={14} />
+                  {:else if actionId === 'spam'}<ShieldAlert size={14} />
+                  {:else if actionId === 'toggle_read'}<Eye size={14} />
+                  {:else if actionId === 'star'}<Star size={14} />{/if}
+                  {quickActionMeta(actionId)?.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </nav>
+  {/if}
 
   {#if composeOpen}
     <section class="fixed bottom-4 right-4 z-40 flex max-h-[86vh] w-[min(720px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60" in:fly={{ y: 24, duration: 180 }}>
@@ -1465,11 +3434,54 @@
             </div>
           {/if}
         </div>
-        {#if composeEditorMode === 'rich'}
-          <textarea class="min-h-0 flex-1 resize-none bg-black/30 p-4 text-sm leading-6 text-zinc-100 outline-none" placeholder="Write rich HTML body..." bind:value={composeHtml}></textarea>
-        {:else}
-          <textarea class="min-h-0 flex-1 resize-none bg-black/30 p-4 text-sm leading-6 text-zinc-100 outline-none" placeholder="Write the message..." bind:value={compose.body}></textarea>
-        {/if}
+<div class="border-b border-white/10 p-3">
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <Bot size={16} class="text-accent" />
+          <span class="text-xs text-zinc-400">AI Helper</span>
+        </div>
+        <div class="flex gap-2">
+          <div class="flex min-w-0 flex-1 items-center gap-2">
+            <input
+              id="compose-ai-prompt"
+              class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none"
+              placeholder="Describe the draft you want..."
+              bind:value={composeAiPrompt}
+              onkeydown={(event) => event.key === 'Enter' && !event.shiftKey && (event.preventDefault(), generateComposeBody())}
+            />
+            <DictationButton targetId="compose-ai-prompt" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+          </div>
+          <button
+            type="button"
+            class="flex items-center gap-1 rounded-md bg-accent/20 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/30 disabled:opacity-50"
+            onclick={generateComposeBody}
+            disabled={isGeneratingCompose || !composeAiPrompt.trim()}
+          >
+            {#if isGeneratingCompose}
+              <Loader2 size={14} class="animate-spin" />
+            {:else}
+              <Bot size={14} />
+            {/if}
+            Generate
+          </button>
+        </div>
+      </div>
+    </div>
+    {#if composeEditorMode === 'rich'}
+      <div class="relative min-h-0 flex-1">
+        <textarea id="compose-html-body" class="min-h-0 h-full w-full resize-none bg-black/30 p-4 pr-12 text-sm leading-6 text-zinc-100 outline-none" placeholder="Write rich HTML body..." bind:value={composeHtml}></textarea>
+        <div class="absolute right-2 top-2">
+          <DictationButton targetId="compose-html-body" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+        </div>
+      </div>
+    {:else}
+      <div class="relative min-h-0 flex-1">
+        <textarea id="compose-body" class="min-h-0 h-full w-full resize-none bg-black/30 p-4 pr-12 text-sm leading-6 text-zinc-100 outline-none" placeholder="Write the message..." bind:value={compose.body}></textarea>
+        <div class="absolute right-2 top-2">
+          <DictationButton targetId="compose-body" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+        </div>
+      </div>
+    {/if}
         <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
           <p class="text-xs text-zinc-500">Autosaves while editing. Offline sends are queued.</p>
           <div class="flex gap-2">
