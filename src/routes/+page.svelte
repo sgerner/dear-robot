@@ -620,7 +620,7 @@
         showShortcutHelp = !showShortcutHelp;
         return;
       }
-      if (typing) return;
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key === 'c') {
         event.preventDefault();
         openCompose('compose');
