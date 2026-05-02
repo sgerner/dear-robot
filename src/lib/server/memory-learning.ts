@@ -1,6 +1,7 @@
 import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { db, nowIso } from './db';
 import { memoryEvents, memoryExamples, memoryProfile, memoryRules, messages } from './db/schema';
+import { readGlobalSkillsMarkdown, truncateMarkdown } from './skills';
 
 const DEFAULT_CORE_PROFILE = `- Write concise replies in a friendly but direct tone.
 - Never auto-send email. Every action requires explicit approval.
@@ -61,6 +62,7 @@ export function deleteMemoryRule(id: number) {
 
 export function buildMemoryPromptContext(input: { subject: string; bodyText: string; note?: string | null }) {
   const profile = getOrCreateMemoryProfile();
+  const skillsMarkdown = readGlobalSkillsMarkdown();
   const query = `${input.subject} ${input.bodyText.slice(0, 1200)} ${input.note || ''}`.toLowerCase();
   const keywords = query
     .split(/\s+/)
@@ -80,9 +82,10 @@ export function buildMemoryPromptContext(input: { subject: string; bodyText: str
   const examples = db.select().from(memoryExamples).where(exampleWhere).orderBy(desc(memoryExamples.score), desc(memoryExamples.createdAt)).limit(2).all();
   return {
     coreProfile: profile.coreProfile,
+    skillsMarkdown,
     rules,
     examples,
-    text: renderMemoryContext(profile.coreProfile, rules, examples)
+    text: renderMemoryContext(profile.coreProfile, skillsMarkdown, rules, examples)
   };
 }
 
@@ -167,12 +170,18 @@ export function recordMemoryEvent(input: {
 
 function renderMemoryContext(
   coreProfile: string,
+  skillsMarkdown: string,
   rules: Array<typeof memoryRules.$inferSelect>,
   examples: Array<typeof memoryExamples.$inferSelect>
 ) {
   const lines: string[] = [];
   lines.push('Core profile:');
   lines.push(coreProfile.trim());
+  const skillsText = truncateMarkdown(skillsMarkdown, 2600);
+  if (skillsText) {
+    lines.push('\nSkills:');
+    lines.push(skillsText);
+  }
   if (rules.length) {
     lines.push('\nLearned rules:');
     for (const rule of rules) lines.push(`- (${rule.confidence.toFixed(2)}) ${rule.ruleText}`);
@@ -233,10 +242,13 @@ function truncate(value: string, max: number) {
 export function memoryOnboardingState() {
   const profile = getOrCreateMemoryProfile();
   const hasCoreProfile = profile.coreProfile.trim().length > 20;
+  const hasSkills = readGlobalSkillsMarkdown().trim().length > 20;
   const hasLearnedRules = (db.select({ count: sql<number>`count(*)` }).from(memoryRules).where(eq(memoryRules.isActive, true)).get()?.count || 0) > 0;
   return {
     hasCoreProfile,
+    hasSkills,
     hasLearnedRules,
-    needsCoreProfile: !hasCoreProfile
+    needsCoreProfile: !hasCoreProfile,
+    needsSkills: !hasSkills
   };
 }

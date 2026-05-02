@@ -81,7 +81,8 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
       name: tool.name,
       description: tool.description || 'No description',
       kind: tool.kind,
-      readOnly: tool.readOnly
+      readOnly: tool.readOnly,
+      skillsMarkdown: tool.skillsMarkdown
     }))
   });
   const planned = await generateStructuredObject({

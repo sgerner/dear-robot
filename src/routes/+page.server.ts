@@ -18,6 +18,10 @@ import {
   getMemoryOverview,
   memoryOnboardingState,
 } from "$lib/server/memory-learning";
+import {
+  defaultGlobalSkillsMarkdown,
+  readGlobalSkillsMarkdown,
+} from "$lib/server/skills";
 import { getGoogleOauthSettings } from "$lib/server/oauth/google";
 import { listAutopilotDashboard } from "$lib/server/agent/autopilot";
 import { env } from "$lib/server/env";
@@ -88,6 +92,8 @@ export function load({ url }) {
       demoDataWillBePrunedOnRealAccount: demoMailboxPresent && !hasRealAccount,
     },
     memory: readAgentInstructions(),
+    skillsMarkdown: readGlobalSkillsMarkdown(),
+    defaultSkillsMarkdown: defaultGlobalSkillsMarkdown,
     memoryOverview,
     mcp: {
       path: mcpPath,

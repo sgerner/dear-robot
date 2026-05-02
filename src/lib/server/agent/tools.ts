@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, nowIso } from '../db';
 import { agentTools, toolCalls } from '../db/schema';
 import { decryptSecret, encryptSecret } from '../security';
+import { deleteToolSkillsMarkdown, readToolSkillsMarkdown, writeToolSkillsMarkdown } from '../skills';
 import { ToolCreateSchema, ToolUpdateSchema } from './schema';
 
 export function listAgentTools() {
@@ -18,6 +19,7 @@ export function listAgentTools() {
       endpoint: tool.endpoint,
       command: tool.command,
       args: safeParseStringArray(tool.argsJson),
+      skillsMarkdown: readToolSkillsMarkdown(tool.id),
       isEnabled: tool.isEnabled,
       readOnly: tool.readOnly,
       requireApprovalForWrite: tool.requireApprovalForWrite,
@@ -66,7 +68,8 @@ export function createAgentTool(input: unknown) {
     })
     .returning()
     .get();
-  return sanitizeTool(created);
+  persistToolSkillsMarkdown(created.id, parsed.skillsMarkdown);
+  return sanitizeTool(created, parsed.skillsMarkdown);
 }
 
 export function updateAgentTool(id: number, input: unknown) {
@@ -105,10 +108,12 @@ export function updateAgentTool(id: number, input: unknown) {
     .where(eq(agentTools.id, id))
     .returning()
     .get();
-  return sanitizeTool(updated);
+  persistToolSkillsMarkdown(id, parsed.skillsMarkdown);
+  return sanitizeTool(updated, parsed.skillsMarkdown);
 }
 
 export function deleteAgentTool(id: number) {
+  deleteToolSkillsMarkdown(id);
   const result = db.delete(agentTools).where(eq(agentTools.id, id)).run();
   return result.changes > 0;
 }
@@ -167,7 +172,7 @@ export async function executeTool(
   }
 }
 
-function sanitizeTool(tool: typeof agentTools.$inferSelect) {
+function sanitizeTool(tool: typeof agentTools.$inferSelect, skillsMarkdown?: string | null) {
   return {
     id: tool.id,
     name: tool.name,
@@ -176,6 +181,7 @@ function sanitizeTool(tool: typeof agentTools.$inferSelect) {
     endpoint: tool.endpoint,
     command: tool.command,
     args: safeParseStringArray(tool.argsJson),
+    skillsMarkdown: skillsMarkdown !== undefined ? skillsMarkdown || '' : readToolSkillsMarkdown(tool.id),
     isEnabled: tool.isEnabled,
     readOnly: tool.readOnly,
     requireApprovalForWrite: tool.requireApprovalForWrite,
@@ -185,6 +191,31 @@ function sanitizeTool(tool: typeof agentTools.$inferSelect) {
     createdAt: tool.createdAt,
     updatedAt: tool.updatedAt
   };
+}
+
+function persistToolSkillsMarkdown(toolId: number, skillsMarkdown: string | null | undefined) {
+  if (skillsMarkdown === undefined) return;
+  if (skillsMarkdown === null) {
+    try {
+      deleteToolSkillsMarkdown(toolId);
+    } catch (error) {
+      console.warn('Unable to remove tool skills markdown', {
+        toolId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+    return;
+  }
+  const normalized = skillsMarkdown.trim();
+  try {
+    if (normalized) writeToolSkillsMarkdown(toolId, skillsMarkdown);
+    else deleteToolSkillsMarkdown(toolId);
+  } catch (error) {
+    console.warn('Unable to persist tool skills markdown', {
+      toolId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }
 
 function safeParseStringArray(value: string | null) {

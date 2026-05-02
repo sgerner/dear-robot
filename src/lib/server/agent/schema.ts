@@ -33,6 +33,7 @@ const ToolBaseSchema = z.object({
   args: z.array(z.string()).default([]),
   authHeaders: z.record(z.string()).default({}),
   env: z.record(z.string()).default({}),
+  skillsMarkdown: z.string().max(20000).nullable().optional(),
   readOnly: z.boolean().default(false),
   requireApprovalForWrite: z.boolean().default(true),
   timeoutMs: z.number().int().min(1000).max(120000).default(30000),

@@ -6,6 +6,7 @@ import { csrfToken, isValidSession, sameOriginOrForm } from '$lib/server/securit
 import { env } from '$lib/server/env';
 import { checkRateLimit } from '$lib/server/rate-limit';
 import { startAutopilotScheduler } from '$lib/server/agent/autopilot';
+import { applyCliManifestOnStartup } from '$lib/server/agent/cli-installer';
 
 let booted = false;
 
@@ -16,6 +17,7 @@ function boot() {
   if (env.NODE_ENV !== 'test') {
     startSyncEngine();
     startAutopilotScheduler();
+    applyCliManifestOnStartup();
   }
 }
 

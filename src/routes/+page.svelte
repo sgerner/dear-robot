@@ -45,7 +45,16 @@
     setCacheEncryptionPassphrase,
     setCacheMeta
   } from '$lib/client/local-cache';
+  import ComposeDrawer from '$lib/components/ComposeDrawer.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
+  import MobileQuickActions from '$lib/components/MobileQuickActions.svelte';
+  import SettingsAccounts from '$lib/components/settings/SettingsAccounts.svelte';
+  import SettingsAdvanced from '$lib/components/settings/SettingsAdvanced.svelte';
+  import SettingsCategoryList from '$lib/components/settings/SettingsCategoryList.svelte';
+  import SettingsInterface from '$lib/components/settings/SettingsInterface.svelte';
+  import SettingsMemory from '$lib/components/settings/SettingsMemory.svelte';
+  import SettingsModels from '$lib/components/settings/SettingsModels.svelte';
+  import SettingsTools from '$lib/components/settings/SettingsTools.svelte';
 
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
@@ -73,6 +82,7 @@
   let draftText = $state('');
   let regenNote = $state('');
   let memoryText = $state('');
+  let skillsText = $state('');
   let coreProfileText = $state('');
   let memoryAdvancedMode = $state(false);
   let showAdvancedMemory = $state(false);
@@ -199,6 +209,11 @@
     readOnly: false,
     requireApprovalForWrite: true
   });
+  let cliInstallForm = $state({
+    manager: 'npm',
+    packageSpec: '',
+    binaryName: ''
+  });
   let bodyMode = $state<'text' | 'html'>('text');
   let searchInput = $state<HTMLInputElement | undefined>(undefined);
   let composeOpen = $state(false);
@@ -310,6 +325,7 @@
     accountFilter = data.query?.accountId ? String(data.query.accountId) : '';
     draftText = data.selected?.suggestion?.draftReply || '';
     memoryText = data.memory;
+    skillsText = data.skillsMarkdown || data.defaultSkillsMarkdown || '';
     coreProfileText = data.memoryOverview?.profile?.coreProfile || '';
     memoryAdvancedMode = data.memoryOverview?.profile?.advancedMode || false;
     bodyMode = data.selected?.message?.safeBodyHtml ? 'html' : 'text';
@@ -1025,6 +1041,26 @@
     await invalidateAll();
   }
 
+  async function saveSkills() {
+    await api('/api/memory', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_skills_markdown', skillsMarkdown: skillsText })
+    });
+    status = 'Skills saved';
+    await invalidateAll();
+  }
+
+  async function resetSkills() {
+    isLoading = true;
+    try {
+      const response = await fetch('/api/memory');
+      const json = await response.json();
+      skillsText = json.defaultSkillsMarkdown || skillsText;
+    } finally {
+      isLoading = false;
+    }
+  }
+
   async function saveCoreProfile() {
     await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'save_core_profile', coreProfile: coreProfileText }) });
     status = 'Core profile saved';
@@ -1202,6 +1238,36 @@
       memoryText = json.defaultMarkdown;
     } finally {
       isLoading = false;
+    }
+  }
+
+  async function saveToolSkills(id: number, skillsMarkdown: string) {
+    const result = await api(`/api/tools/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ skillsMarkdown })
+    });
+    status = 'Tool skills saved';
+    await invalidateAll();
+    return result.tool;
+  }
+
+  async function saveToolConfig(id: number, input: { envJson: string; headersJson: string }) {
+    try {
+      const payload: Record<string, unknown> = {};
+      if (input.envJson.trim()) payload.env = parseToolJsonRecord(input.envJson);
+      if (input.headersJson.trim()) payload.authHeaders = parseToolJsonRecord(input.headersJson);
+      if (!Object.keys(payload).length) {
+        status = 'Nothing to save';
+        return;
+      }
+      await api(`/api/tools/${id}`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      status = 'Tool config saved';
+      await invalidateAll();
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Invalid tool config';
     }
   }
 
@@ -1518,6 +1584,32 @@
     await api(`/api/tools/${id}`, { method: 'DELETE' });
     status = 'Tool removed';
     await invalidateAll();
+  }
+
+  async function installCliPackage() {
+    if (!cliInstallForm.packageSpec.trim()) {
+      status = 'Enter a package to install';
+      return;
+    }
+    status = `Installing ${cliInstallForm.packageSpec} via ${cliInstallForm.manager}...`;
+    const result = await api('/api/tools/install', {
+      method: 'POST',
+      body: JSON.stringify({
+        manager: cliInstallForm.manager,
+        packageSpec: cliInstallForm.packageSpec.trim(),
+        binaryName: cliInstallForm.binaryName.trim() || null
+      })
+    });
+    status = result.warning
+      ? `Installed with warning: ${result.warning}`
+      : `Installed ${cliInstallForm.packageSpec}`;
+    if (cliInstallForm.binaryName.trim() && !agentToolForm.command.trim()) {
+      agentToolForm = {
+        ...agentToolForm,
+        kind: 'cli',
+        command: cliInstallForm.binaryName.trim()
+      };
+    }
   }
 
   function applyAiPreset(profile: 'primary' | 'fallback' | 'advanced' | 'audio', presetId: string) {
@@ -1902,6 +1994,21 @@ async function generateComposeBody() {
     } catch {
       return {};
     }
+  }
+
+  function parseToolJsonRecord(value: string) {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Tool config must be a JSON object');
+    }
+    const record: Record<string, string> = {};
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof val !== 'string') {
+        throw new Error(`Tool config value for "${key}" must be a string`);
+      }
+      record[key] = val;
+    }
+    return record;
   }
 
   function replySubject(subject: string) {
@@ -2731,593 +2838,129 @@ async function generateComposeBody() {
         {#if isMobileViewport && !mobileSettingsDetailOpen}
           <h2 class="text-2xl font-semibold">Settings</h2>
           <p class="mt-2 text-zinc-400">Choose what you want to configure.</p>
-          <div class="mt-6 space-y-2">
-            {#each settingsCategories as category (category.key)}
-              <button
-                class={`w-full rounded-lg border px-3 py-3 text-left transition-all duration-150 hover:-translate-y-0.5 ${settingsCategory === category.key ? 'border-accent/40 bg-accent/10 text-accent shadow-sm shadow-accent/10' : 'border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]'}`}
-                onclick={() => openSettingsCategory(category.key)}
-              >
-                <p class="text-sm font-medium">{category.label}</p>
-                <p class="mt-1 text-xs text-zinc-500">{category.detail}</p>
-              </button>
-            {/each}
-          </div>
+          <SettingsCategoryList categories={settingsCategories as unknown as Array<{ key: string; label: string; detail: string }>} selected={settingsCategory} onSelect={(category) => openSettingsCategory(category as SettingsCategory)} />
         {:else}
         <h2 class="text-2xl font-semibold">Configuration</h2>
         {#if settingsCategory === 'accounts'}
-          <div class="mt-6 space-y-4">
-            <h3 class="text-sm font-medium text-zinc-300">Email Accounts</h3>
-            {#each data.accounts as account (account.id)}
-              <article class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <p class="font-medium">{account.email}</p>
-                    <p class="text-xs text-zinc-500">{account.host}:{account.port} -> {account.smtpHost}:{account.smtpPort}</p>
-                    <p class="mt-1 text-xs text-zinc-400">{account.syncStatus}{account.lastSyncAt ? ` · ${new Date(account.lastSyncAt).toLocaleString()}` : ''} · {account.authType === 'oauth_gmail' ? 'gmail oauth' : 'password auth'}</p>
-                  </div>
-                  <span class="rounded-full border border-white/10 px-2 py-1 text-xs">{account.isEnabled ? 'enabled' : 'disabled'}</span>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => accountAction(account.id, 'test')}>Test</button>
-                  <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}>{account.isEnabled ? 'Disable' : 'Enable'}</button>
-                  <button class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200" onclick={() => accountAction(account.id, 'delete')}>Remove</button>
-                </div>
-              </article>
-            {/each}
-            <form class="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3" onsubmit={(event) => { event.preventDefault(); addAccount(); }}>
-              <h3 class="text-sm font-medium">Add IMAP/SMTP</h3>
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Email" bind:value={accountForm.email} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP host" bind:value={accountForm.host} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP username" bind:value={accountForm.username} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="IMAP password" type="password" bind:value={accountForm.password} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP host" bind:value={accountForm.smtpHost} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP username" bind:value={accountForm.smtpUsername} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="SMTP password" type="password" bind:value={accountForm.smtpPassword} />
-              <button class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"><Plus size={16} /> Add account</button>
-            </form>
-            <section class="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-              <h3 class="text-sm font-medium">Connect Gmail (Google OAuth)</h3>
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Google OAuth Client ID" bind:value={googleOauthSettings.clientId} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder={googleOauthHasSecret ? 'Client secret (leave blank to rotate)' : 'Google OAuth Client Secret'} type="password" bind:value={googleOauthSettings.clientSecret} />
-              <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Redirect URI" bind:value={googleOauthSettings.redirectUri} />
-              <div class="relative">
-                <textarea id="google-oauth-scopes" class="min-h-20 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none" placeholder="One scope per line" bind:value={googleOauthSettings.scopes}></textarea>
-                <div class="absolute right-2 top-2">
-                  <DictationButton targetId="google-oauth-scopes" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-                </div>
-              </div>
-              <label class="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
-                <input type="checkbox" bind:checked={googleOauthSettings.isEnabled} />
-                Enabled
-              </label>
-              <div class="flex flex-wrap gap-2">
-                <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={saveGoogleOauthSettings}>Save OAuth Settings</button>
-                <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={startGoogleConnect}>Connect Gmail Account</button>
-              </div>
-              {#if googleOauthConnectedEmail}
-                <p class="text-xs text-accent">Connected: {googleOauthConnectedEmail}</p>
-              {/if}
-            </section>
-          </div>
+          <SettingsAccounts
+            {data}
+            bind:accountForm
+            bind:googleOauthSettings
+            {googleOauthHasSecret}
+            {googleOauthConnectedEmail}
+            dictationTargetId={dictationTarget?.id || null}
+            {dictationActive}
+            {dictationUnavailable}
+            {dictationLevel}
+            {toggleDictation}
+            {accountAction}
+            {addAccount}
+            {saveGoogleOauthSettings}
+            {startGoogleConnect}
+          />
         {/if}
         {#if settingsCategory === 'memory'}
-          <div class="mt-6 space-y-4">
-            <h3 class="text-xl font-semibold">Memory</h3>
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-sm font-medium">Memory Assistant</p>
-              <p class="mt-1 text-xs text-zinc-500">Describe how memory should change. The assistant will update profile and rules for you.</p>
-              <div class="mt-3 flex gap-2">
-                <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <input id="memory-assistant-prompt" class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Example: prioritize short replies for wholesale quotes and keep greetings warm" bind:value={memoryAssistantPrompt} />
-                  <DictationButton targetId="memory-assistant-prompt" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-                </div>
-                <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={applyMemoryAssistant}>Apply</button>
-              </div>
-            </div>
-            <div class="relative">
-              <textarea id="memory-core-profile" class="min-h-40 w-full resize-y rounded-lg border border-white/10 bg-black/40 p-3 pr-12 text-sm leading-6 outline-none" bind:value={coreProfileText}></textarea>
-              <div class="absolute right-2 top-2">
-                <DictationButton targetId="memory-core-profile" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-              </div>
-            </div>
-            <div class="flex gap-2">
-              <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveCoreProfile}>Save Core Profile</button>
-              <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300">
-                <input type="checkbox" bind:checked={memoryAdvancedMode} onchange={(event) => setAdvancedMemoryMode((event.currentTarget as HTMLInputElement).checked)} />
-                Advanced mode
-              </label>
-            </div>
-            {#if memoryAdvancedMode}
-              <div class="relative">
-                <textarea id="memory-advanced" class="min-h-36 w-full rounded-lg border border-white/10 bg-black/40 p-3 pr-12 font-mono text-xs leading-6 outline-none" bind:value={memoryText}></textarea>
-                <div class="absolute right-2 top-2">
-                  <DictationButton targetId="memory-advanced" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-                </div>
-              </div>
-              <div class="flex gap-2">
-                <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={saveMemory}>Save Memory File</button>
-                <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={resetMemory}>Reset Default</button>
-              </div>
-            {/if}
-            <div class="grid gap-4 md:grid-cols-2">
-              <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                <p class="text-sm font-medium">Learned Rules</p>
-                <div class="mt-3 space-y-2">
-                  {#each data.memoryOverview?.rules || [] as rule (rule.id)}
-                    <article class="rounded-md border border-white/10 bg-black/20 p-2">
-                      <p class="text-xs text-zinc-300">{rule.ruleText}</p>
-                      <p class="mt-1 text-[11px] text-zinc-500">{rule.scope} · conf {Number(rule.confidence).toFixed(2)} · used {rule.usageCount}x</p>
-                      <button class="mt-2 rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-400" onclick={() => removeMemoryRule(rule.id)}>Disable</button>
-                    </article>
-                  {/each}
-                </div>
-              </div>
-              <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                <p class="text-sm font-medium">Recent Memory Events</p>
-                <div class="mt-3 space-y-2">
-                  {#each data.memoryOverview?.events || [] as event (event.id)}
-                    <article class="rounded-md border border-white/10 bg-black/20 p-2">
-                      <p class="text-xs text-zinc-300">{event.eventType}</p>
-                      <p class="mt-1 text-[11px] text-zinc-500">{new Date(event.createdAt).toLocaleString()}</p>
-                    </article>
-                  {/each}
-                </div>
-              </div>
-            </div>
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-sm font-medium">Top Learned Examples</p>
-              <div class="mt-3 space-y-2">
-                {#each data.memoryOverview?.examples || [] as example (example.id)}
-                  <article class="rounded-md border border-white/10 bg-black/20 p-2">
-                    <p class="text-[11px] text-zinc-500">{example.scope} · score {Number(example.score).toFixed(2)}</p>
-                    <p class="mt-1 text-xs text-zinc-400 line-clamp-2">Before: {example.beforeText}</p>
-                    <p class="mt-1 text-xs text-zinc-300 line-clamp-2">After: {example.afterText}</p>
-                  </article>
-                {/each}
-              </div>
-            </div>
-          </div>
+          <SettingsMemory
+            {data}
+            bind:memoryAssistantPrompt
+            bind:coreProfileText
+            bind:memoryAdvancedMode
+            bind:memoryText
+            bind:skillsText
+            dictationTargetId={dictationTarget?.id || null}
+            {dictationActive}
+            {dictationUnavailable}
+            {dictationLevel}
+            {toggleDictation}
+            {applyMemoryAssistant}
+            {saveCoreProfile}
+            {saveSkills}
+            {resetSkills}
+            {setAdvancedMemoryMode}
+            {saveMemory}
+            {resetMemory}
+            {removeMemoryRule}
+          />
         {/if}
         {#if settingsCategory === 'models'}
-        <div class="mt-8 gap-4 max-w-3xl mx-auto">
-          <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 class="font-medium">AI Profiles</h3>
-                <p class="mt-1 text-sm text-zinc-400">Primary, fallback, advanced planner, and audio models.</p>
-              </div>
-            </div>
-            <div class="mt-4 space-y-3">
-              {#each coreAiProfileKeys as profileKey (profileKey)}
-                <article class="rounded-md border border-white/10 bg-black/20 p-3">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p class="text-sm font-medium">{aiProfileForms[profileKey].label}</p>
-                      <p class="text-xs text-zinc-500">{profileKey} · {aiProfileForms[profileKey].provider} · {aiProfileForms[profileKey].model}</p>
-                      <p class="mt-1 text-[11px] text-zinc-500">Recommended: {aiProfileRecommendations[profileKey].join(' · ')}</p>
-                    </div>
-                    <label class="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300 hover:text-zinc-200">
-                      <span class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors" class:bg-accent={aiProfileForms[profileKey].isEnabled}>
-                        <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" class:translate-x-5={aiProfileForms[profileKey].isEnabled} class:translate-x-1={!aiProfileForms[profileKey].isEnabled}></span>
-                        <input type="checkbox" class="sr-only" bind:checked={aiProfileForms[profileKey].isEnabled} />
-                      </span>
-                      Enabled
-                    </label>
-                  </div>
-                  <div class="mt-3 flex items-center gap-2 text-xs">
-                    <button class={`rounded-md border px-2 py-1 ${profileMode[profileKey] === 'catalog' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setProfileMode(profileKey, 'catalog')}>Catalog</button>
-                    <button class={`rounded-md border px-2 py-1 ${profileMode[profileKey] === 'manual' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setProfileMode(profileKey, 'manual')}>Manual</button>
-                  </div>
-
-                  {#if profileMode[profileKey] === 'catalog'}
-                    <div class="mt-3 grid gap-2 md:grid-cols-2">
-                      <div>
-                        <input
-                          list={`provider-options-${profileKey}`}
-                          class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-                          placeholder="Search provider (DeepSeek recommended)"
-                          bind:value={aiProfileForms[profileKey].provider}
-                          onfocus={loadModelsDevCatalog}
-                          onchange={(event) => selectCatalogProviderForProfile(profileKey, (event.currentTarget as HTMLInputElement).value)}
-                        />
-                        <datalist id={`provider-options-${profileKey}`}>
-                          {#each modelsDevProviders as provider (provider.id)}
-                            <option value={provider.id}>{provider.name}</option>
-                          {/each}
-                        </datalist>
-                      </div>
-                      <div>
-                        <input
-                          list={`model-options-${profileKey}`}
-                          class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-                          placeholder="Search model"
-                          bind:value={aiProfileForms[profileKey].model}
-                        />
-                        <datalist id={`model-options-${profileKey}`}>
-                          {#each selectedCatalogModels(profileKey) as model (model.id)}
-                            <option value={model.id}>{model.label}</option>
-                          {/each}
-                        </datalist>
-                      </div>
-                    </div>
-                    {#if selectedCatalogProvider(profileKey)?.doc}
-                      <p class="mt-2 text-xs text-zinc-500">Docs: <a class="underline hover:text-zinc-300" href={selectedCatalogProvider(profileKey)?.doc || '#'} target="_blank" rel="noreferrer">{selectedCatalogProvider(profileKey)?.doc}</a></p>
-                    {/if}
-                    <div class="mt-2 grid gap-2">
-                      {#each requiredEnvVars(profileKey) as envKey (envKey)}
-                        <input
-                          class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-                          placeholder={`${envKey} value`}
-                          type="password"
-                          value={profileEnvValues[profileKey]?.[envKey] || ''}
-                          oninput={(event) => {
-                            const value = (event.currentTarget as HTMLInputElement).value;
-                            profileEnvValues = {
-                              ...profileEnvValues,
-                              [profileKey]: {
-                                ...(profileEnvValues[profileKey] || {}),
-                                [envKey]: value
-                              }
-                            };
-                          }}
-                        />
-                      {/each}
-                    </div>
-                  {:else}
-                    <div class="mt-2 grid gap-2 md:grid-cols-2">
-                      <label class="block">
-                        <span class="text-xs text-zinc-500">Provider</span>
-                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Provider label" bind:value={aiProfileForms[profileKey].provider} />
-                      </label>
-                      <label class="block">
-                        <span class="text-xs text-zinc-500">Base URL</span>
-                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="OpenAI-compatible endpoint" bind:value={aiProfileForms[profileKey].baseUrl} />
-                      </label>
-                      <label class="block">
-                        <span class="text-xs text-zinc-500">Model ID</span>
-                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Model identifier" bind:value={aiProfileForms[profileKey].model} />
-                      </label>
-                      <label class="block">
-                        <span class="text-xs text-zinc-500">API Key / Bearer Token</span>
-                        <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Secret key" type="password" bind:value={aiProfileForms[profileKey].apiKey} />
-                      </label>
-                    </div>
-                  {/if}
-                  <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-xs text-zinc-500">{data.aiProfiles.find((item: { profile: string }) => item.profile === profileKey)?.hasApiKey ? 'Saved key present' : 'No saved key'}</p>
-                    <div class="flex gap-2">
-                      {#if profileMode[profileKey] === 'catalog'}
-                        <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={loadModelsDevCatalog}>{modelsDevLoading ? 'Loading...' : 'Refresh catalog'}</button>
-                      {/if}
-                      <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={() => testAiProfile(profileKey)}>Test</button>
-                      <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={() => saveAiProfile(profileKey)}>Save</button>
-                    </div>
-                  </div>
-                </article>
-              {/each}
-              <article class="rounded-md border border-white/10 bg-black/20 p-3">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p class="text-sm font-medium">Dictation Provider</p>
-                    <p class="text-xs text-zinc-500">audio · {audioProvider()?.label || audioProviderId} · {audioModelId}</p>
-                    <p class="mt-1 text-[11px] text-zinc-500">Recommended: {aiProfileRecommendations.audio.join(' · ')}</p>
-                  </div>
-                  <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-400">Audio profile</span>
-                </div>
-                <div class="mt-4 grid gap-3 md:grid-cols-2">
-                  <label class="block">
-                    <span class="text-xs text-zinc-500">Provider</span>
-                    <select class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={audioProviderId} onchange={(event) => selectAudioProvider((event.currentTarget as HTMLSelectElement).value)}>
-                      {#each data.speechProviders.filter((provider) => !provider.hiddenByDefault) as provider (provider.id)}
-                        <option value={provider.id}>{provider.label}{provider.recommended ? ' (Recommended)' : ''}</option>
-                      {/each}
-                    </select>
-                  </label>
-                  <label class="block">
-                    <span class="text-xs text-zinc-500">Model</span>
-                    <select class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={audioModelId}>
-                      {#each audioModels() as model (model.id)}
-                        <option value={model.id}>{model.label}</option>
-                      {/each}
-                    </select>
-                  </label>
-                </div>
-                <div class="mt-3 rounded-md border border-white/10 bg-black/20 p-3">
-                  <p class="text-xs text-zinc-300">{audioModels().find((model) => model.id === audioModelId)?.blurb || 'Select a model to view details.'}</p>
-                  {#if audioProvider()?.docsUrl || audioProvider()?.signupUrl}
-                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                      {#if audioProvider()?.docsUrl}
-                        <a class="rounded border border-white/10 px-2 py-1 text-zinc-300 hover:bg-white/[0.06]" href={audioProvider()?.docsUrl} target="_blank" rel="noreferrer">Docs</a>
-                      {/if}
-                      {#if audioProvider()?.signupUrl}
-                        <a class="rounded border border-white/10 px-2 py-1 text-zinc-300 hover:bg-white/[0.06]" href={audioProvider()?.signupUrl} target="_blank" rel="noreferrer">Pricing/Signup</a>
-                      {/if}
-                    </div>
-                  {/if}
-                </div>
-                {#if audioProvider()?.authType !== 'none'}
-                  <input class="mt-3 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" type="password" placeholder="API key (leave blank to keep saved key)" bind:value={audioApiKey} />
-                {:else}
-                  <p class="mt-3 rounded-md border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">Browser fallback requires no API key.</p>
-                {/if}
-                {#if audioProviderId === 'browser_web_speech'}
-                  <p class="mt-2 text-xs text-zinc-500">Browser dictation is not supported in Firefox and may vary by browser.</p>
-                {/if}
-                <div class="mt-4 flex flex-wrap gap-2">
-                  <button class="rounded-md border border-white/10 px-3 py-2 text-xs" onclick={() => testAiProfile('audio')}>Test microphone / transcription</button>
-                  <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={saveAudioDictationProfile}>Save dictation settings</button>
-                </div>
-              </article>
-            </div>
-          </div>
-          
-          
-        </div>
+          <SettingsModels
+            {data}
+            {coreAiProfileKeys}
+            bind:aiProfileForms
+            bind:profileMode
+            bind:profileEnvValues
+            {aiProfileRecommendations}
+            {modelsDevProviders}
+            {loadModelsDevCatalog}
+            {selectCatalogProviderForProfile}
+            {selectedCatalogModels}
+            {selectedCatalogProvider}
+            {requiredEnvVars}
+            {setProfileMode}
+            {testAiProfile}
+            {saveAiProfile}
+            {modelsDevLoading}
+            bind:audioProviderId
+            bind:audioModelId
+            bind:audioApiKey
+            {audioProvider}
+            {audioModels}
+            {selectAudioProvider}
+            {saveAudioDictationProfile}
+          />
         {/if}
         {#if settingsCategory === 'tools'}
-        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 class="font-medium">MCP Server</h3>
-              <p class="mt-2 text-sm text-zinc-400">External agents can connect to this mailbox over the built-in MCP-compatible endpoint.</p>
-            </div>
-            <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-400">Bearer auth required</span>
-          </div>
-          <div class="mt-4 space-y-3">
-            <div class="rounded-md border border-white/10 bg-black/20 p-3">
-              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Endpoint</p>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200">{data.mcp?.endpoint || data.mcp?.path || '/api/mcp/sse'}</code>
-                <button class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300" onclick={() => copyToClipboard(data.mcp?.endpoint || data.mcp?.path || '/api/mcp/sse', 'MCP endpoint')}>
-                  <Copy size={12} />
-                  Copy
-                </button>
-              </div>
-            </div>
-            <div class="rounded-md border border-white/10 bg-black/20 p-3">
-              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Authorization Header</p>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200">{data.mcp?.authHeader || 'Authorization: Bearer <MCP_AUTH_TOKEN>'}</code>
-                <button class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300" onclick={() => copyToClipboard(data.mcp?.authHeader || '', 'Auth header')}>
-                  <Copy size={12} />
-                  Copy
-                </button>
-              </div>
-            </div>
-            <div class="rounded-md border border-white/10 bg-black/20 p-3">
-              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">MCP Auth Token</p>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200">{data.mcp?.authToken || '(not configured)'}</code>
-                <button class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 disabled:opacity-40" onclick={() => copyToClipboard(data.mcp?.authToken || '', 'MCP token')} disabled={!data.mcp?.authToken}>
-                  <Copy size={12} />
-                  Copy
-                </button>
-              </div>
-            </div>
-            <div class="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
-              <p class="font-medium text-zinc-300">Tool names</p>
-              <p class="mt-1">search_emails, get_email_context, list_folders, move_message, set_read, set_flagged, generate_suggestion, regenerate_suggestion, execute_suggestion.</p>
-            </div>
-          </div>
-        </div>
+          <SettingsTools
+            {data}
+            {copyToClipboard}
+            {testAgentTool}
+            {toggleAgentTool}
+            {removeAgentTool}
+            {addAgentTool}
+            {saveToolSkills}
+            {saveToolConfig}
+            {installCliPackage}
+            {addWebhook}
+            bind:agentToolForm
+            bind:cliInstallForm
+            bind:webhookTarget
+          />
         {/if}
         {#if settingsCategory === 'interface'}
-        <div class="mt-6 space-y-4" in:fade={{ duration: 150 }}>
-          <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 class="font-medium">Quick Action Bar</h3>
-                <p class="mt-1 text-sm text-zinc-400">Choose the actions shown on mobile and desktop message views. Mobile shows overflow behind the three-dot menu when the row is full.</p>
-              </div>
-              <button class="rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]" onclick={resetInterfacePreferences}>Reset</button>
-            </div>
-            <div class="mt-4 space-y-2">
-              {#each quickActionCatalog as action (action.id)}
-                <div class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3" in:fly={{ y: 8, duration: 140 }}>
-                  <div class="flex min-w-0 items-center gap-3">
-                    <button
-                      type="button"
-                      class={`relative h-6 w-11 rounded-full transition-colors duration-200 ${quickActionIds.includes(action.id) ? 'bg-accent' : 'bg-zinc-700'}`}
-                      aria-pressed={quickActionIds.includes(action.id)}
-                      aria-label={`Toggle ${action.label}`}
-                      onclick={() => setQuickActionEnabled(action.id, !quickActionIds.includes(action.id))}
-                    >
-                      <span class={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${quickActionIds.includes(action.id) ? 'translate-x-5' : 'translate-x-1'}`}></span>
-                    </button>
-                    <div>
-                      <p class="text-sm font-medium text-zinc-200">{action.label}</p>
-                      <p class="text-xs text-zinc-500">{quickActionIds.includes(action.id) ? `Position ${quickActionIds.indexOf(action.id) + 1}` : 'Hidden'}</p>
-                    </div>
-                  </div>
-                  {#if quickActionIds.includes(action.id)}
-                    <div class="flex gap-1">
-                      <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]" onclick={() => moveQuickAction(action.id, -1)}>Up</button>
-                      <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]" onclick={() => moveQuickAction(action.id, 1)}>Down</button>
-                    </div>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          </section>
-
-          <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-            <h3 class="font-medium">Mobile Swipe Gestures</h3>
-            <p class="mt-1 text-sm text-zinc-400">Short swipes trigger at about a thumb-width. Longer swipes use the second action.</p>
-            <div class="mt-4 grid gap-3 md:grid-cols-2">
-              {#each [
-                { key: 'leftShort', label: 'Short swipe left' },
-                { key: 'leftLong', label: 'Long swipe left' },
-                { key: 'rightShort', label: 'Short swipe right' },
-                { key: 'rightLong', label: 'Long swipe right' }
-              ] as gesture (gesture.key)}
-                <label class="block rounded-md border border-white/10 bg-black/20 p-3">
-                  <span class="text-xs text-zinc-500">{gesture.label}</span>
-                  <select
-                    class="mt-2 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
-                    value={swipeSettings[gesture.key as keyof typeof swipeSettings]}
-                    onchange={(event) => updateSwipeSetting(gesture.key as keyof typeof swipeSettings, (event.currentTarget as HTMLSelectElement).value as SwipeActionId)}
-                  >
-                    {#each swipeActionCatalog as action (action.id)}
-                      <option value={action.id}>{action.label}</option>
-                    {/each}
-                  </select>
-                </label>
-              {/each}
-            </div>
-          </section>
-
-          <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-            <h3 class="font-medium">Folder Role Mapping</h3>
-            <p class="mt-1 text-sm text-zinc-400">IMAP and Gmail special-use folders are discovered during sync. Override roles here when a provider uses unusual names.</p>
-            <div class="mt-4 space-y-3">
-              {#each folderGroups() as group (group.accountId)}
-                <div class="rounded-md border border-white/10 bg-black/20 p-3" in:fly={{ y: 8, duration: 140 }}>
-                  <div class="flex items-center justify-between gap-2">
-                    <p class="truncate text-sm font-medium text-zinc-200">{group.accountEmail}</p>
-                    <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{group.folders.length} folders</span>
-                  </div>
-                  <div class="mt-3 grid gap-2 md:grid-cols-2">
-                    {#each group.folders as folder (folder.id)}
-                      <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-                        <span class="min-w-0">
-                          <span class="block truncate text-xs text-zinc-300">{folder.path}</span>
-                          <span class="text-[11px] text-zinc-500">{folder.total} messages</span>
-                        </span>
-                        <select
-                          class="w-32 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
-                          value={folder.role || ''}
-                          onchange={(event) => saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value as '' | FolderRole)}
-                        >
-                          {#each folderRoleOptions as option (option.value)}
-                            <option value={option.value}>{option.label}</option>
-                          {/each}
-                        </select>
-                      </label>
-                    {/each}
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </section>
-        </div>
+          <SettingsInterface
+            {quickActionCatalog}
+            {quickActionIds}
+            {resetInterfacePreferences}
+            {setQuickActionEnabled}
+            {moveQuickAction}
+            {swipeSettings}
+            {swipeActionCatalog}
+            {updateSwipeSetting}
+            folderGroups={folderGroups()}
+            {saveFolderRole}
+            {folderRoleOptions}
+          />
         {/if}
         {#if settingsCategory === 'advanced'}
-        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-          <h3 class="font-medium">Encrypted Browser Cache</h3>
-          <p class="mt-2 text-sm text-zinc-400">Optional client-side encryption for IndexedDB cache on shared devices. Use a local passphrase.</p>
-          <div class="mt-3 flex flex-wrap items-center gap-2">
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm md:w-auto md:flex-1" placeholder="Cache passphrase (local browser only)" type="password" bind:value={cachePassphrase} />
-            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveCacheEncryption}>Save</button>
-          </div>
-          <p class="mt-2 text-xs text-zinc-500">Status: {cacheEncrypted ? 'enabled' : 'disabled'}</p>
-        </div>
-        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-          <h3 class="font-medium">Backups</h3>
-          <p class="mt-2 text-sm text-zinc-400">Create and restore `/data` snapshots for disaster recovery. Restore rewrites current DB state.</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={createBackupNow}>Create Backup</button>
-            <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={refreshBackups}>Refresh</button>
-          </div>
-          <div class="mt-3 max-h-44 space-y-2 overflow-y-auto">
-            {#if backups.length}
-              {#each backups as backup (backup.id)}
-                <div class="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2">
-                  <p class="text-xs text-zinc-300">{new Date(backup.createdAt).toLocaleString()}</p>
-                  <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300" onclick={() => restoreBackupNow(backup.id)}>Restore</button>
-                </div>
-              {/each}
-            {:else}
-              <p class="text-xs text-zinc-500">No backups created yet.</p>
-            {/if}
-          </div>
-        </div>
-        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-          <h3 class="font-medium">Admin Audit Snapshot</h3>
-          <p class="mt-2 text-sm text-zinc-400">Quick visibility into executed actions, tool calls, and memory learning events.</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={loadAuditSnapshot}>Load Snapshot</button>
-          </div>
-          {#if auditSnapshot}
-            <div class="mt-3 grid gap-2 md:grid-cols-3">
-              <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Executed actions: {auditSnapshot.actions}</div>
-              <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Tool calls: {auditSnapshot.toolCalls}</div>
-              <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Memory events: {auditSnapshot.memoryEvents}</div>
-            </div>
-          {/if}
-        </div>
-        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-          <h3 class="font-medium">Contacts Import/Export</h3>
-          <p class="mt-2 text-sm text-zinc-400">Export copies CSV to clipboard. Import accepts <code>email,name</code> or <code>account_id,email,name</code> rows.</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm" onclick={exportContacts}><Download size={15} /> Export CSV</button>
-            <button class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm" onclick={importContacts}><Upload size={15} /> Import CSV</button>
-          </div>
-          <div class="relative mt-3">
-            <textarea id="contacts-import-csv" class="min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none" placeholder="email,name&#10;person@example.com,Person Name" bind:value={contactsImportCsv}></textarea>
-            <div class="absolute right-2 top-2">
-              <DictationButton targetId="contacts-import-csv" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-            </div>
-          </div>
-        </div>
-        {/if}
-        {#if settingsCategory === 'tools'}
-        <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-          <h3 class="font-medium">Agent Tools (Bring Your Own)</h3>
-          <p class="mt-2 text-sm text-zinc-400">Default mode is owner-trusted. Tools can run with full access for this instance.</p>
-          <div class="mt-3 space-y-2">
-            {#each data.tools as tool (tool.id)}
-              <article class="rounded-md border border-white/10 bg-black/20 p-3">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p class="text-sm font-medium">{tool.name}</p>
-                    <p class="text-xs text-zinc-500">{tool.kind} · {tool.readOnly ? 'read-only' : 'read/write'} · {tool.isEnabled ? 'enabled' : 'disabled'}</p>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => testAgentTool(tool.id)}>Test</button>
-                    <button class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => toggleAgentTool(tool.id, tool.isEnabled)}>{tool.isEnabled ? 'Disable' : 'Enable'}</button>
-                    <button class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200" onclick={() => removeAgentTool(tool.id)}>Remove</button>
-                  </div>
-                </div>
-              </article>
-            {/each}
-          </div>
-          <form class="mt-4 space-y-2" onsubmit={(event) => { event.preventDefault(); addAgentTool(); }}>
-            <div class="grid gap-2 md:grid-cols-2">
-              <input class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Tool name" bind:value={agentToolForm.name} />
-              <select class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" bind:value={agentToolForm.kind}>
-                <option value="mcp_http">MCP HTTP</option>
-                <option value="cli">CLI</option>
-              </select>
-            </div>
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Description" bind:value={agentToolForm.description} />
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Endpoint URL (for MCP HTTP)" bind:value={agentToolForm.endpoint} />
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Command (for CLI)" bind:value={agentToolForm.command} />
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="CLI args csv, e.g. -e,console.log(1)" bind:value={agentToolForm.argsCsv} />
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Auth headers JSON map" bind:value={agentToolForm.headersJson} />
-            <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Env JSON map" bind:value={agentToolForm.envJson} />
-<div class="flex flex-wrap items-center gap-4 text-xs text-zinc-300">
-      <label class="inline-flex cursor-pointer items-center gap-2 hover:text-zinc-200">
-        <span class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors" class:bg-accent={agentToolForm.readOnly}>
-          <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" class:translate-x-5={agentToolForm.readOnly} class:translate-x-1={!agentToolForm.readOnly}></span>
-          <input type="checkbox" class="sr-only" bind:checked={agentToolForm.readOnly} />
-        </span>
-        Read-only
-      </label>
-      <label class="inline-flex cursor-pointer items-center gap-2 hover:text-zinc-200">
-        <span class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors" class:bg-accent={agentToolForm.requireApprovalForWrite}>
-          <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" class:translate-x-5={agentToolForm.requireApprovalForWrite} class:translate-x-1={!agentToolForm.requireApprovalForWrite}></span>
-          <input type="checkbox" class="sr-only" bind:checked={agentToolForm.requireApprovalForWrite} />
-        </span>
-        Require approval for writes
-      </label>
-    </div>
-            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add tool</button>
-          </form>
-        </div>
-        <form class="mt-4 flex gap-2" onsubmit={(event) => { event.preventDefault(); addWebhook(); }}>
-          <input class="flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm" placeholder="Delegate webhook URL" bind:value={webhookTarget} />
-          <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add webhook</button>
-        </form>
+          <SettingsAdvanced
+            bind:cachePassphrase
+            {cacheEncrypted}
+            {saveCacheEncryption}
+            {backups}
+            {createBackupNow}
+            {refreshBackups}
+            {restoreBackupNow}
+            {auditSnapshot}
+            {loadAuditSnapshot}
+            bind:contactsImportCsv
+            {exportContacts}
+            {importContacts}
+            dictationTargetId={dictationTarget?.id || null}
+            {dictationActive}
+            {dictationUnavailable}
+            {dictationLevel}
+            {toggleDictation}
+          />
         {/if}
         {/if}
       </div>
@@ -3327,170 +2970,37 @@ async function generateComposeBody() {
   </section>
 
   {#if data.query?.messageId && data.selected?.message && !['settings', 'operations'].includes(view)}
-    <nav class="fixed bottom-0 left-0 right-0 z-30 grid gap-1 border-t border-white/10 bg-black/95 px-2 py-2 backdrop-blur-md md:hidden" style={`grid-template-columns: repeat(${visibleMobileQuickActions().length + (overflowMobileQuickActions().length ? 1 : 0)}, minmax(0, 1fr));`} in:fly={{ y: 20, duration: 180 }} out:fade={{ duration: 120 }}>
-      {#each visibleMobileQuickActions() as actionId (actionId)}
-        <button class={quickActionButtonClass(actionId, true)} aria-label={quickActionMeta(actionId)?.label} title={quickActionMeta(actionId)?.label} onclick={() => runQuickAction(actionId)}>
-          {#if actionId === 'reply'}<Reply size={16} />
-          {:else if actionId === 'reply_all'}<ReplyAll size={16} />
-          {:else if actionId === 'forward'}<Forward size={16} />
-          {:else if actionId === 'archive'}<Archive size={16} />
-          {:else if actionId === 'delete'}<Trash2 size={16} />
-          {:else if actionId === 'spam'}<ShieldAlert size={16} />
-          {:else if actionId === 'toggle_read'}
-            {#if data.selected.message.isRead}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
-          {:else if actionId === 'star'}<Star size={16} />{/if}
-        </button>
-      {/each}
-      {#if overflowMobileQuickActions().length}
-        <div class="relative">
-          <button class="grid w-full place-items-center rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200 transition-all duration-150 active:scale-95" aria-label="More actions" title="More actions" onclick={() => (quickActionOverflowOpen = !quickActionOverflowOpen)}>
-            <MoreVertical size={16} />
-          </button>
-          {#if quickActionOverflowOpen}
-            <div class="absolute bottom-12 right-0 min-w-40 overflow-hidden rounded-lg border border-white/10 bg-zinc-950 p-1 shadow-2xl shadow-black/60" in:fly={{ y: 8, duration: 140 }} out:fade={{ duration: 100 }}>
-              {#each overflowMobileQuickActions() as actionId (actionId)}
-                <button class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-zinc-200 transition-colors duration-150 hover:bg-white/[0.08]" onclick={() => runQuickAction(actionId)}>
-                  {#if actionId === 'reply'}<Reply size={14} />
-                  {:else if actionId === 'reply_all'}<ReplyAll size={14} />
-                  {:else if actionId === 'forward'}<Forward size={14} />
-                  {:else if actionId === 'archive'}<Archive size={14} />
-                  {:else if actionId === 'delete'}<Trash2 size={14} />
-                  {:else if actionId === 'spam'}<ShieldAlert size={14} />
-                  {:else if actionId === 'toggle_read'}<Eye size={14} />
-                  {:else if actionId === 'star'}<Star size={14} />{/if}
-                  {quickActionMeta(actionId)?.label}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/if}
-    </nav>
+    <MobileQuickActions
+      selectedMessage={data.selected.message}
+      visibleActionIds={visibleMobileQuickActions()}
+      overflowActionIds={overflowMobileQuickActions()}
+      {quickActionButtonClass}
+      {quickActionMeta}
+      {runQuickAction}
+      bind:quickActionOverflowOpen
+    />
   {/if}
 
   {#if composeOpen}
-    <section class="fixed bottom-4 right-4 z-40 flex max-h-[86vh] w-[min(720px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60" in:fly={{ y: 24, duration: 180 }}>
-      <header class="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <div>
-          <p class="text-xs uppercase tracking-[0.18em] text-accent">AI-ready compose</p>
-          <h2 class="text-sm font-semibold capitalize">{composeMode.replace('_', ' ')}</h2>
-        </div>
-        <button class="rounded-md p-2 text-zinc-400 hover:bg-white/10" title="Close" onclick={() => (composeOpen = false)}>
-          <X size={18} />
-        </button>
-      </header>
-      <form class="flex min-h-0 flex-1 flex-col" onsubmit={(event) => { event.preventDefault(); sendCompose(); }}>
-        <div class="grid gap-2 border-b border-white/10 p-4">
-          <select class="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none" bind:value={compose.accountId}>
-            {#each data.accounts as account (account.id)}
-              <option value={account.id}>{account.email}</option>
-            {/each}
-          </select>
-          <input class="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" list="contact-options" placeholder="To" bind:value={compose.to} />
-          <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <input class="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" list="contact-options" placeholder="Cc" bind:value={compose.cc} />
-            <input class="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" list="contact-options" placeholder="Bcc" bind:value={compose.bcc} />
-          </div>
-          <input class="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" placeholder="Subject" bind:value={compose.subject} />
-          <datalist id="contact-options">
-            {#each data.contacts as contact (contact.id)}
-              <option value={contact.name ? `${contact.name} <${contact.email}>` : contact.email}></option>
-            {/each}
-          </datalist>
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="flex rounded-md border border-white/10 p-1 text-xs">
-              <button
-                type="button"
-                class={`rounded px-2 py-1 ${composeEditorMode === 'plain' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-                onclick={() => (composeEditorMode = 'plain')}
-              >Plain</button>
-              <button
-                type="button"
-                class={`rounded px-2 py-1 ${composeEditorMode === 'rich' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-                onclick={() => (composeEditorMode = 'rich')}
-              >Rich</button>
-            </div>
-            <label class="inline-flex cursor-pointer items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300">
-              <Paperclip size={13} />
-              <span>Attach</span>
-              <input class="hidden" type="file" multiple onchange={onAttachFiles} />
-            </label>
-            {#if compose.draftId}
-              <span class="text-xs text-zinc-500">Draft #{compose.draftId}</span>
-            {/if}
-          </div>
-          {#if compose.attachments.length}
-            <div class="rounded-md border border-white/10 bg-black/20 p-2">
-              <p class="mb-2 text-xs text-zinc-500">Attachments</p>
-              <div class="flex flex-wrap gap-2">
-                {#each compose.attachments as attachment, idx (`${attachment.filename}-${idx}`)}
-                  <button type="button" class="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200" onclick={() => removeAttachment(idx)}>
-                    <Paperclip size={12} />
-                    <span>{attachment.filename}</span>
-                    <span class="text-zinc-500">Remove</span>
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
-<div class="border-b border-white/10 p-3">
-      <div class="flex flex-col gap-2">
-        <div class="flex items-center gap-2">
-          <Bot size={16} class="text-accent" />
-          <span class="text-xs text-zinc-400">AI Helper</span>
-        </div>
-        <div class="flex gap-2">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <input
-              id="compose-ai-prompt"
-              class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none"
-              placeholder="Describe the draft you want..."
-              bind:value={composeAiPrompt}
-              onkeydown={(event) => event.key === 'Enter' && !event.shiftKey && (event.preventDefault(), generateComposeBody())}
-            />
-            <DictationButton targetId="compose-ai-prompt" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-          </div>
-          <button
-            type="button"
-            class="flex items-center gap-1 rounded-md bg-accent/20 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/30 disabled:opacity-50"
-            onclick={generateComposeBody}
-            disabled={isGeneratingCompose || !composeAiPrompt.trim()}
-          >
-            {#if isGeneratingCompose}
-              <Loader2 size={14} class="animate-spin" />
-            {:else}
-              <Bot size={14} />
-            {/if}
-            Generate
-          </button>
-        </div>
-      </div>
-    </div>
-    {#if composeEditorMode === 'rich'}
-      <div class="relative min-h-0 flex-1">
-        <textarea id="compose-html-body" class="min-h-0 h-full w-full resize-none bg-black/30 p-4 pr-12 text-sm leading-6 text-zinc-100 outline-none" placeholder="Write rich HTML body..." bind:value={composeHtml}></textarea>
-        <div class="absolute right-2 top-2">
-          <DictationButton targetId="compose-html-body" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-        </div>
-      </div>
-    {:else}
-      <div class="relative min-h-0 flex-1">
-        <textarea id="compose-body" class="min-h-0 h-full w-full resize-none bg-black/30 p-4 pr-12 text-sm leading-6 text-zinc-100 outline-none" placeholder="Write the message..." bind:value={compose.body}></textarea>
-        <div class="absolute right-2 top-2">
-          <DictationButton targetId="compose-body" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-        </div>
-      </div>
-    {/if}
-        <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
-          <p class="text-xs text-zinc-500">Autosaves while editing. Offline sends are queued.</p>
-          <div class="flex gap-2">
-            <button data-testid="save-draft" type="button" class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-300" onclick={saveDraft}>Save Draft</button>
-            <button type="button" class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-300" onclick={() => (composeOpen = false)}>Cancel</button>
-            <button data-testid="send-compose" class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"><Send size={16} /> Send</button>
-          </div>
-        </footer>
-      </form>
-    </section>
+    <ComposeDrawer
+      {data}
+      bind:compose
+      {composeMode}
+      bind:composeEditorMode
+      bind:composeHtml
+      bind:composeAiPrompt
+      {isGeneratingCompose}
+      dictationTargetId={dictationTarget?.id || null}
+      {dictationActive}
+      {dictationUnavailable}
+      {dictationLevel}
+      {toggleDictation}
+      {onAttachFiles}
+      {removeAttachment}
+      {generateComposeBody}
+      {saveDraft}
+      {sendCompose}
+      onClose={() => (composeOpen = false)}
+    />
   {/if}
 </main>

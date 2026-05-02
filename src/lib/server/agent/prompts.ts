@@ -1,4 +1,5 @@
 import type { EmailSuggestion } from '../ai/schema';
+import { truncateMarkdown } from '../skills';
 
 export function buildAgentPlanMessages(input: {
   agentInstructions: string;
@@ -12,12 +13,19 @@ export function buildAgentPlanMessages(input: {
   availableFolders: string[];
   existingSuggestion: EmailSuggestion | null;
   note: string | null;
-  tools: Array<{ name: string; description: string; kind: string; readOnly: boolean }>;
+  tools: Array<{ name: string; description: string; kind: string; readOnly: boolean; skillsMarkdown?: string | null }>;
 }) {
   const body = input.bodyText.length > 16000 ? `${input.bodyText.slice(0, 16000)}\n[truncated]` : input.bodyText;
   const toolsList = input.tools.length
     ? input.tools
-        .map((tool) => `- ${tool.name} (${tool.kind}, ${tool.readOnly ? 'read-only' : 'read/write'}): ${tool.description}`)
+        .map((tool) => {
+          const lines = [`- ${tool.name} (${tool.kind}, ${tool.readOnly ? 'read-only' : 'read/write'}): ${tool.description}`];
+          const playbook = truncateMarkdown(tool.skillsMarkdown || '', 1200);
+          if (playbook) {
+            lines.push(`  skills.md:\n${indent(playbook, '  ')}`);
+          }
+          return lines.join('\n');
+        })
         .join('\n')
     : '- none';
   return [
@@ -84,4 +92,11 @@ Body:
 ${body}`
     }
   ] as Array<{ role: string; content: string }>;
+}
+
+function indent(value: string, prefix: string) {
+  return value
+    .split('\n')
+    .map((line) => `${prefix}${line}`)
+    .join('\n');
 }

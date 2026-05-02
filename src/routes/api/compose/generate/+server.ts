@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { env } from '$lib/server/env';
 import { getAiConfigForRuntime } from '$lib/server/ai/settings';
 import { getMessageDetail } from '$lib/server/services/messages';
+import { readAgentInstructions } from '$lib/server/memory';
+import { readGlobalSkillsMarkdown, truncateMarkdown } from '$lib/server/skills';
 
 const GenerateComposeSchema = z.object({
   prompt: z.string().min(1),
@@ -73,7 +75,17 @@ export async function POST({ request }) {
   }
   const systemPrompt = `You are an email assistant. Write professional, concise emails based on the user's request.
 Generate only the email body text with no markdown.${contextText}`;
-  const userPrompt = `Instructions:\n${prompt}\n\nRecipient: ${to || 'Unknown'}\nSubject: ${subject || 'None specified'}`;
+  const userPrompt = `AGENT_INSTRUCTIONS.md:
+${readAgentInstructions()}
+
+skills.md:
+${truncateMarkdown(readGlobalSkillsMarkdown(), 2200)}
+
+Instructions:
+${prompt}
+
+Recipient: ${to || 'Unknown'}
+Subject: ${subject || 'None specified'}`;
   const body = await generateWithOpenAiCompatible(profile, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt }
