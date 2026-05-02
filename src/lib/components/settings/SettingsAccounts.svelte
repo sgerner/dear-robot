@@ -43,10 +43,10 @@
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
-    toggleDictation: (targetId: string) => void | Promise<void>;
+    toggleDictation: (_targetId: string) => void | Promise<void>;
     accountAction: (
-      id: number,
-      action: 'test' | 'enable' | 'disable' | 'delete'
+      _id: number,
+      _action: 'test' | 'enable' | 'disable' | 'delete'
     ) => void | Promise<void>;
     addAccount: () => void | Promise<void>;
     saveGoogleOauthSettings: () => void | Promise<void>;

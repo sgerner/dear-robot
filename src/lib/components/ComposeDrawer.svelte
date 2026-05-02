@@ -33,9 +33,9 @@
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
-    toggleDictation: (targetId: string) => void | Promise<void>;
-    onAttachFiles: (event: Event) => void | Promise<void>;
-    removeAttachment: (index: number) => void;
+    toggleDictation: (_targetId: string) => void | Promise<void>;
+    onAttachFiles: (_event: Event) => void | Promise<void>;
+    removeAttachment: (_index: number) => void;
     generateComposeBody: () => void | Promise<void>;
     saveDraft: () => void | Promise<void>;
     sendCompose: () => void | Promise<void>;

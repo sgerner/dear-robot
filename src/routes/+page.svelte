@@ -3,8 +3,6 @@
     Bot,
     Archive,
     ChevronLeft,
-    Download,
-    MoreVertical,
     Keyboard,
     Menu,
     Eye,
@@ -15,7 +13,6 @@
     Loader2,
     Mail,
     PenLine,
-    Plus,
     RefreshCw,
     Reply,
     ReplyAll,
@@ -26,9 +23,7 @@
     Paperclip,
     ShieldAlert,
     Trash2,
-    Upload,
-    X,
-    Copy
+    X
   } from 'lucide-svelte';
   import { goto, invalidateAll } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
@@ -101,12 +96,10 @@
   let skillsText = $state('');
   let coreProfileText = $state('');
   let memoryAdvancedMode = $state(false);
-  let showAdvancedMemory = $state(false);
   let webhookTarget = $state('');
   let status = $state('');
   let taskNote = $state('');
   let memoryAssistantPrompt = $state('');
-  const aiProfileKeys = ['primary', 'fallback', 'advanced', 'audio'] as const;
   const coreAiProfileKeys = ['primary', 'fallback', 'advanced'] as const;
   const settingsCategories = [
     { key: 'accounts', label: 'Accounts', detail: 'Mailboxes and Gmail OAuth' },
@@ -563,7 +556,7 @@
     return audioProvider()?.models || [];
   }
 
-  function browserSpeechSupported() {
+  function _browserSpeechSupported() {
     if (typeof window === 'undefined') return false;
     const maybeWindow = window as Window & {
       SpeechRecognition?: unknown;
@@ -1057,13 +1050,13 @@
     return (preset?.modelOptions || []).map((id: string) => ({ id, label: id }));
   }
 
-  function resolvedModelOptions(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+  function _resolvedModelOptions(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     const dynamic = aiCatalogOptions[profile];
     if (dynamic?.length) return dynamic;
     return profileDefaultModelOptions(profile);
   }
 
-  async function fetchAiModelCatalog(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+  async function _fetchAiModelCatalog(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     const form = aiProfileForms[profile];
     if (!form) return;
     if (form.provider === 'modeldev' && form.baseUrl.includes('api.model.dev')) {
@@ -1105,20 +1098,20 @@
     await invalidateAll();
   }
 
-  function toggleQueueItem(id: number, selected: boolean) {
+  function _toggleQueueItem(id: number, selected: boolean) {
     selectedQueueIds = selected
       ? Array.from(new Set([...selectedQueueIds, id]))
       : selectedQueueIds.filter((value) => value !== id);
   }
 
-  function selectAllQueue() {
+  function _selectAllQueue() {
     const ids = (data.autopilot?.queue || [])
       .filter((item: { status: string }) => item.status === 'proposed')
       .map((item: { id: number }) => item.id);
     selectedQueueIds = selectedQueueIds.length === ids.length ? [] : ids;
   }
 
-  async function queueAction(action: 'approve' | 'reject' | 'execute') {
+  async function _queueAction(action: 'approve' | 'reject' | 'execute') {
     if (!selectedQueueIds.length) return;
     status = `${action} queue items...`;
     await api(`/api/autopilot/queue/${action}`, {
@@ -1527,7 +1520,7 @@
     return loose?.path || null;
   }
 
-  async function markSpam() {
+  async function _markSpam() {
     if (!data.selected?.message) return;
     await markMessageSpam(data.selected.message.id);
   }
@@ -1771,7 +1764,7 @@
     }
   }
 
-  function applyAiPreset(profile: 'primary' | 'fallback' | 'advanced' | 'audio', presetId: string) {
+  function _applyAiPreset(profile: 'primary' | 'fallback' | 'advanced' | 'audio', presetId: string) {
     const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find(
       (item) => item.id === presetId
     );
@@ -2008,7 +2001,7 @@
     composeOpen = true;
   }
 
-  function openDraft(draft: DraftView) {
+  function _openDraft(draft: DraftView) {
     composeMode = draft.mode;
     compose = {
       draftId: draft.id,

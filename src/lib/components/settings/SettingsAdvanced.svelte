@@ -27,7 +27,7 @@
     backups: Array<{ id: string; createdAt: string }>;
     createBackupNow: () => void | Promise<void>;
     refreshBackups: () => void | Promise<void>;
-    restoreBackupNow: (id: string) => void | Promise<void>;
+    restoreBackupNow: (_id: string) => void | Promise<void>;
     auditSnapshot: { actions: number; toolCalls: number; memoryEvents: number } | null;
     loadAuditSnapshot: () => void | Promise<void>;
     contactsImportCsv: string;
@@ -37,7 +37,7 @@
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
-    toggleDictation: (targetId: string) => void | Promise<void>;
+    toggleDictation: (_targetId: string) => void | Promise<void>;
   }>();
 </script>
 

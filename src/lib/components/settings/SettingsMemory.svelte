@@ -32,15 +32,15 @@
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
-    toggleDictation: (targetId: string) => void | Promise<void>;
+    toggleDictation: (_targetId: string) => void | Promise<void>;
     applyMemoryAssistant: () => void | Promise<void>;
     saveCoreProfile: () => void | Promise<void>;
     saveSkills: () => void | Promise<void>;
     resetSkills: () => void | Promise<void>;
-    setAdvancedMemoryMode: (enabled: boolean) => void | Promise<void>;
+    setAdvancedMemoryMode: (_enabled: boolean) => void | Promise<void>;
     saveMemory: () => void | Promise<void>;
     resetMemory: () => void | Promise<void>;
-    removeMemoryRule: (id: number) => void | Promise<void>;
+    removeMemoryRule: (_id: number) => void | Promise<void>;
   }>();
 </script>
 

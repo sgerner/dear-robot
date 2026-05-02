@@ -38,7 +38,16 @@ export default [
     },
     rules: {
       ...ts.configs.recommended.rules,
-      'no-undef': 'off'
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_'
+        }
+      ]
     }
   },
   {
@@ -51,7 +60,16 @@ export default [
     },
     rules: {
       'no-undef': 'off',
-      'svelte/no-navigation-without-resolve': 'off'
+      'svelte/no-navigation-without-resolve': 'off',
+      'no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_'
+        }
+      ],
+      'svelte/prefer-svelte-reactivity': 'off'
     }
   }
 ];

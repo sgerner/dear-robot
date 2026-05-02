@@ -15,16 +15,16 @@
     quickActionCatalog: Array<{ id: string; label: string; tone?: 'danger' | 'accent' }>;
     quickActionIds: string[];
     resetInterfacePreferences: () => void;
-    setQuickActionEnabled: (actionId: any, enabled: boolean) => void;
-    moveQuickAction: (actionId: any, direction: -1 | 1) => void;
+    setQuickActionEnabled: (_actionId: any, _enabled: boolean) => void;
+    moveQuickAction: (_actionId: any, _direction: -1 | 1) => void;
     swipeSettings: Record<string, string>;
     swipeActionCatalog: Array<{ id: string; label: string }>;
     updateSwipeSetting: (
-      key: 'leftShort' | 'leftLong' | 'rightShort' | 'rightLong',
-      action: any
+      _key: 'leftShort' | 'leftLong' | 'rightShort' | 'rightLong',
+      _action: any
     ) => void;
     folderGroups: Array<{ accountId: number; accountEmail: string; folders: Array<any> }>;
-    saveFolderRole: (folderId: number, role: any) => void | Promise<void>;
+    saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
     folderRoleOptions: Array<{ value: string; label: string }>;
   }>();
 </script>

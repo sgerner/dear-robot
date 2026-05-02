@@ -17,15 +17,15 @@
     webhookTarget = $bindable()
   } = $props<{
     data: any;
-    copyToClipboard: (value: string, label?: string) => void | Promise<void>;
-    testAgentTool: (id: number) => void | Promise<void>;
-    toggleAgentTool: (id: number, enabled: boolean) => void | Promise<void>;
-    removeAgentTool: (id: number) => void | Promise<void>;
+    copyToClipboard: (_value: string, _label?: string) => void | Promise<void>;
+    testAgentTool: (_id: number) => void | Promise<void>;
+    toggleAgentTool: (_id: number, _enabled: boolean) => void | Promise<void>;
+    removeAgentTool: (_id: number) => void | Promise<void>;
     addAgentTool: () => void | Promise<void>;
-    saveToolSkills: (id: number, skillsMarkdown: string) => Promise<any> | void;
+    saveToolSkills: (_id: number, _skillsMarkdown: string) => Promise<any> | void;
     saveToolConfig: (
-      id: number,
-      input: { envJson: string; headersJson: string }
+      _id: number,
+      _input: { envJson: string; headersJson: string }
     ) => void | Promise<void>;
     installCliPackage: () => void | Promise<void>;
     addWebhook: () => void | Promise<void>;

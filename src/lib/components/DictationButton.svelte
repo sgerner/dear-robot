@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Mic, Square as StopIcon } from 'lucide-svelte';
 
-  type ToggleHandler = (targetId: string) => void | Promise<void>;
+  type ToggleHandler = (_targetId: string) => void | Promise<void>;
 
   let {
     targetId,

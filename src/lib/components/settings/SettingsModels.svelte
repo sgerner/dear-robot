@@ -32,20 +32,20 @@
     aiProfileRecommendations: Record<string, string[]>;
     modelsDevProviders: Array<{ id: string; name: string; doc: string | null }>;
     loadModelsDevCatalog: () => void | Promise<void>;
-    selectCatalogProviderForProfile: (profile: any, input: string) => void;
-    selectedCatalogModels: (profile: any) => Array<{ id: string; label: string }>;
-    selectedCatalogProvider: (profile: any) => { doc?: string | null } | null | undefined;
-    requiredEnvVars: (profile: any) => string[];
-    setProfileMode: (profile: any, mode: 'catalog' | 'manual') => void;
-    testAiProfile: (profile: any) => void | Promise<void>;
-    saveAiProfile: (profile: any) => void | Promise<void>;
+    selectCatalogProviderForProfile: (_profile: any, _input: string) => void;
+    selectedCatalogModels: (_profile: any) => Array<{ id: string; label: string }>;
+    selectedCatalogProvider: (_profile: any) => { doc?: string | null } | null | undefined;
+    requiredEnvVars: (_profile: any) => string[];
+    setProfileMode: (_profile: any, _mode: 'catalog' | 'manual') => void;
+    testAiProfile: (_profile: any) => void | Promise<void>;
+    saveAiProfile: (_profile: any) => void | Promise<void>;
     modelsDevLoading: boolean;
     audioProviderId: string;
     audioModelId: string;
     audioApiKey: string;
     audioProvider: () => any;
     audioModels: () => Array<{ id: string; label: string; blurb?: string }>;
-    selectAudioProvider: (providerId: string) => void;
+    selectAudioProvider: (_providerId: string) => void;
     saveAudioDictationProfile: () => void | Promise<void>;
   }>();
 </script>

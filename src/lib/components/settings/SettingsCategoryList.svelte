@@ -6,7 +6,7 @@
   }: {
     categories: Array<{ key: string; label: string; detail: string }>;
     selected: string;
-    onSelect: (category: string) => void;
+    onSelect: (_category: string) => void;
   } = $props();
 </script>
 

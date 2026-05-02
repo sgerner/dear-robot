@@ -24,15 +24,11 @@
     selectedMessage: { isRead?: boolean } | null;
     visibleActionIds: string[];
     overflowActionIds: string[];
-    quickActionButtonClass: (actionId: any, compact?: boolean) => string;
-    quickActionMeta: (actionId: any) => { label: string } | undefined;
-    runQuickAction: (actionId: any) => void | Promise<void>;
+    quickActionButtonClass: (_actionId: any, _compact?: boolean) => string;
+    quickActionMeta: (_actionId: any) => { label: string } | undefined;
+    runQuickAction: (_actionId: any) => void | Promise<void>;
     quickActionOverflowOpen: boolean;
   }>();
-
-  function iconFor(actionId: string, size = 16) {
-    return { actionId, size };
-  }
 </script>
 
 <nav
