@@ -32,7 +32,8 @@ function profileConfig(profile: z.infer<typeof TestSchema>['profile']): RuntimeP
       provider: env.AI_FALLBACK_PROVIDER || 'gemini',
       transport: 'openai_compatible',
       model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
-      baseUrl: env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      baseUrl:
+        env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
       apiKey: env.AI_FALLBACK_API_KEY || undefined,
       preset: env.AI_FALLBACK_PROVIDER || 'gemini',
       isEnabled: true,
@@ -111,7 +112,10 @@ export async function POST({ request }) {
     }
     if (profile === 'audio') {
       const provider = getSpeechProvider(config.provider);
-      return json({ ok: true, message: `${provider.label} saved. Batch/streaming support depends on provider capabilities.` });
+      return json({
+        ok: true,
+        message: `${provider.label} saved. Batch/streaming support depends on provider capabilities.`
+      });
     }
     if (config.transport === 'anthropic') await testAnthropic(config);
     else await testOpenAiCompatible(config);

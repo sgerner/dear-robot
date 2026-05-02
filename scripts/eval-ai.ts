@@ -16,7 +16,13 @@ const emails = JSON.parse(fs.readFileSync(fixturePath, 'utf8')) as Array<{
   body_text: string;
 }>;
 const agentInstructions = fs.readFileSync(instructionsPath, 'utf8');
-const rows: Array<{ id: string; category: string; action: string; risk: string; provider: string }> = [];
+const rows: Array<{
+  id: string;
+  category: string;
+  action: string;
+  risk: string;
+  provider: string;
+}> = [];
 
 for (const email of emails) {
   const result = await generateEmailSuggestion({

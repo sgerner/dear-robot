@@ -9,4 +9,3 @@ export async function GET() {
     throw error(400, err instanceof Error ? err.message : 'Unable to load Models.dev catalog');
   }
 }
-

@@ -37,7 +37,12 @@ export function listTaskRuns(messageId?: number, limit = 50) {
 export function getTaskRunDetail(id: number) {
   const run = db.select().from(taskRuns).where(eq(taskRuns.id, id)).get();
   if (!run) return null;
-  const steps = db.select().from(taskSteps).where(eq(taskSteps.taskRunId, id)).orderBy(taskSteps.stepIndex).all();
+  const steps = db
+    .select()
+    .from(taskSteps)
+    .where(eq(taskSteps.taskRunId, id))
+    .orderBy(taskSteps.stepIndex)
+    .all();
   const message = db.select().from(messages).where(eq(messages.id, run.messageId)).get();
   return {
     run: {
@@ -58,9 +63,15 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
   const detail = getMessageDetail(messageId);
   if (!detail?.message) throw new Error('Message not found');
   const suggestion = detail.suggestion ? suggestionToShape(detail.suggestion) : null;
-  const accountFolders = listFoldersWithCounts(detail.message.accountId).map((folder) => folder.path);
+  const accountFolders = listFoldersWithCounts(detail.message.accountId).map(
+    (folder) => folder.path
+  );
   const tools = listAgentTools().filter((tool) => tool.isEnabled);
-  const complexity = classifyComplexity(detail.message.subject, detail.message.bodyText, parsed.note || null);
+  const complexity = classifyComplexity(
+    detail.message.subject,
+    detail.message.bodyText,
+    parsed.note || null
+  );
   const messagesPrompt = buildAgentPlanMessages({
     agentInstructions: readAgentInstructions(),
     memoryContext: buildMemoryPromptContext({
@@ -100,7 +111,9 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     .values({
       messageId,
       suggestionId: detail.suggestion?.id ?? null,
-      status: normalized.steps.some((step) => step.requires_approval) ? 'needs_approval' : 'planned',
+      status: normalized.steps.some((step) => step.requires_approval)
+        ? 'needs_approval'
+        : 'planned',
       complexity: normalized.complexity,
       modelUsed: planned.model,
       providerUsed: planned.provider,
@@ -145,7 +158,10 @@ export function approveTaskRun(id: number, input: unknown = {}) {
       .where(and(eq(taskSteps.id, parsed.stepId), eq(taskSteps.taskRunId, id)))
       .run();
   } else {
-    db.update(taskSteps).set({ status: 'approved', updatedAt: now }).where(eq(taskSteps.taskRunId, id)).run();
+    db.update(taskSteps)
+      .set({ status: 'approved', updatedAt: now })
+      .where(eq(taskSteps.taskRunId, id))
+      .run();
   }
   const remainingPending = db
     .select({ id: taskSteps.id })
@@ -163,7 +179,10 @@ export function rejectTaskRun(id: number) {
   const run = db.select().from(taskRuns).where(eq(taskRuns.id, id)).get();
   if (!run) return null;
   const now = nowIso();
-  db.update(taskSteps).set({ status: 'rejected', updatedAt: now }).where(eq(taskSteps.taskRunId, id)).run();
+  db.update(taskSteps)
+    .set({ status: 'rejected', updatedAt: now })
+    .where(eq(taskSteps.taskRunId, id))
+    .run();
   db.update(taskRuns).set({ status: 'rejected', updatedAt: now }).where(eq(taskRuns.id, id)).run();
   return getTaskRunDetail(id);
 }
@@ -171,14 +190,25 @@ export function rejectTaskRun(id: number) {
 export async function executeTaskRun(id: number) {
   const run = db.select().from(taskRuns).where(eq(taskRuns.id, id)).get();
   if (!run) throw new Error('Task run not found');
-  const steps = db.select().from(taskSteps).where(eq(taskSteps.taskRunId, id)).orderBy(taskSteps.stepIndex).all();
+  const steps = db
+    .select()
+    .from(taskSteps)
+    .where(eq(taskSteps.taskRunId, id))
+    .orderBy(taskSteps.stepIndex)
+    .all();
   const pending = steps.find((step) => step.status === 'pending');
   if (pending) throw new Error('Task run still has pending approvals');
-  db.update(taskRuns).set({ status: 'running', updatedAt: nowIso(), errorMessage: null }).where(eq(taskRuns.id, id)).run();
+  db.update(taskRuns)
+    .set({ status: 'running', updatedAt: nowIso(), errorMessage: null })
+    .where(eq(taskRuns.id, id))
+    .run();
   const outputs: Array<Record<string, unknown>> = [];
   for (const step of steps) {
     if (!['approved', 'running'].includes(step.status)) continue;
-    db.update(taskSteps).set({ status: 'running', updatedAt: nowIso(), errorMessage: null }).where(eq(taskSteps.id, step.id)).run();
+    db.update(taskSteps)
+      .set({ status: 'running', updatedAt: nowIso(), errorMessage: null })
+      .where(eq(taskSteps.id, step.id))
+      .run();
     try {
       const output = await executeStep(run.messageId, id, step);
       outputs.push({ stepId: step.id, output });
@@ -222,13 +252,20 @@ export async function executeTaskRun(id: number) {
   return getTaskRunDetail(id);
 }
 
-async function executeStep(messageId: number, taskRunId: number, step: typeof taskSteps.$inferSelect) {
+async function executeStep(
+  messageId: number,
+  taskRunId: number,
+  step: typeof taskSteps.$inferSelect
+) {
   const input = (safeParseJson(step.toolInputJson) || {}) as Record<string, unknown>;
   if (step.kind === 'draft_reply') {
     return { draft: input.draft || step.details };
   }
   if (step.kind === 'move_to_folder') {
-    const folderPath = typeof input.folderPath === 'string' ? input.folderPath : inferFolderFromDetails(step.details);
+    const folderPath =
+      typeof input.folderPath === 'string'
+        ? input.folderPath
+        : inferFolderFromDetails(step.details);
     if (!folderPath) throw new Error('move_to_folder step requires folderPath');
     const moved = await moveMessage(messageId, folderPath);
     return { movedTo: moved?.folderPath || folderPath };
@@ -262,7 +299,8 @@ function classifyComplexity(subject: string, bodyText: string, note: string | nu
     'angry',
     'sensitive'
   ];
-  if (bodyText.length > 2000 || keywords.some((keyword) => haystack.includes(keyword))) return 'advanced' as const;
+  if (bodyText.length > 2000 || keywords.some((keyword) => haystack.includes(keyword)))
+    return 'advanced' as const;
   return 'primary' as const;
 }
 
@@ -292,7 +330,8 @@ function mockPlan(
         {
           title: 'Draft customer response',
           kind: 'draft_reply',
-          details: suggestion?.draft_reply || 'Prepare a concise response with next steps and timeline.',
+          details:
+            suggestion?.draft_reply || 'Prepare a concise response with next steps and timeline.',
           tool_name: null,
           tool_input: { draft: suggestion?.draft_reply || null },
           requires_approval: true,
@@ -349,9 +388,7 @@ function mockPlan(
   };
 }
 
-function suggestionToShape(
-  suggestion: typeof aiSuggestions.$inferSelect
-): EmailSuggestion {
+function suggestionToShape(suggestion: typeof aiSuggestions.$inferSelect): EmailSuggestion {
   return {
     category: suggestion.category,
     confidence: suggestion.confidence,

@@ -59,9 +59,25 @@
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
   type SettingsCategory = 'accounts' | 'models' | 'memory' | 'tools' | 'interface' | 'advanced';
-  type QuickActionId = 'reply' | 'reply_all' | 'forward' | 'archive' | 'delete' | 'spam' | 'toggle_read' | 'star';
+  type QuickActionId =
+    | 'reply'
+    | 'reply_all'
+    | 'forward'
+    | 'archive'
+    | 'delete'
+    | 'spam'
+    | 'toggle_read'
+    | 'star';
   type SwipeActionId = 'archive' | 'delete' | 'spam' | 'toggle_read' | 'star' | 'none';
-  type FolderRole = 'inbox' | 'archive' | 'spam' | 'trash' | 'sent' | 'drafts' | 'newsletters' | 'receipts';
+  type FolderRole =
+    | 'inbox'
+    | 'archive'
+    | 'spam'
+    | 'trash'
+    | 'sent'
+    | 'drafts'
+    | 'newsletters'
+    | 'receipts';
   let view = $state<AppView>('inbox');
   let settingsCategory = $state<SettingsCategory>('accounts');
   let operationsCategory = $state<'autopilot' | 'executed'>('autopilot');
@@ -101,7 +117,11 @@
     { key: 'advanced', label: 'Advanced', detail: 'Cache, backups, audit, contacts' }
   ] as const;
   const settingsCategoryKeys = settingsCategories.map((category) => category.key);
-  const quickActionCatalog: Array<{ id: QuickActionId; label: string; tone?: 'danger' | 'accent' }> = [
+  const quickActionCatalog: Array<{
+    id: QuickActionId;
+    label: string;
+    tone?: 'danger' | 'accent';
+  }> = [
     { id: 'reply', label: 'Reply', tone: 'accent' },
     { id: 'reply_all', label: 'Reply all' },
     { id: 'forward', label: 'Forward' },
@@ -137,7 +157,9 @@
   function seedAiProfileForm(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     const saved = data.aiProfiles?.find((item: { profile: string }) => item.profile === profile);
     const aiPresets = ((data as any).aiPresets || []) as Array<Record<string, any>>;
-    const preset = aiPresets.find((item) => item.id === saved?.preset || item.provider === saved?.provider);
+    const preset = aiPresets.find(
+      (item) => item.id === saved?.preset || item.provider === saved?.provider
+    );
     const fallbackPreset =
       aiPresets.find((item) => item.id === (profile === 'audio' ? 'openai-audio' : profile)) ||
       aiPresets[0];
@@ -155,28 +177,35 @@
       notes: saved?.notes || chosen?.notes || ''
     };
   }
-  let aiProfileForms = $state<Record<string, {
-    profile: 'primary' | 'fallback' | 'advanced' | 'audio';
-    label: string;
-    provider: string;
-    transport: 'openai_compatible' | 'anthropic';
-    model: string;
-    baseUrl: string;
-    apiKey: string;
-    preset: string;
-    isEnabled: boolean;
-    notes: string;
-  }>>({});
+  let aiProfileForms = $state<
+    Record<
+      string,
+      {
+        profile: 'primary' | 'fallback' | 'advanced' | 'audio';
+        label: string;
+        provider: string;
+        transport: 'openai_compatible' | 'anthropic';
+        model: string;
+        baseUrl: string;
+        apiKey: string;
+        preset: string;
+        isEnabled: boolean;
+        notes: string;
+      }
+    >
+  >({});
   let aiCatalogOptions = $state<Record<string, Array<{ id: string; label: string }>>>({});
-  let modelsDevProviders = $state<Array<{
-    id: string;
-    name: string;
-    npm: string | null;
-    api: string | null;
-    env: string[];
-    doc: string | null;
-    models: Array<{ id: string; label: string }>;
-  }>>([]);
+  let modelsDevProviders = $state<
+    Array<{
+      id: string;
+      name: string;
+      npm: string | null;
+      api: string | null;
+      env: string[];
+      doc: string | null;
+      models: Array<{ id: string; label: string }>;
+    }>
+  >([]);
   let modelsDevLoaded = $state(false);
   let modelsDevLoading = $state(false);
   let profileMode = $state<Record<string, 'catalog' | 'manual'>>({
@@ -192,8 +221,16 @@
     audio: {}
   });
   const aiProfileRecommendations: Record<string, string[]> = {
-    primary: ['DeepSeek `deepseek-v4-flash`', 'OpenAI `gpt-5.5`', 'Google `gemini-3.1-pro-preview`'],
-    fallback: ['OpenAI `gpt-5.4-mini`', 'Anthropic `claude-sonnet-4-6`', 'Google `gemini-3.1-flash-lite-preview`'],
+    primary: [
+      'DeepSeek `deepseek-v4-flash`',
+      'OpenAI `gpt-5.5`',
+      'Google `gemini-3.1-pro-preview`'
+    ],
+    fallback: [
+      'OpenAI `gpt-5.4-mini`',
+      'Anthropic `claude-sonnet-4-6`',
+      'Google `gemini-3.1-flash-lite-preview`'
+    ],
     advanced: ['DeepSeek `deepseek-v4-pro`', 'OpenAI `gpt-5.5-pro`', 'Anthropic `claude-opus-4-7`'],
     audio: ['Deepgram `nova-3`', 'OpenAI `gpt-4o-mini-transcribe`', 'Groq `whisper-large-v3-turbo`']
   };
@@ -228,7 +265,9 @@
   let cachePassphrase = $state('');
   let cacheEncrypted = $state(false);
   let backups = $state<Array<{ id: string; createdAt: string }>>([]);
-  let auditSnapshot = $state<{ actions: number; toolCalls: number; memoryEvents: number } | null>(null);
+  let auditSnapshot = $state<{ actions: number; toolCalls: number; memoryEvents: number } | null>(
+    null
+  );
   let selectedQueueIds = $state<number[]>([]);
   let showShortcutHelp = $state(false);
   let autopilotPolicy = $state({
@@ -279,7 +318,14 @@
   let composeAiPrompt = $state('');
   let isGeneratingCompose = $state(false);
   let foldersExpanded = $state(false);
-  let quickActionIds = $state<QuickActionId[]>(['reply', 'reply_all', 'forward', 'archive', 'delete', 'spam']);
+  let quickActionIds = $state<QuickActionId[]>([
+    'reply',
+    'reply_all',
+    'forward',
+    'archive',
+    'delete',
+    'spam'
+  ]);
   let swipeSettings = $state({
     leftShort: 'delete' as SwipeActionId,
     leftLong: 'spam' as SwipeActionId,
@@ -314,11 +360,15 @@
 
   $effect(() => {
     const nextView = data.query?.view;
-    view = typeof nextView === 'string' && ['inbox', 'unread', 'starred', 'pending', 'operations', 'settings'].includes(nextView)
-      ? (nextView as AppView)
-      : 'inbox';
+    view =
+      typeof nextView === 'string' &&
+      ['inbox', 'unread', 'starred', 'pending', 'operations', 'settings'].includes(nextView)
+        ? (nextView as AppView)
+        : 'inbox';
     const nextSettings = data.query?.settings;
-    settingsCategory = settingsCategoryKeys.includes(nextSettings as SettingsCategory) ? (nextSettings as SettingsCategory) : 'accounts';
+    settingsCategory = settingsCategoryKeys.includes(nextSettings as SettingsCategory)
+      ? (nextSettings as SettingsCategory)
+      : 'accounts';
     const nextOps = data.query?.ops;
     operationsCategory = nextOps === 'executed' ? 'executed' : 'autopilot';
     search = data.query?.q || '';
@@ -333,7 +383,8 @@
     if (selectedMessageId !== currentSelectedMessageId) {
       selectedMessageId = currentSelectedMessageId;
     }
-    if (!compose.accountId) compose.accountId = data.selected?.message?.accountId || data.accounts[0]?.id || 0;
+    if (!compose.accountId)
+      compose.accountId = data.selected?.message?.accountId || data.accounts[0]?.id || 0;
     void replaceCache('messages', data.messages);
     void replaceCache('folders', data.folders);
     void replaceCache('contacts', data.contacts);
@@ -344,8 +395,17 @@
       clientSecret: '',
       redirectUri:
         data.googleOauthSettings?.redirectUri ||
-        (typeof window !== 'undefined' ? `${window.location.origin}/api/accounts/google/callback` : ''),
-      scopes: (data.googleOauthSettings?.scopes || ['openid', 'email', 'profile', 'https://mail.google.com/']).join('\n'),
+        (typeof window !== 'undefined'
+          ? `${window.location.origin}/api/accounts/google/callback`
+          : ''),
+      scopes: (
+        data.googleOauthSettings?.scopes || [
+          'openid',
+          'email',
+          'profile',
+          'https://mail.google.com/'
+        ]
+      ).join('\n'),
       isEnabled: data.googleOauthSettings?.isEnabled ?? true
     };
     googleOauthHasSecret = Boolean(data.googleOauthSettings?.hasClientSecret);
@@ -374,11 +434,20 @@
 
   $effect(() => {
     const audioProfile = aiProfileForms.audio;
-    const providerFromSettings = data.audioDictationSettings?.provider || audioProfile?.provider || 'deepgram';
+    const providerFromSettings =
+      data.audioDictationSettings?.provider || audioProfile?.provider || 'deepgram';
     audioProviderId = providerFromSettings;
-    const provider = data.speechProviders?.find((item: { id: string }) => item.id === providerFromSettings) || data.speechProviders?.[0];
-    const desiredModel = data.audioDictationSettings?.model || audioProfile?.model || provider?.defaultModel || 'nova-3';
-    const matchedModel = provider?.models?.some((model: { id: string }) => model.id === desiredModel)
+    const provider =
+      data.speechProviders?.find((item: { id: string }) => item.id === providerFromSettings) ||
+      data.speechProviders?.[0];
+    const desiredModel =
+      data.audioDictationSettings?.model ||
+      audioProfile?.model ||
+      provider?.defaultModel ||
+      'nova-3';
+    const matchedModel = provider?.models?.some(
+      (model: { id: string }) => model.id === desiredModel
+    )
       ? desiredModel
       : provider?.defaultModel || desiredModel;
     audioModelId = matchedModel;
@@ -388,7 +457,8 @@
     for (const profile of coreAiProfileKeys) {
       const form = aiProfileForms[profile];
       const currentMode = profileMode[profile];
-      const nextMode: 'catalog' | 'manual' = form?.preset === 'modeldev' ? 'catalog' : currentMode || 'catalog';
+      const nextMode: 'catalog' | 'manual' =
+        form?.preset === 'modeldev' ? 'catalog' : currentMode || 'catalog';
       if (currentMode !== nextMode) {
         profileMode = { ...profileMode, [profile]: nextMode };
       }
@@ -483,7 +553,10 @@
   }
 
   function audioProvider() {
-    return data.speechProviders?.find((provider: { id: string }) => provider.id === audioProviderId) || data.speechProviders?.[0];
+    return (
+      data.speechProviders?.find((provider: { id: string }) => provider.id === audioProviderId) ||
+      data.speechProviders?.[0]
+    );
   }
 
   function audioModels() {
@@ -492,10 +565,12 @@
 
   function browserSpeechSupported() {
     if (typeof window === 'undefined') return false;
-    const maybeWindow = window as Window & { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+    const maybeWindow = window as Window & {
+      SpeechRecognition?: unknown;
+      webkitSpeechRecognition?: unknown;
+    };
     return Boolean(maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition);
   }
-
 
   function openOperations(category: 'autopilot' | 'executed' = 'autopilot') {
     mobileMenuOpen = false;
@@ -504,14 +579,19 @@
 
   async function navigateView(
     nextView: AppView,
-    options: { settings?: SettingsCategory; ops?: 'autopilot' | 'executed'; clearMessage?: boolean } = {}
+    options: {
+      settings?: SettingsCategory;
+      ops?: 'autopilot' | 'executed';
+      clearMessage?: boolean;
+    } = {}
   ) {
     mobileMenuOpen = false;
     showShortcutHelp = false;
     const params = new URLSearchParams(location.search);
     if (nextView === 'inbox') params.delete('view');
     else params.set('view', nextView);
-    if (options.clearMessage || nextView === 'settings' || nextView === 'operations') params.delete('message');
+    if (options.clearMessage || nextView === 'settings' || nextView === 'operations')
+      params.delete('message');
     if (nextView !== 'settings') params.delete('settings');
     if (nextView !== 'operations') params.delete('ops');
     if (options.settings) params.set('settings', options.settings);
@@ -555,7 +635,9 @@
       }
       if (!isInboxView(view)) return;
       const selectedId = data.selected?.message?.id ?? data.messages[0]?.id;
-      const current = data.selected?.message || data.messages.find((message: { id: number }) => message.id === selectedId);
+      const current =
+        data.selected?.message ||
+        data.messages.find((message: { id: number }) => message.id === selectedId);
       const index = data.messages.findIndex((message: { id: number }) => message.id === selectedId);
       if (event.key === 'j') {
         const next = data.messages[Math.min(index + 1, data.messages.length - 1)];
@@ -617,12 +699,18 @@
   function loadUiPreferences() {
     if (typeof localStorage === 'undefined') return;
     try {
-      const savedQuickActions = JSON.parse(localStorage.getItem('triage.quickActions') || 'null') as QuickActionId[] | null;
+      const savedQuickActions = JSON.parse(
+        localStorage.getItem('triage.quickActions') || 'null'
+      ) as QuickActionId[] | null;
       if (Array.isArray(savedQuickActions)) {
-        const allowed = savedQuickActions.filter((id): id is QuickActionId => quickActionCatalog.some((action) => action.id === id));
+        const allowed = savedQuickActions.filter((id): id is QuickActionId =>
+          quickActionCatalog.some((action) => action.id === id)
+        );
         if (allowed.length) quickActionIds = allowed;
       }
-      const savedSwipes = JSON.parse(localStorage.getItem('triage.swipeActions') || 'null') as Partial<typeof swipeSettings> | null;
+      const savedSwipes = JSON.parse(
+        localStorage.getItem('triage.swipeActions') || 'null'
+      ) as Partial<typeof swipeSettings> | null;
       if (savedSwipes) {
         swipeSettings = {
           leftShort: coerceSwipeAction(savedSwipes.leftShort, 'delete'),
@@ -637,7 +725,9 @@
   }
 
   function coerceSwipeAction(value: unknown, fallback: SwipeActionId): SwipeActionId {
-    return swipeActionCatalog.some((action) => action.id === value) ? (value as SwipeActionId) : fallback;
+    return swipeActionCatalog.some((action) => action.id === value)
+      ? (value as SwipeActionId)
+      : fallback;
   }
 
   function saveUiPreferences() {
@@ -672,7 +762,12 @@
 
   function resetInterfacePreferences() {
     quickActionIds = ['reply', 'reply_all', 'forward', 'archive', 'delete', 'spam'];
-    swipeSettings = { leftShort: 'delete', leftLong: 'spam', rightShort: 'archive', rightLong: 'toggle_read' };
+    swipeSettings = {
+      leftShort: 'delete',
+      leftLong: 'spam',
+      rightShort: 'archive',
+      rightLong: 'toggle_read'
+    };
     saveUiPreferences();
     status = 'Interface preferences reset';
   }
@@ -728,9 +823,10 @@
   async function applySearch(options: { clearMessage?: boolean } = {}) {
     isLoading = true;
     try {
-      const active = typeof document !== 'undefined' ? document.activeElement === searchInput : false;
-      const selectionStart = active ? searchInput?.selectionStart ?? null : null;
-      const selectionEnd = active ? searchInput?.selectionEnd ?? null : null;
+      const active =
+        typeof document !== 'undefined' ? document.activeElement === searchInput : false;
+      const selectionStart = active ? (searchInput?.selectionStart ?? null) : null;
+      const selectionEnd = active ? (searchInput?.selectionEnd ?? null) : null;
       const params = new URLSearchParams();
       if (search) params.set('q', search);
       if (view !== 'inbox') params.set('view', view);
@@ -766,7 +862,10 @@
   async function executeSuggestion() {
     if (!data.selected?.suggestion) return;
     status = 'Executing...';
-    await api(`/api/suggestions/${data.selected.suggestion.id}/execute`, { method: 'POST', body: '{}' });
+    await api(`/api/suggestions/${data.selected.suggestion.id}/execute`, {
+      method: 'POST',
+      body: '{}'
+    });
     status = 'Executed';
     await invalidateAll();
   }
@@ -784,7 +883,10 @@
 
   async function rejectSuggestion() {
     if (!data.selected?.suggestion) return;
-    await api(`/api/suggestions/${data.selected.suggestion.id}/reject`, { method: 'POST', body: '{}' });
+    await api(`/api/suggestions/${data.selected.suggestion.id}/reject`, {
+      method: 'POST',
+      body: '{}'
+    });
     await invalidateAll();
   }
 
@@ -866,7 +968,12 @@
 
   function modelsDevProviderByInput(input: string) {
     const normalized = input.trim().toLowerCase();
-    return modelsDevProviders.find((provider) => provider.id.toLowerCase() === normalized || provider.name.toLowerCase() === normalized) || null;
+    return (
+      modelsDevProviders.find(
+        (provider) =>
+          provider.id.toLowerCase() === normalized || provider.name.toLowerCase() === normalized
+      ) || null
+    );
   }
 
   function selectedCatalogProvider(profile: 'primary' | 'fallback' | 'advanced') {
@@ -881,7 +988,10 @@
     return selectedCatalogProvider(profile)?.env || ['API_KEY'];
   }
 
-  function setProfileMode(profile: 'primary' | 'fallback' | 'advanced', mode: 'catalog' | 'manual') {
+  function setProfileMode(
+    profile: 'primary' | 'fallback' | 'advanced',
+    mode: 'catalog' | 'manual'
+  ) {
     if (mode === 'manual') {
       aiProfileForms = {
         ...aiProfileForms,
@@ -898,7 +1008,10 @@
     if (mode === 'catalog') void loadModelsDevCatalog();
   }
 
-  function selectCatalogProviderForProfile(profile: 'primary' | 'fallback' | 'advanced', input: string) {
+  function selectCatalogProviderForProfile(
+    profile: 'primary' | 'fallback' | 'advanced',
+    input: string
+  ) {
     const provider = modelsDevProviderByInput(input);
     if (!provider) {
       aiProfileForms = {
@@ -919,7 +1032,8 @@
       openrouter: 'https://openrouter.ai/api/v1',
       groq: 'https://api.groq.com/openai/v1'
     };
-    const fallbackBase = provider.api || knownBaseByProvider[provider.id] || aiProfileForms[profile].baseUrl || '';
+    const fallbackBase =
+      provider.api || knownBaseByProvider[provider.id] || aiProfileForms[profile].baseUrl || '';
     aiProfileForms = {
       ...aiProfileForms,
       [profile]: {
@@ -929,14 +1043,17 @@
         baseUrl: fallbackBase,
         transport: provider.id === 'anthropic' ? 'anthropic' : 'openai_compatible',
         preset: 'modeldev',
-        label: profile === 'advanced' ? 'Advanced Planner' : profile[0].toUpperCase() + profile.slice(1)
+        label:
+          profile === 'advanced' ? 'Advanced Planner' : profile[0].toUpperCase() + profile.slice(1)
       }
     };
   }
 
   function profileDefaultModelOptions(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     const presetId = aiProfileForms[profile]?.preset;
-    const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find((item) => item.id === presetId);
+    const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find(
+      (item) => item.id === presetId
+    );
     return (preset?.modelOptions || []).map((id: string) => ({ id, label: id }));
   }
 
@@ -989,11 +1106,15 @@
   }
 
   function toggleQueueItem(id: number, selected: boolean) {
-    selectedQueueIds = selected ? Array.from(new Set([...selectedQueueIds, id])) : selectedQueueIds.filter((value) => value !== id);
+    selectedQueueIds = selected
+      ? Array.from(new Set([...selectedQueueIds, id]))
+      : selectedQueueIds.filter((value) => value !== id);
   }
 
   function selectAllQueue() {
-    const ids = (data.autopilot?.queue || []).filter((item: { status: string }) => item.status === 'proposed').map((item: { id: number }) => item.id);
+    const ids = (data.autopilot?.queue || [])
+      .filter((item: { status: string }) => item.status === 'proposed')
+      .map((item: { id: number }) => item.id);
     selectedQueueIds = selectedQueueIds.length === ids.length ? [] : ids;
   }
 
@@ -1009,7 +1130,9 @@
     await invalidateAll();
   }
 
-  async function recordMessageOutcome(outcomeType: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') {
+  async function recordMessageOutcome(
+    outcomeType: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action'
+  ) {
     if (!data.selected?.message) return;
     await api('/api/autopilot/outcomes', {
       method: 'POST',
@@ -1036,7 +1159,10 @@
   }
 
   async function saveMemory() {
-    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'save_markdown', markdown: memoryText }) });
+    await api('/api/memory', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_markdown', markdown: memoryText })
+    });
     status = 'Memory saved';
     await invalidateAll();
   }
@@ -1062,20 +1188,29 @@
   }
 
   async function saveCoreProfile() {
-    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'save_core_profile', coreProfile: coreProfileText }) });
+    await api('/api/memory', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_core_profile', coreProfile: coreProfileText })
+    });
     status = 'Core profile saved';
     await invalidateAll();
   }
 
   async function setAdvancedMemoryMode(enabled: boolean) {
-    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'set_advanced_mode', enabled }) });
+    await api('/api/memory', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'set_advanced_mode', enabled })
+    });
     memoryAdvancedMode = enabled;
     status = enabled ? 'Advanced memory mode enabled' : 'Advanced memory mode disabled';
     await invalidateAll();
   }
 
   async function removeMemoryRule(id: number) {
-    await api('/api/memory', { method: 'POST', body: JSON.stringify({ action: 'delete_rule', id }) });
+    await api('/api/memory', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete_rule', id })
+    });
     status = 'Rule removed';
     await invalidateAll();
   }
@@ -1089,7 +1224,9 @@
     });
     memoryAssistantPrompt = '';
     coreProfileText = result.memoryOverview?.profile?.coreProfile || coreProfileText;
-    memoryAdvancedMode = Boolean(result.memoryOverview?.profile?.advancedMode ?? memoryAdvancedMode);
+    memoryAdvancedMode = Boolean(
+      result.memoryOverview?.profile?.advancedMode ?? memoryAdvancedMode
+    );
     status = result.action?.summary || 'Memory updated';
     await invalidateAll();
   }
@@ -1117,7 +1254,10 @@
 
   async function restoreBackupNow(id: string) {
     status = 'Restoring backup...';
-    await api(`/api/admin/backups/${encodeURIComponent(id)}/restore`, { method: 'POST', body: '{}' });
+    await api(`/api/admin/backups/${encodeURIComponent(id)}/restore`, {
+      method: 'POST',
+      body: '{}'
+    });
     status = 'Backup restored';
     await invalidateAll();
   }
@@ -1125,7 +1265,9 @@
   function saveCacheEncryption() {
     setCacheEncryptionPassphrase(cachePassphrase || null);
     cacheEncrypted = cacheEncryptionEnabled();
-    status = cacheEncrypted ? 'Encrypted browser cache enabled' : 'Encrypted browser cache disabled';
+    status = cacheEncrypted
+      ? 'Encrypted browser cache enabled'
+      : 'Encrypted browser cache disabled';
   }
 
   function getDictationTarget(targetId: string) {
@@ -1191,7 +1333,8 @@
         recordingChunks = [];
       };
       const AudioContextCtor =
-        window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioContextCtor) {
         dictationAudioContext = new AudioContextCtor();
         if (dictationAudioContext.state === 'suspended') {
@@ -1363,12 +1506,23 @@
 
   function resolveFolderPath(accountId: number | null | undefined, names: string[]) {
     if (!accountId) return null;
-    const folders = data.folders.filter((folder: { accountId: number; path: string; role?: string | null }) => folder.accountId === accountId);
+    const folders = data.folders.filter(
+      (folder: { accountId: number; path: string; role?: string | null }) =>
+        folder.accountId === accountId
+    );
     const normalized = names.map((name) => name.toLowerCase());
-    const exact = folders.find((folder: { path: string; role?: string | null }) => normalized.includes(folder.path.toLowerCase()) || (folder.role ? normalized.includes(folder.role.toLowerCase()) : false));
+    const exact = folders.find(
+      (folder: { path: string; role?: string | null }) =>
+        normalized.includes(folder.path.toLowerCase()) ||
+        (folder.role ? normalized.includes(folder.role.toLowerCase()) : false)
+    );
     if (exact) return exact.path;
     const loose = folders.find((folder: { path: string; role?: string | null }) =>
-      normalized.some((name) => folder.path.toLowerCase().includes(name) || (folder.role ? folder.role.toLowerCase().includes(name) : false))
+      normalized.some(
+        (name) =>
+          folder.path.toLowerCase().includes(name) ||
+          (folder.role ? folder.role.toLowerCase().includes(name) : false)
+      )
     );
     return loose?.path || null;
   }
@@ -1395,7 +1549,12 @@
 
   async function deleteMessage(messageId: number) {
     const accountId = messageForAction(messageId)?.accountId;
-    const trashFolder = resolveFolderPath(accountId, ['trash', 'deleted items', 'deleted messages', 'bin']);
+    const trashFolder = resolveFolderPath(accountId, [
+      'trash',
+      'deleted items',
+      'deleted messages',
+      'bin'
+    ]);
     if (!trashFolder) {
       status = 'No trash folder configured for this account';
       return;
@@ -1613,7 +1772,9 @@
   }
 
   function applyAiPreset(profile: 'primary' | 'fallback' | 'advanced' | 'audio', presetId: string) {
-    const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find((item) => item.id === presetId);
+    const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find(
+      (item) => item.id === presetId
+    );
     const current = aiProfileForms[profile];
     if (!current) return;
     if (!preset || preset.id === 'manual') {
@@ -1670,7 +1831,9 @@
   async function saveAudioDictationProfile() {
     const provider = audioProvider();
     if (!provider) return;
-    const model = audioModels().find((item: { id: string }) => item.id === audioModelId)?.id || provider.defaultModel;
+    const model =
+      audioModels().find((item: { id: string }) => item.id === audioModelId)?.id ||
+      provider.defaultModel;
     syncAudioProviderIntoProfile();
     status = `Saving dictation provider (${provider.label})...`;
     await api('/api/ai-profiles', {
@@ -1772,7 +1935,10 @@
     const selected = data.selected?.message;
     const accountId = selected?.accountId || data.accounts[0]?.id || 0;
     if (!selected || mode === 'compose') {
-      const serverDraft = data.drafts?.find((draft: DraftView) => (draft.accountId || accountId) === accountId && draft.status === 'draft');
+      const serverDraft = data.drafts?.find(
+        (draft: DraftView) =>
+          (draft.accountId || accountId) === accountId && draft.status === 'draft'
+      );
       compose = serverDraft
         ? {
             draftId: serverDraft.id,
@@ -1789,11 +1955,31 @@
             })),
             sourceMessageId: serverDraft.sourceMessageId ?? null
           }
-        : { draftId: null, accountId, to: '', cc: '', bcc: '', subject: '', body: '', attachments: [], sourceMessageId: null };
+        : {
+            draftId: null,
+            accountId,
+            to: '',
+            cc: '',
+            bcc: '',
+            subject: '',
+            body: '',
+            attachments: [],
+            sourceMessageId: null
+          };
       composeHtml = serverDraft?.bodyHtml || '';
       composeEditorMode = composeHtml ? 'rich' : 'plain';
     } else if (mode === 'reply') {
-      compose = { draftId: null, accountId, to: selected.from, cc: '', bcc: '', subject: replySubject(selected.subject), body: '', attachments: [], sourceMessageId: selected.id };
+      compose = {
+        draftId: null,
+        accountId,
+        to: selected.from,
+        cc: '',
+        bcc: '',
+        subject: replySubject(selected.subject),
+        body: '',
+        attachments: [],
+        sourceMessageId: selected.id
+      };
     } else if (mode === 'reply_all') {
       compose = {
         draftId: null,
@@ -1844,63 +2030,66 @@
     composeOpen = true;
   }
 
-async function sendCompose() {
-  const bodyText = composeEditorMode === 'rich' ? stripHtml(composeHtml) : compose.body;
-  const payload = {
-    ...compose,
-    body: bodyText,
-    bodyHtml: composeEditorMode === 'rich' ? composeHtml : null,
-    mode: composeMode
-  };
-  status = navigator.onLine ? 'Sending...' : 'Offline: queuing';
-  try {
-    await api('/api/compose', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    composeOpen = false;
-    status = 'Sent';
-    await invalidateAll();
-  } catch (error) {
-    if (!navigator.onLine || error instanceof TypeError) {
-      const queued = await enqueueOutbox(payload as Record<string, unknown>);
-      status = queued ? 'Queued for send when online' : 'Unable to queue';
-    } else {
-      throw error;
-    }
-  }
-}
-
-async function generateComposeBody() {
-  if (!composeAiPrompt.trim()) return;
-  isGeneratingCompose = true;
-  status = 'Generating email...';
-  try {
-    const result = await api('/api/compose/generate', {
-      method: 'POST',
-      body: JSON.stringify({
-        prompt: composeAiPrompt,
-        to: compose.to,
-        subject: compose.subject,
-        context: composeMode !== 'compose' && compose.sourceMessageId ? { messageId: compose.sourceMessageId } : null
-      })
-    });
-    if (result.body) {
-      compose.body = result.body;
-      composeHtml = result.bodyHtml || result.body;
-      if (result.subject && !compose.subject) {
-        compose.subject = result.subject;
+  async function sendCompose() {
+    const bodyText = composeEditorMode === 'rich' ? stripHtml(composeHtml) : compose.body;
+    const payload = {
+      ...compose,
+      body: bodyText,
+      bodyHtml: composeEditorMode === 'rich' ? composeHtml : null,
+      mode: composeMode
+    };
+    status = navigator.onLine ? 'Sending...' : 'Offline: queuing';
+    try {
+      await api('/api/compose', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      composeOpen = false;
+      status = 'Sent';
+      await invalidateAll();
+    } catch (error) {
+      if (!navigator.onLine || error instanceof TypeError) {
+        const queued = await enqueueOutbox(payload as Record<string, unknown>);
+        status = queued ? 'Queued for send when online' : 'Unable to queue';
+      } else {
+        throw error;
       }
     }
-    composeAiPrompt = '';
-    status = 'Email generated';
-  } catch (error) {
-    status = 'Failed to generate email';
-    console.error(error);
-  } finally {
-    isGeneratingCompose = false;
   }
-}
+
+  async function generateComposeBody() {
+    if (!composeAiPrompt.trim()) return;
+    isGeneratingCompose = true;
+    status = 'Generating email...';
+    try {
+      const result = await api('/api/compose/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: composeAiPrompt,
+          to: compose.to,
+          subject: compose.subject,
+          context:
+            composeMode !== 'compose' && compose.sourceMessageId
+              ? { messageId: compose.sourceMessageId }
+              : null
+        })
+      });
+      if (result.body) {
+        compose.body = result.body;
+        composeHtml = result.bodyHtml || result.body;
+        if (result.subject && !compose.subject) {
+          compose.subject = result.subject;
+        }
+      }
+      composeAiPrompt = '';
+      status = 'Email generated';
+    } catch (error) {
+      status = 'Failed to generate email';
+      console.error(error);
+    } finally {
+      isGeneratingCompose = false;
+    }
+  }
 
   async function saveDraft() {
     try {
@@ -1983,7 +2172,10 @@ async function generateComposeBody() {
   }
 
   function stripHtml(value: string) {
-    return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return value
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   function parseJsonMap(value: string) {
@@ -2026,7 +2218,10 @@ async function generateComposeBody() {
   }
 
   function quickActionMeta(actionId: QuickActionId | SwipeActionId) {
-    return quickActionCatalog.find((action) => action.id === actionId) || swipeActionCatalog.find((action) => action.id === actionId);
+    return (
+      quickActionCatalog.find((action) => action.id === actionId) ||
+      swipeActionCatalog.find((action) => action.id === actionId)
+    );
   }
 
   function visibleMobileQuickActions() {
@@ -2042,8 +2237,10 @@ async function generateComposeBody() {
     const base = compact
       ? 'grid place-items-center rounded-md border p-2 transition-all duration-150 active:scale-95'
       : 'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0';
-    if (meta?.tone === 'danger') return `${base} border-red-400/30 bg-red-400/[0.04] text-red-100 hover:bg-red-400/10`;
-    if (meta?.tone === 'accent') return `${base} border-accent/40 bg-accent text-black shadow-sm shadow-accent/20 hover:shadow-accent/30`;
+    if (meta?.tone === 'danger')
+      return `${base} border-red-400/30 bg-red-400/[0.04] text-red-100 hover:bg-red-400/10`;
+    if (meta?.tone === 'accent')
+      return `${base} border-accent/40 bg-accent text-black shadow-sm shadow-accent/20 hover:shadow-accent/30`;
     return `${base} border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.08]`;
   }
 
@@ -2087,7 +2284,13 @@ async function generateComposeBody() {
 
   function startSwipe(event: PointerEvent, messageId: number) {
     if (event.pointerType === 'mouse') return;
-    swiping = { id: messageId, startX: event.clientX, deltaX: 0, pointerId: event.pointerId, dragging: false };
+    swiping = {
+      id: messageId,
+      startX: event.clientX,
+      deltaX: 0,
+      pointerId: event.pointerId,
+      dragging: false
+    };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
@@ -2122,14 +2325,23 @@ async function generateComposeBody() {
   }
 
   function folderGroups() {
-    const groups = new Map<number, { accountId: number; accountEmail: string; folders: typeof data.folders }>();
+    const groups = new Map<
+      number,
+      { accountId: number; accountEmail: string; folders: typeof data.folders }
+    >();
     for (const folder of data.folders) {
       if (!groups.has(folder.accountId)) {
-        groups.set(folder.accountId, { accountId: folder.accountId, accountEmail: folder.accountEmail, folders: [] });
+        groups.set(folder.accountId, {
+          accountId: folder.accountId,
+          accountEmail: folder.accountEmail,
+          folders: []
+        });
       }
       groups.get(folder.accountId)?.folders.push(folder);
     }
-    return Array.from(groups.values()).sort((left, right) => left.accountEmail.localeCompare(right.accountEmail));
+    return Array.from(groups.values()).sort((left, right) =>
+      left.accountEmail.localeCompare(right.accountEmail)
+    );
   }
 
   const mobileHeaderTitle = $derived(
@@ -2137,7 +2349,8 @@ async function generateComposeBody() {
       ? 'AI Operations'
       : view === 'settings'
         ? isMobileViewport && mobileSettingsDetailOpen
-          ? settingsCategories.find((category) => category.key === settingsCategory)?.label || 'Settings'
+          ? settingsCategories.find((category) => category.key === settingsCategory)?.label ||
+            'Settings'
           : 'Settings'
         : data.query?.messageId
           ? data.selected?.message?.subject || 'Triage'
@@ -2149,39 +2362,65 @@ async function generateComposeBody() {
   <title>Triage</title>
 </svelte:head>
 
-<main class="relative grid h-screen grid-cols-1 overflow-hidden pt-16 text-zinc-100 md:grid-cols-[76px_minmax(320px,430px)_1fr] md:pt-0">
+<main
+  class="relative grid h-screen grid-cols-1 overflow-hidden pt-16 text-zinc-100 md:grid-cols-[76px_minmax(320px,430px)_1fr] md:pt-0"
+>
   {#if isLoading}
     <div class="fixed left-0 right-0 top-0 z-50 h-1 bg-accent/20" transition:fade>
       <div class="h-full bg-accent animate-pulse" style="width: 30%"></div>
     </div>
-    <div class="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border border-accent/20 bg-black/80 px-3 py-1.5 text-xs text-accent backdrop-blur-md" transition:fade>
+    <div
+      class="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border border-accent/20 bg-black/80 px-3 py-1.5 text-xs text-accent backdrop-blur-md"
+      transition:fade
+    >
       <Loader2 size={14} class="animate-spin" />
       <span>Working...</span>
     </div>
   {/if}
 
   {#if mobileMenuOpen}
-    <button class="fixed inset-0 z-40 bg-black/70 md:hidden" aria-label="Close navigation drawer" onclick={() => (mobileMenuOpen = false)}></button>
-    <aside class="fixed left-0 top-0 z-50 h-full w-[82vw] max-w-xs border-r border-white/10 bg-black/95 p-4 backdrop-blur-md md:hidden" in:fly={{ x: -24, duration: 180 }}>
+    <button
+      class="fixed inset-0 z-40 bg-black/70 md:hidden"
+      aria-label="Close navigation drawer"
+      onclick={() => (mobileMenuOpen = false)}
+    ></button>
+    <aside
+      class="fixed left-0 top-0 z-50 h-full w-[82vw] max-w-xs border-r border-white/10 bg-black/95 p-4 backdrop-blur-md md:hidden"
+      in:fly={{ x: -24, duration: 180 }}
+    >
       <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
         <div class="min-w-0">
           <p class="text-sm font-semibold text-zinc-100">Navigate</p>
-          <p class="truncate text-[11px] text-zinc-500">{view === 'operations' ? 'AI operations' : view === 'settings' ? 'Settings' : 'Inbox'}</p>
+          <p class="truncate text-[11px] text-zinc-500">
+            {view === 'operations' ? 'AI operations' : view === 'settings' ? 'Settings' : 'Inbox'}
+          </p>
         </div>
-        <button class="rounded-md border border-white/10 p-2 text-zinc-300" onclick={() => (mobileMenuOpen = false)}>
+        <button
+          class="rounded-md border border-white/10 p-2 text-zinc-300"
+          onclick={() => (mobileMenuOpen = false)}
+        >
           <X size={16} />
         </button>
       </div>
       <div class="mt-4 space-y-2 overflow-y-auto pr-1">
-        <button class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`} onclick={() => setQuickView('inbox')}>
+        <button
+          class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`}
+          onclick={() => setQuickView('inbox')}
+        >
           <Inbox size={18} />
           <span class="text-sm font-medium">Inbox</span>
         </button>
-        <button class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'operations' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`} onclick={() => openOperations('autopilot')}>
+        <button
+          class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'operations' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`}
+          onclick={() => openOperations('autopilot')}
+        >
           <Bot size={18} />
           <span class="text-sm font-medium">AI Operations</span>
         </button>
-        <button class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'settings' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`} onclick={() => openSettings('accounts')}>
+        <button
+          class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'settings' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`}
+          onclick={() => openSettings('accounts')}
+        >
           <Settings size={18} />
           <span class="text-sm font-medium">Settings</span>
         </button>
@@ -2189,10 +2428,22 @@ async function generateComposeBody() {
           <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-3">
             <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Inbox filters</p>
             <div class="mt-3 flex flex-wrap gap-2">
-              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('inbox')}>All</button>
-              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('unread')}>Unread</button>
-              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('starred')}>Starred</button>
-              <button class={`rounded-full border px-3 py-1.5 text-xs ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`} onclick={() => setQuickView('pending')}>Pending</button>
+              <button
+                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
+                onclick={() => setQuickView('inbox')}>All</button
+              >
+              <button
+                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
+                onclick={() => setQuickView('unread')}>Unread</button
+              >
+              <button
+                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
+                onclick={() => setQuickView('starred')}>Starred</button
+              >
+              <button
+                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
+                onclick={() => setQuickView('pending')}>Pending</button
+              >
             </div>
           </div>
         {/if}
@@ -2200,13 +2451,23 @@ async function generateComposeBody() {
     </aside>
   {/if}
 
-  <header class="fixed left-0 right-0 top-0 z-30 flex h-12 items-center gap-2 border-b border-white/10 bg-black/90 px-2 backdrop-blur-md md:hidden">
+  <header
+    class="fixed left-0 right-0 top-0 z-30 flex h-12 items-center gap-2 border-b border-white/10 bg-black/90 px-2 backdrop-blur-md md:hidden"
+  >
     <div class="flex items-center gap-1">
-      <button class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200" aria-label="Open navigation" onclick={() => (mobileMenuOpen = true)}>
+      <button
+        class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200"
+        aria-label="Open navigation"
+        onclick={() => (mobileMenuOpen = true)}
+      >
         <Menu size={18} />
       </button>
       {#if view === 'settings' || view === 'operations' || data.query?.messageId}
-        <button class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200" aria-label="Back" onclick={mobileBack}>
+        <button
+          class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200"
+          aria-label="Back"
+          onclick={mobileBack}
+        >
           <ChevronLeft size={18} />
         </button>
       {/if}
@@ -2214,23 +2475,42 @@ async function generateComposeBody() {
     <div class="min-w-0 flex-1 text-center">
       <p class="truncate text-sm font-medium text-zinc-100">{mobileHeaderTitle}</p>
     </div>
-    <button class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200" aria-label="Compose" title="Compose" onclick={() => openCompose('compose')}>
+    <button
+      class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200"
+      aria-label="Compose"
+      title="Compose"
+      onclick={() => openCompose('compose')}
+    >
       <PenLine size={18} />
     </button>
   </header>
 
   <!-- Desktop Sidebar -->
-  <nav class="glass z-10 hidden flex-col items-center gap-3 border-y-0 border-l-0 px-3 py-4 md:flex">
+  <nav
+    class="glass z-10 hidden flex-col items-center gap-3 border-y-0 border-l-0 px-3 py-4 md:flex"
+  >
     <div class="mb-4 grid h-10 w-10 place-items-center rounded-md bg-accent text-black">
       <Mail size={20} />
     </div>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${isInboxView(view) ? 'bg-white/10' : ''}`} title="Inbox" onclick={() => setQuickView('inbox')}>
+    <button
+      class={`focus-ring rounded-md p-3 text-zinc-300 ${isInboxView(view) ? 'bg-white/10' : ''}`}
+      title="Inbox"
+      onclick={() => setQuickView('inbox')}
+    >
       <Inbox size={20} />
     </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'operations' ? 'bg-white/10' : ''}`} title="Operations" onclick={() => openOperations('autopilot')}>
+    <button
+      class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'operations' ? 'bg-white/10' : ''}`}
+      title="Operations"
+      onclick={() => openOperations('autopilot')}
+    >
       <Bot size={20} />
     </button>
-    <button class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'settings' ? 'bg-white/10' : ''}`} title="Settings" onclick={() => openSettings()}>
+    <button
+      class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'settings' ? 'bg-white/10' : ''}`}
+      title="Settings"
+      onclick={() => openSettings()}
+    >
       <Settings size={20} />
     </button>
   </nav>
@@ -2245,18 +2525,26 @@ async function generateComposeBody() {
     <PenLine size={24} />
   </button>
 
-  <section class={`border-r border-white/10 bg-black/30 pb-16 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:block' : 'block'}`}>
+  <section
+    class={`border-r border-white/10 bg-black/30 pb-16 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:block' : 'block'}`}
+  >
     <div class="border-b border-white/10 p-4">
       {#if onboardingTitle && onboardingBody}
         <div class="mb-3 rounded-lg border border-accent/25 bg-accent/10 p-3 text-sm">
           <p class="font-medium text-accent">{onboardingTitle}</p>
           <p class="mt-1 text-xs leading-5 text-zinc-300">{onboardingBody}</p>
           <div class="mt-3 flex flex-wrap gap-2">
-            <button class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black" onclick={() => openSettings()}>
+            <button
+              class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black"
+              onclick={() => openSettings()}
+            >
               Open config
             </button>
             {#if data.onboarding?.needsEmailSetup}
-              <button class="rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300" onclick={() => openSettings()}>
+              <button
+                class="rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300"
+                onclick={() => openSettings()}
+              >
                 Add mailbox
               </button>
             {/if}
@@ -2265,7 +2553,9 @@ async function generateComposeBody() {
       {/if}
       <h1 class="hidden text-lg font-semibold md:block">Triage</h1>
       {#if isInboxView(view)}
-        <div class="mt-4 flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-3 py-2">
+        <div
+          class="mt-4 flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-3 py-2"
+        >
           <Search size={16} class="text-zinc-500" />
           <input
             bind:this={searchInput}
@@ -2317,9 +2607,14 @@ async function generateComposeBody() {
               {#each folderGroups() as group (group.accountId)}
                 <div class="rounded-md border border-white/10 bg-white/[0.03] p-1">
                   <div class="flex items-center justify-between gap-2 px-2 py-1">
-                    <p class="truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">{group.accountEmail}</p>
+                    <p class="truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">
+                      {group.accountEmail}
+                    </p>
                     {#if accountFilter}
-                      <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-500">{group.folders.length}</span>
+                      <span
+                        class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-500"
+                        >{group.folders.length}</span
+                      >
                     {/if}
                   </div>
                   <div class="space-y-1">
@@ -2332,7 +2627,9 @@ async function generateComposeBody() {
                           <FolderOpen size={14} class="shrink-0" />
                           <span class="truncate">{folder.path}</span>
                         </span>
-                        <span class="shrink-0 text-[11px] text-zinc-500">{folder.unread ? `${folder.unread}/` : ''}{folder.total}</span>
+                        <span class="shrink-0 text-[11px] text-zinc-500"
+                          >{folder.unread ? `${folder.unread}/` : ''}{folder.total}</span
+                        >
                       </button>
                     {/each}
                   </div>
@@ -2344,10 +2641,22 @@ async function generateComposeBody() {
       {/if}
       {#if isInboxView(view)}
         <div class="mt-3 flex flex-wrap gap-1.5">
-          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('inbox')}>All</button>
-          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('unread')}>Unread</button>
-          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('starred')}>Starred</button>
-          <button class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`} onclick={() => setQuickView('pending')}>Pending</button>
+          <button
+            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
+            onclick={() => setQuickView('inbox')}>All</button
+          >
+          <button
+            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
+            onclick={() => setQuickView('unread')}>Unread</button
+          >
+          <button
+            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
+            onclick={() => setQuickView('starred')}>Starred</button
+          >
+          <button
+            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
+            onclick={() => setQuickView('pending')}>Pending</button
+          >
         </div>
         {#if showShortcutHelp}
           <div class="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-zinc-300">
@@ -2357,16 +2666,24 @@ async function generateComposeBody() {
             </div>
             <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">/</kbd> search</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">j</kbd>/<kbd class="rounded border border-white/10 px-1.5 py-0.5">k</kbd> move</div>
+              <div>
+                <kbd class="rounded border border-white/10 px-1.5 py-0.5">j</kbd>/<kbd
+                  class="rounded border border-white/10 px-1.5 py-0.5">k</kbd
+                > move
+              </div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">c</kbd> compose</div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">r</kbd> reply</div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">a</kbd> reply all</div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">f</kbd> forward</div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">s</kbd> star</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">u</kbd> unread/read</div>
+              <div>
+                <kbd class="rounded border border-white/10 px-1.5 py-0.5">u</kbd> unread/read
+              </div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">e</kbd> archive</div>
               <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">#</kbd> trash</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">?</kbd> toggle help</div>
+              <div>
+                <kbd class="rounded border border-white/10 px-1.5 py-0.5">?</kbd> toggle help
+              </div>
             </div>
           </div>
         {/if}
@@ -2379,23 +2696,37 @@ async function generateComposeBody() {
     {#if view === 'operations'}
       <div class="space-y-3 overflow-y-auto p-4" in:fade={{ duration: 150 }}>
         <div class="flex rounded-md border border-white/10 p-1 text-xs">
-          <button class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('autopilot')}>Autopilot</button>
-          <button class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('executed')}>Executed</button>
+          <button
+            class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`}
+            onclick={() => openOperations('autopilot')}>Autopilot</button
+          >
+          <button
+            class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`}
+            onclick={() => openOperations('executed')}>Executed</button
+          >
         </div>
         <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
           <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">AI Operations</p>
-          <h2 class="mt-2 text-sm font-medium text-zinc-200">{operationsCategory === 'autopilot' ? 'Autopilot' : 'Executed actions'}</h2>
+          <h2 class="mt-2 text-sm font-medium text-zinc-200">
+            {operationsCategory === 'autopilot' ? 'Autopilot' : 'Executed actions'}
+          </h2>
           <p class="mt-1 text-xs leading-5 text-zinc-500">
             {operationsCategory === 'autopilot'
               ? `Review pending AI actions and run the agent when needed. ${data.autopilot?.stats?.proposed || 0} items are waiting.`
               : `Review the execution log and audit trail. ${data.executed?.length || 0} actions recorded.`}
           </p>
           <div class="mt-3 flex gap-2">
-            <button class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300" onclick={() => openOperations(operationsCategory)}>
+            <button
+              class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300"
+              onclick={() => openOperations(operationsCategory)}
+            >
               Refresh
             </button>
             {#if operationsCategory === 'autopilot'}
-              <button class="rounded-md bg-accent px-3 py-1 text-[11px] font-medium text-black" onclick={runAutopilot}>Run</button>
+              <button
+                class="rounded-md bg-accent px-3 py-1 text-[11px] font-medium text-black"
+                onclick={runAutopilot}>Run</button
+              >
             {/if}
           </div>
         </div>
@@ -2420,12 +2751,30 @@ async function generateComposeBody() {
             class="relative overflow-hidden border-b border-white/5"
             animate:flip={{ duration: 180 }}
           >
-            <div class="absolute inset-y-0 left-0 flex w-44 items-center gap-2 bg-accent/15 px-4 text-xs text-accent transition-opacity duration-150" style={`opacity: ${swiping?.id === message.id && swiping.deltaX > 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}>
+            <div
+              class="absolute inset-y-0 left-0 flex w-44 items-center gap-2 bg-accent/15 px-4 text-xs text-accent transition-opacity duration-150"
+              style={`opacity: ${swiping?.id === message.id && swiping.deltaX > 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}
+            >
               <Archive size={15} />
-              <span>{swipeLabel(swiping?.id === message.id && swiping.deltaX > 0 ? swipeActionForDelta(swiping.deltaX) : swipeSettings.rightShort)}</span>
+              <span
+                >{swipeLabel(
+                  swiping?.id === message.id && swiping.deltaX > 0
+                    ? swipeActionForDelta(swiping.deltaX)
+                    : swipeSettings.rightShort
+                )}</span
+              >
             </div>
-            <div class="absolute inset-y-0 right-0 flex w-44 items-center justify-end gap-2 bg-red-500/15 px-4 text-xs text-red-100 transition-opacity duration-150" style={`opacity: ${swiping?.id === message.id && swiping.deltaX < 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}>
-              <span>{swipeLabel(swiping?.id === message.id && swiping.deltaX < 0 ? swipeActionForDelta(swiping.deltaX) : swipeSettings.leftShort)}</span>
+            <div
+              class="absolute inset-y-0 right-0 flex w-44 items-center justify-end gap-2 bg-red-500/15 px-4 text-xs text-red-100 transition-opacity duration-150"
+              style={`opacity: ${swiping?.id === message.id && swiping.deltaX < 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}
+            >
+              <span
+                >{swipeLabel(
+                  swiping?.id === message.id && swiping.deltaX < 0
+                    ? swipeActionForDelta(swiping.deltaX)
+                    : swipeSettings.leftShort
+                )}</span
+              >
               <Trash2 size={15} />
             </div>
             <button
@@ -2445,17 +2794,36 @@ async function generateComposeBody() {
             >
               <div class="flex items-center justify-between gap-3">
                 <div class="flex min-w-0 items-center gap-2">
-                  <p class={`truncate text-sm ${message.isRead ? 'font-medium text-zinc-400' : 'font-semibold text-zinc-100'}`}>{message.from}</p>
+                  <p
+                    class={`truncate text-sm ${message.isRead ? 'font-medium text-zinc-400' : 'font-semibold text-zinc-100'}`}
+                  >
+                    {message.from}
+                  </p>
                 </div>
-                <time class="shrink-0 text-xs text-zinc-500">{new Date(message.date).toLocaleDateString()}</time>
+                <time class="shrink-0 text-xs text-zinc-500"
+                  >{new Date(message.date).toLocaleDateString()}</time
+                >
               </div>
-              <p class={`mt-1 truncate text-sm ${message.isRead ? 'text-zinc-300' : 'font-medium text-white'}`}>{message.isFlagged ? '★ ' : ''}{message.subject}</p>
+              <p
+                class={`mt-1 truncate text-sm ${message.isRead ? 'text-zinc-300' : 'font-medium text-white'}`}
+              >
+                {message.isFlagged ? '★ ' : ''}{message.subject}
+              </p>
               <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{message.snippet}</p>
               <div class="mt-2 flex items-center gap-2">
-                <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{message.folderPath}</span>
-                <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-400">{message.accountEmail}</span>
+                <span
+                  class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500"
+                  >{message.folderPath}</span
+                >
+                <span
+                  class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-400"
+                  >{message.accountEmail}</span
+                >
                 {#if message.suggestionStatus}
-                  <span class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(message.riskLevel)}`}>{message.recommendedAction}</span>
+                  <span
+                    class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(message.riskLevel)}`}
+                    >{message.recommendedAction}</span
+                  >
                 {/if}
               </div>
             </button>
@@ -2465,22 +2833,41 @@ async function generateComposeBody() {
     {/if}
   </section>
 
-  <section class={`min-w-0 overflow-y-auto pb-40 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}>
+  <section
+    class={`min-w-0 overflow-y-auto pb-40 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
+  >
     {#if data.selected && !['settings', 'operations'].includes(view)}
       <article class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         <header class="border-b border-white/10 pb-6">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400">{data.selected.account?.email}</span>
-            <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400">{data.selected.message.folderPath}</span>
+            <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400"
+              >{data.selected.account?.email}</span
+            >
+            <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400"
+              >{data.selected.message.folderPath}</span
+            >
           </div>
-          <h2 class="mt-4 text-2xl font-semibold tracking-tight md:text-3xl">{data.selected.message.subject}</h2>
-          <p class="mt-3 text-sm text-zinc-400">From {data.selected.message.from} to {data.selected.message.to} · {new Date(data.selected.message.date).toLocaleString()}</p>
+          <h2 class="mt-4 text-2xl font-semibold tracking-tight md:text-3xl">
+            {data.selected.message.subject}
+          </h2>
+          <p class="mt-3 text-sm text-zinc-400">
+            From {data.selected.message.from} to {data.selected.message.to} · {new Date(
+              data.selected.message.date
+            ).toLocaleString()}
+          </p>
         </header>
 
-        <div class="sticky top-0 z-10 hidden flex-wrap items-center gap-2 border-b border-white/10 bg-black/75 py-3 backdrop-blur-md md:flex" in:fly={{ y: -6, duration: 180 }}>
+        <div
+          class="sticky top-0 z-10 hidden flex-wrap items-center gap-2 border-b border-white/10 bg-black/75 py-3 backdrop-blur-md md:flex"
+          in:fly={{ y: -6, duration: 180 }}
+        >
           {#each quickActionIds as actionId (actionId)}
             <button
-              data-testid={actionId === 'reply_all' ? 'reply-all' : actionId === 'archive' ? 'quick-action-archive' : undefined}
+              data-testid={actionId === 'reply_all'
+                ? 'reply-all'
+                : actionId === 'archive'
+                  ? 'quick-action-archive'
+                  : undefined}
               class={quickActionButtonClass(actionId)}
               onclick={() => runQuickAction(actionId)}
             >
@@ -2496,7 +2883,10 @@ async function generateComposeBody() {
               {quickActionMeta(actionId)?.label}
             </button>
           {/each}
-          <select class="min-w-44 rounded-md border border-white/10 bg-black/60 px-3 py-2 text-sm text-zinc-200 outline-none" onchange={(event) => moveSelected(event.currentTarget.value)}>
+          <select
+            class="min-w-44 rounded-md border border-white/10 bg-black/60 px-3 py-2 text-sm text-zinc-200 outline-none"
+            onchange={(event) => moveSelected(event.currentTarget.value)}
+          >
             <option value="">Move...</option>
             {#each data.folders.filter((folder) => folder.accountId === data.selected?.message.accountId) as folder (folder.id)}
               <option value={folder.path}>{folder.path}</option>
@@ -2505,17 +2895,25 @@ async function generateComposeBody() {
         </div>
 
         {#if data.selected.suggestion}
-          <section class={`mt-8 rounded-lg border p-4 md:p-5 ${riskClass(data.selected.suggestion.riskLevel)}`} data-testid="ai-action-card" in:fly={{ y: 20, duration: 300, delay: 100 }}>
+          <section
+            class={`mt-8 rounded-lg border p-4 md:p-5 ${riskClass(data.selected.suggestion.riskLevel)}`}
+            data-testid="ai-action-card"
+            in:fly={{ y: 20, duration: 300, delay: 100 }}
+          >
             <div class="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p class="text-xs uppercase tracking-[0.18em] opacity-80">AI Action Card</p>
                 <h3 class="mt-2 text-xl font-semibold">{data.selected.suggestion.category}</h3>
                 <p class="mt-2 text-sm opacity-90">{data.selected.suggestion.reasoningSummary}</p>
               </div>
-<div class="flex flex-wrap gap-2 text-xs">
-          <span class="rounded-full border border-current/20 px-2 py-1">{data.selected.suggestion.recommendedAction}</span>
-          <span class="rounded-full border border-current/20 px-2 py-1">{data.selected.suggestion.riskLevel} risk</span>
-        </div>
+              <div class="flex flex-wrap gap-2 text-xs">
+                <span class="rounded-full border border-current/20 px-2 py-1"
+                  >{data.selected.suggestion.recommendedAction}</span
+                >
+                <span class="rounded-full border border-current/20 px-2 py-1"
+                  >{data.selected.suggestion.riskLevel} risk</span
+                >
+              </div>
             </div>
             {#if data.selected.suggestion.targetFolder}
               <p class="mt-4 text-sm">Target folder: {data.selected.suggestion.targetFolder}</p>
@@ -2526,56 +2924,128 @@ async function generateComposeBody() {
             {#if data.selected.suggestion.draftReply || ['reply', 'forward'].includes(data.selected.suggestion.recommendedAction)}
               <label class="mt-5 block text-sm font-medium" for="draft-reply">Draft</label>
               <div class="relative mt-2">
-                <textarea id="draft-reply" data-testid="draft-reply" class="min-h-44 w-full resize-y rounded-md border border-current/20 bg-black/30 p-3 pr-12 text-sm text-white outline-none" bind:value={draftText}></textarea>
+                <textarea
+                  id="draft-reply"
+                  data-testid="draft-reply"
+                  class="min-h-44 w-full resize-y rounded-md border border-current/20 bg-black/30 p-3 pr-12 text-sm text-white outline-none"
+                  bind:value={draftText}
+                ></textarea>
                 <div class="absolute right-2 top-2">
-                  <DictationButton targetId="draft-reply" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+                  <DictationButton
+                    targetId="draft-reply"
+                    activeTargetId={dictationTarget?.id || null}
+                    recording={dictationActive}
+                    unavailable={dictationUnavailable}
+                    level={dictationLevel}
+                    onToggle={toggleDictation}
+                  />
                 </div>
               </div>
             {/if}
             <div class="mt-5 flex flex-wrap items-center gap-2">
-              <button data-testid="execute-suggestion" class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={executeSuggestion}><Send size={16} /> Execute</button>
-              <button class="rounded-md border border-current/20 px-3 py-2 text-sm" onclick={saveEdit}>Save Edit</button>
-              <button class="rounded-md border border-current/20 px-3 py-2 text-sm" onclick={rejectSuggestion}>Reject</button>
+              <button
+                data-testid="execute-suggestion"
+                class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+                onclick={executeSuggestion}><Send size={16} /> Execute</button
+              >
+              <button
+                class="rounded-md border border-current/20 px-3 py-2 text-sm"
+                onclick={saveEdit}>Save Edit</button
+              >
+              <button
+                class="rounded-md border border-current/20 px-3 py-2 text-sm"
+                onclick={rejectSuggestion}>Reject</button
+              >
               <div class="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto md:flex-1">
-                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                   <input id="regen-note" class="min-w-0 flex-1 rounded-md border border-current/20 bg-black/30 px-3 py-2 text-sm text-white" placeholder="Tweak this suggestion..." bind:value={regenNote} />
-                   <DictationButton targetId="regen-note" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
-                 </div>
-                 <button class="flex items-center gap-2 rounded-md border border-current/20 px-3 py-2 text-sm" onclick={regenerate}><RefreshCw size={16} /> Regenerate</button>
+                <div class="flex min-w-0 flex-1 items-center gap-2">
+                  <input
+                    id="regen-note"
+                    class="min-w-0 flex-1 rounded-md border border-current/20 bg-black/30 px-3 py-2 text-sm text-white"
+                    placeholder="Tweak this suggestion..."
+                    bind:value={regenNote}
+                  />
+                  <DictationButton
+                    targetId="regen-note"
+                    activeTargetId={dictationTarget?.id || null}
+                    recording={dictationActive}
+                    unavailable={dictationUnavailable}
+                    level={dictationLevel}
+                    onToggle={toggleDictation}
+                  />
+                </div>
+                <button
+                  class="flex items-center gap-2 rounded-md border border-current/20 px-3 py-2 text-sm"
+                  onclick={regenerate}><RefreshCw size={16} /> Regenerate</button
+                >
               </div>
             </div>
           </section>
         {:else}
           <div in:fade>
-            <button class="mt-6 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={() => generateSuggestion(data.selected?.message.id ?? 0)}>Generate suggestion</button>
+            <button
+              class="mt-6 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+              onclick={() => generateSuggestion(data.selected?.message.id ?? 0)}
+              >Generate suggestion</button
+            >
           </div>
         {/if}
 
         <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
           <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Outcome Learning</p>
           <div class="mt-3 flex flex-wrap gap-2">
-            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('resolved')}>Resolved</button>
-            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('needs_followup')}>Needs follow-up</button>
-            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('bad_draft')}>Bad draft</button>
-            <button class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={() => recordMessageOutcome('wrong_action')}>Wrong action</button>
+            <button
+              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
+              onclick={() => recordMessageOutcome('resolved')}>Resolved</button
+            >
+            <button
+              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
+              onclick={() => recordMessageOutcome('needs_followup')}>Needs follow-up</button
+            >
+            <button
+              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
+              onclick={() => recordMessageOutcome('bad_draft')}>Bad draft</button
+            >
+            <button
+              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
+              onclick={() => recordMessageOutcome('wrong_action')}>Wrong action</button
+            >
           </div>
         </section>
 
-        <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5" data-testid="agent-task-card">
+        <section
+          class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5"
+          data-testid="agent-task-card"
+        >
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Agent Task Plan</p>
               <h3 class="mt-1 text-lg font-semibold">Action Graph</h3>
             </div>
-            <button data-testid="plan-task" class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200" onclick={createTaskPlan}>
+            <button
+              data-testid="plan-task"
+              class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
+              onclick={createTaskPlan}
+            >
               <Bot size={15} />
               Plan Task
             </button>
           </div>
           <div class="mt-3 flex gap-2">
             <div class="flex min-w-0 flex-1 items-center gap-2">
-              <input id="task-note" class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none" placeholder="Add planning note (optional)..." bind:value={taskNote} />
-              <DictationButton targetId="task-note" activeTargetId={dictationTarget?.id || null} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+              <input
+                id="task-note"
+                class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none"
+                placeholder="Add planning note (optional)..."
+                bind:value={taskNote}
+              />
+              <DictationButton
+                targetId="task-note"
+                activeTargetId={dictationTarget?.id || null}
+                recording={dictationActive}
+                unavailable={dictationUnavailable}
+                level={dictationLevel}
+                onToggle={toggleDictation}
+              />
             </div>
           </div>
           {#if data.tasks?.length}
@@ -2585,12 +3055,26 @@ async function generateComposeBody() {
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p class="text-sm font-medium">{task.run.summary}</p>
-                      <p class="text-xs text-zinc-500">{task.run.status} · {task.run.complexity} · {task.run.providerUsed}/{task.run.modelUsed}</p>
+                      <p class="text-xs text-zinc-500">
+                        {task.run.status} · {task.run.complexity} · {task.run.providerUsed}/{task
+                          .run.modelUsed}
+                      </p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                      <button data-testid="approve-task" class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => approveTask(task.run.id)}>Approve all</button>
-                      <button data-testid="execute-task" class="rounded-md border border-white/10 px-2 py-1 text-xs" onclick={() => executeTask(task.run.id)}>Execute</button>
-                      <button class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200" onclick={() => rejectTask(task.run.id)}>Reject</button>
+                      <button
+                        data-testid="approve-task"
+                        class="rounded-md border border-white/10 px-2 py-1 text-xs"
+                        onclick={() => approveTask(task.run.id)}>Approve all</button
+                      >
+                      <button
+                        data-testid="execute-task"
+                        class="rounded-md border border-white/10 px-2 py-1 text-xs"
+                        onclick={() => executeTask(task.run.id)}>Execute</button
+                      >
+                      <button
+                        class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200"
+                        onclick={() => rejectTask(task.run.id)}>Reject</button
+                      >
                     </div>
                   </div>
                   {#if task.run.errorMessage}
@@ -2605,9 +3089,15 @@ async function generateComposeBody() {
                         <div class="flex flex-wrap items-center justify-between gap-2">
                           <p class="text-xs font-medium">{step.title}</p>
                           <div class="flex items-center gap-2">
-                            <span class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(step.riskLevel)}`}>{step.status}</span>
+                            <span
+                              class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(step.riskLevel)}`}
+                              >{step.status}</span
+                            >
                             {#if step.status === 'pending'}
-                              <button class="rounded-md border border-white/10 px-2 py-0.5 text-[11px]" onclick={() => approveTask(task.run.id, step.id)}>Approve</button>
+                              <button
+                                class="rounded-md border border-white/10 px-2 py-0.5 text-[11px]"
+                                onclick={() => approveTask(task.run.id, step.id)}>Approve</button
+                              >
                             {/if}
                           </div>
                         </div>
@@ -2637,7 +3127,9 @@ async function generateComposeBody() {
                 >
                   <div class="flex items-center justify-between gap-3">
                     <p class="truncate text-sm font-medium">{item.from}</p>
-                    <time class="shrink-0 text-xs text-zinc-500">{new Date(item.date).toLocaleString()}</time>
+                    <time class="shrink-0 text-xs text-zinc-500"
+                      >{new Date(item.date).toLocaleString()}</time
+                    >
                   </div>
                   <p class="mt-1 truncate text-xs text-zinc-400">{item.subject}</p>
                   <p class="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.bodyText}</p>
@@ -2647,19 +3139,21 @@ async function generateComposeBody() {
           </section>
         {/if}
 
-        <section class="prose prose-invert mt-8 max-w-none rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-6">
+        <section
+          class="prose prose-invert mt-8 max-w-none rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-6"
+        >
           {#if data.selected.message.safeBodyHtml}
             <div class="mb-4 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
               <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Message Body</p>
               <div class="flex items-center gap-2 rounded-md border border-white/10 p-1 text-xs">
                 <button
                   class={`rounded px-2 py-1 ${bodyMode === 'html' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-                  onclick={() => (bodyMode = 'html')}
-                >HTML</button>
+                  onclick={() => (bodyMode = 'html')}>HTML</button
+                >
                 <button
                   class={`rounded px-2 py-1 ${bodyMode === 'text' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-                  onclick={() => (bodyMode = 'text')}
-                >Text</button>
+                  onclick={() => (bodyMode = 'text')}>Text</button
+                >
               </div>
             </div>
           {/if}
@@ -2669,26 +3163,37 @@ async function generateComposeBody() {
               {@html data.selected.message.safeBodyHtml}
             </article>
           {:else}
-            <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-zinc-200">{data.selected.message.bodyText}</pre>
+            <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-zinc-200">{data
+                .selected.message.bodyText}</pre>
           {/if}
         </section>
 
         {#if data.selected.attachments?.length}
           <details class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm text-zinc-300">
+            <summary
+              class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm text-zinc-300"
+            >
               <span class="inline-flex items-center gap-2">
                 <Paperclip size={14} class="text-zinc-500" />
                 <span>Attachments</span>
-                <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500">{data.selected.attachments.length}</span>
+                <span
+                  class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500"
+                  >{data.selected.attachments.length}</span
+                >
               </span>
               <span class="text-xs text-zinc-500">Show files</span>
             </summary>
             <div class="mt-3 flex flex-wrap gap-2">
               {#each data.selected.attachments as attachment (attachment.id)}
-                <a class="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]" href={`/api/messages/${data.selected.message.id}/attachments/${attachment.id}`}>
+                <a
+                  class="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
+                  href={`/api/messages/${data.selected.message.id}/attachments/${attachment.id}`}
+                >
                   <Paperclip size={13} />
                   <span>{attachment.filename}</span>
-                  <span class="text-zinc-500">{Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB</span>
+                  <span class="text-zinc-500"
+                    >{Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB</span
+                  >
                 </a>
               {/each}
             </div>
@@ -2698,17 +3203,29 @@ async function generateComposeBody() {
     {:else if view === 'operations'}
       <div class="mx-auto max-w-5xl p-8" in:fade={{ duration: 150 }}>
         <div class="mb-4 flex rounded-md border border-white/10 p-1 text-xs">
-          <button class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('autopilot')}>Autopilot</button>
-          <button class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`} onclick={() => openOperations('executed')}>Executed</button>
+          <button
+            class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`}
+            onclick={() => openOperations('autopilot')}>Autopilot</button
+          >
+          <button
+            class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`}
+            onclick={() => openOperations('executed')}>Executed</button
+          >
         </div>
         {#if operationsCategory === 'autopilot'}
           <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p class="text-xs uppercase tracking-[0.18em] text-accent">AI Operations</p>
               <h2 class="mt-2 text-2xl font-semibold">Autopilot Control Room</h2>
-              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">The agent scans mail, proposes actions, tracks follow-ups, and keeps a decision log. Sends, forwards, and delegation stay approval-gated.</p>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+                The agent scans mail, proposes actions, tracks follow-ups, and keeps a decision log.
+                Sends, forwards, and delegation stay approval-gated.
+              </p>
             </div>
-            <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={runAutopilot}>Run Autopilot</button>
+            <button
+              class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+              onclick={runAutopilot}>Run Autopilot</button
+            >
           </div>
 
           <section class="mt-6 grid gap-3 md:grid-cols-4">
@@ -2734,34 +3251,59 @@ async function generateComposeBody() {
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 class="font-medium">Policy</h3>
-                <p class="mt-1 text-sm text-zinc-400">Keep this boring: simulation first, explicit sends always.</p>
+                <p class="mt-1 text-sm text-zinc-400">
+                  Keep this boring: simulation first, explicit sends always.
+                </p>
               </div>
-              <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveAutopilotPolicy}>Save Policy</button>
+              <button
+                class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+                onclick={saveAutopilotPolicy}>Save Policy</button
+              >
             </div>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
-              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+              <label
+                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
+              >
                 <span>Autopilot enabled</span>
                 <input type="checkbox" bind:checked={autopilotPolicy.autopilotEnabled} />
               </label>
-              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+              <label
+                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
+              >
                 <span>Dry-run only</span>
                 <input type="checkbox" bind:checked={autopilotPolicy.dryRunOnly} />
               </label>
-              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+              <label
+                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
+              >
                 <span>Auto-file low-risk mail</span>
                 <input type="checkbox" bind:checked={autopilotPolicy.allowAutoFileLowRisk} />
               </label>
-              <label class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm">
+              <label
+                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
+              >
                 <span>Auto-handle low-risk no-action</span>
                 <input type="checkbox" bind:checked={autopilotPolicy.allowAutoNoActionLowRisk} />
               </label>
               <label class="rounded-md border border-white/10 bg-black/20 p-3 text-sm">
                 <span>Messages per run</span>
-                <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2" type="number" min="1" max="200" bind:value={autopilotPolicy.maxMessagesPerRun} />
+                <input
+                  class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2"
+                  type="number"
+                  min="1"
+                  max="200"
+                  bind:value={autopilotPolicy.maxMessagesPerRun}
+                />
               </label>
               <label class="rounded-md border border-white/10 bg-black/20 p-3 text-sm">
                 <span>Max auto actions per run</span>
-                <input class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2" type="number" min="0" max="100" bind:value={autopilotPolicy.maxAutoActionsPerRun} />
+                <input
+                  class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2"
+                  type="number"
+                  min="0"
+                  max="100"
+                  bind:value={autopilotPolicy.maxAutoActionsPerRun}
+                />
               </label>
             </div>
           </section>
@@ -2773,8 +3315,12 @@ async function generateComposeBody() {
                 {#each data.autopilot?.runs || [] as run (run.id)}
                   <div class="rounded-md border border-white/10 bg-black/20 p-3">
                     <p class="text-sm">{run.status} · {run.mode}</p>
-                    <p class="mt-1 text-xs text-zinc-500">Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}</p>
-                    {#if run.errorMessage}<p class="mt-1 text-xs text-red-200">{run.errorMessage}</p>{/if}
+                    <p class="mt-1 text-xs text-zinc-500">
+                      Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}
+                    </p>
+                    {#if run.errorMessage}<p class="mt-1 text-xs text-red-200">
+                        {run.errorMessage}
+                      </p>{/if}
                   </div>
                 {:else}
                   <p class="text-sm text-zinc-500">No runs yet.</p>
@@ -2787,7 +3333,9 @@ async function generateComposeBody() {
                 {#each data.autopilot?.summaries || [] as summary (summary.id)}
                   <article class="rounded-md border border-white/10 bg-black/20 p-3">
                     <p class="truncate text-sm font-medium">{summary.subject}</p>
-                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{summary.summary}</p>
+                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">
+                      {summary.summary}
+                    </p>
                     <p class="mt-2 text-xs text-accent">{summary.nextAction}</p>
                   </article>
                 {:else}
@@ -2802,7 +3350,11 @@ async function generateComposeBody() {
             <div class="mt-4 overflow-x-auto">
               <table class="w-full text-left text-xs">
                 <thead class="text-zinc-500">
-                  <tr><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th><th>Prompt</th></tr>
+                  <tr
+                    ><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th><th
+                      >Prompt</th
+                    ></tr
+                  >
                 </thead>
                 <tbody>
                   {#each data.autopilot?.observability || [] as item (item.id)}
@@ -2824,144 +3376,162 @@ async function generateComposeBody() {
             {#each data.executed as action (action.id)}
               <article class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
                 <p class="font-medium">{action.actionType}</p>
-                <p class="text-sm text-zinc-500">{action.status} · {new Date(action.createdAt).toLocaleString()}</p>
-                <pre class="mt-3 overflow-auto rounded-md bg-black/30 p-3 text-xs text-zinc-400">{action.detailsJson}</pre>
+                <p class="text-sm text-zinc-500">
+                  {action.status} · {new Date(action.createdAt).toLocaleString()}
+                </p>
+                <pre
+                  class="mt-3 overflow-auto rounded-md bg-black/30 p-3 text-xs text-zinc-400">{action.detailsJson}</pre>
               </article>
             {:else}
-              <p class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-zinc-500">No executed actions yet.</p>
+              <p
+                class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-zinc-500"
+              >
+                No executed actions yet.
+              </p>
             {/each}
           </div>
         {/if}
       </div>
     {:else if view === 'settings'}
-      <div class="h-[calc(100dvh-3rem)] overflow-y-auto p-4 md:h-auto md:p-8" in:fade={{ duration: 150 }}>
+      <div
+        class="h-[calc(100dvh-3rem)] overflow-y-auto p-4 md:h-auto md:p-8"
+        in:fade={{ duration: 150 }}
+      >
         {#if isMobileViewport && !mobileSettingsDetailOpen}
           <h2 class="text-2xl font-semibold">Settings</h2>
           <p class="mt-2 text-zinc-400">Choose what you want to configure.</p>
-          <SettingsCategoryList categories={settingsCategories as unknown as Array<{ key: string; label: string; detail: string }>} selected={settingsCategory} onSelect={(category) => openSettingsCategory(category as SettingsCategory)} />
+          <SettingsCategoryList
+            categories={settingsCategories as unknown as Array<{
+              key: string;
+              label: string;
+              detail: string;
+            }>}
+            selected={settingsCategory}
+            onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
+          />
         {:else}
-        <h2 class="text-2xl font-semibold">Configuration</h2>
-        {#if settingsCategory === 'accounts'}
-          <SettingsAccounts
-            {data}
-            bind:accountForm
-            bind:googleOauthSettings
-            {googleOauthHasSecret}
-            {googleOauthConnectedEmail}
-            dictationTargetId={dictationTarget?.id || null}
-            {dictationActive}
-            {dictationUnavailable}
-            {dictationLevel}
-            {toggleDictation}
-            {accountAction}
-            {addAccount}
-            {saveGoogleOauthSettings}
-            {startGoogleConnect}
-          />
-        {/if}
-        {#if settingsCategory === 'memory'}
-          <SettingsMemory
-            {data}
-            bind:memoryAssistantPrompt
-            bind:coreProfileText
-            bind:memoryAdvancedMode
-            bind:memoryText
-            bind:skillsText
-            dictationTargetId={dictationTarget?.id || null}
-            {dictationActive}
-            {dictationUnavailable}
-            {dictationLevel}
-            {toggleDictation}
-            {applyMemoryAssistant}
-            {saveCoreProfile}
-            {saveSkills}
-            {resetSkills}
-            {setAdvancedMemoryMode}
-            {saveMemory}
-            {resetMemory}
-            {removeMemoryRule}
-          />
-        {/if}
-        {#if settingsCategory === 'models'}
-          <SettingsModels
-            {data}
-            {coreAiProfileKeys}
-            bind:aiProfileForms
-            bind:profileMode
-            bind:profileEnvValues
-            {aiProfileRecommendations}
-            {modelsDevProviders}
-            {loadModelsDevCatalog}
-            {selectCatalogProviderForProfile}
-            {selectedCatalogModels}
-            {selectedCatalogProvider}
-            {requiredEnvVars}
-            {setProfileMode}
-            {testAiProfile}
-            {saveAiProfile}
-            {modelsDevLoading}
-            bind:audioProviderId
-            bind:audioModelId
-            bind:audioApiKey
-            {audioProvider}
-            {audioModels}
-            {selectAudioProvider}
-            {saveAudioDictationProfile}
-          />
-        {/if}
-        {#if settingsCategory === 'tools'}
-          <SettingsTools
-            {data}
-            {copyToClipboard}
-            {testAgentTool}
-            {toggleAgentTool}
-            {removeAgentTool}
-            {addAgentTool}
-            {saveToolSkills}
-            {saveToolConfig}
-            {installCliPackage}
-            {addWebhook}
-            bind:agentToolForm
-            bind:cliInstallForm
-            bind:webhookTarget
-          />
-        {/if}
-        {#if settingsCategory === 'interface'}
-          <SettingsInterface
-            {quickActionCatalog}
-            {quickActionIds}
-            {resetInterfacePreferences}
-            {setQuickActionEnabled}
-            {moveQuickAction}
-            {swipeSettings}
-            {swipeActionCatalog}
-            {updateSwipeSetting}
-            folderGroups={folderGroups()}
-            {saveFolderRole}
-            {folderRoleOptions}
-          />
-        {/if}
-        {#if settingsCategory === 'advanced'}
-          <SettingsAdvanced
-            bind:cachePassphrase
-            {cacheEncrypted}
-            {saveCacheEncryption}
-            {backups}
-            {createBackupNow}
-            {refreshBackups}
-            {restoreBackupNow}
-            {auditSnapshot}
-            {loadAuditSnapshot}
-            bind:contactsImportCsv
-            {exportContacts}
-            {importContacts}
-            dictationTargetId={dictationTarget?.id || null}
-            {dictationActive}
-            {dictationUnavailable}
-            {dictationLevel}
-            {toggleDictation}
-          />
-        {/if}
+          <h2 class="text-2xl font-semibold">Configuration</h2>
+          {#if settingsCategory === 'accounts'}
+            <SettingsAccounts
+              {data}
+              bind:accountForm
+              bind:googleOauthSettings
+              {googleOauthHasSecret}
+              {googleOauthConnectedEmail}
+              dictationTargetId={dictationTarget?.id || null}
+              {dictationActive}
+              {dictationUnavailable}
+              {dictationLevel}
+              {toggleDictation}
+              {accountAction}
+              {addAccount}
+              {saveGoogleOauthSettings}
+              {startGoogleConnect}
+            />
+          {/if}
+          {#if settingsCategory === 'memory'}
+            <SettingsMemory
+              {data}
+              bind:memoryAssistantPrompt
+              bind:coreProfileText
+              bind:memoryAdvancedMode
+              bind:memoryText
+              bind:skillsText
+              dictationTargetId={dictationTarget?.id || null}
+              {dictationActive}
+              {dictationUnavailable}
+              {dictationLevel}
+              {toggleDictation}
+              {applyMemoryAssistant}
+              {saveCoreProfile}
+              {saveSkills}
+              {resetSkills}
+              {setAdvancedMemoryMode}
+              {saveMemory}
+              {resetMemory}
+              {removeMemoryRule}
+            />
+          {/if}
+          {#if settingsCategory === 'models'}
+            <SettingsModels
+              {data}
+              {coreAiProfileKeys}
+              bind:aiProfileForms
+              bind:profileMode
+              bind:profileEnvValues
+              {aiProfileRecommendations}
+              {modelsDevProviders}
+              {loadModelsDevCatalog}
+              {selectCatalogProviderForProfile}
+              {selectedCatalogModels}
+              {selectedCatalogProvider}
+              {requiredEnvVars}
+              {setProfileMode}
+              {testAiProfile}
+              {saveAiProfile}
+              {modelsDevLoading}
+              bind:audioProviderId
+              bind:audioModelId
+              bind:audioApiKey
+              {audioProvider}
+              {audioModels}
+              {selectAudioProvider}
+              {saveAudioDictationProfile}
+            />
+          {/if}
+          {#if settingsCategory === 'tools'}
+            <SettingsTools
+              {data}
+              {copyToClipboard}
+              {testAgentTool}
+              {toggleAgentTool}
+              {removeAgentTool}
+              {addAgentTool}
+              {saveToolSkills}
+              {saveToolConfig}
+              {installCliPackage}
+              {addWebhook}
+              bind:agentToolForm
+              bind:cliInstallForm
+              bind:webhookTarget
+            />
+          {/if}
+          {#if settingsCategory === 'interface'}
+            <SettingsInterface
+              {quickActionCatalog}
+              {quickActionIds}
+              {resetInterfacePreferences}
+              {setQuickActionEnabled}
+              {moveQuickAction}
+              {swipeSettings}
+              {swipeActionCatalog}
+              {updateSwipeSetting}
+              folderGroups={folderGroups()}
+              {saveFolderRole}
+              {folderRoleOptions}
+            />
+          {/if}
+          {#if settingsCategory === 'advanced'}
+            <SettingsAdvanced
+              bind:cachePassphrase
+              {cacheEncrypted}
+              {saveCacheEncryption}
+              {backups}
+              {createBackupNow}
+              {refreshBackups}
+              {restoreBackupNow}
+              {auditSnapshot}
+              {loadAuditSnapshot}
+              bind:contactsImportCsv
+              {exportContacts}
+              {importContacts}
+              dictationTargetId={dictationTarget?.id || null}
+              {dictationActive}
+              {dictationUnavailable}
+              {dictationLevel}
+              {toggleDictation}
+            />
+          {/if}
         {/if}
       </div>
     {:else}

@@ -36,7 +36,14 @@ export const OutcomeSchema = z.object({
   messageId: z.coerce.number().int().positive(),
   suggestionId: z.coerce.number().int().positive().nullable().optional(),
   actionQueueId: z.coerce.number().int().positive().nullable().optional(),
-  outcomeType: z.enum(['resolved', 'needs_followup', 'bad_draft', 'wrong_action', 'positive_reply', 'negative_reply']),
+  outcomeType: z.enum([
+    'resolved',
+    'needs_followup',
+    'bad_draft',
+    'wrong_action',
+    'positive_reply',
+    'negative_reply'
+  ]),
   notes: z.string().max(2000).nullable().optional()
 });
 
@@ -108,8 +115,18 @@ export function listAutopilotDashboard() {
     .orderBy(desc(agentActionQueue.createdAt))
     .limit(80)
     .all();
-  const runs = db.select().from(autopilotRuns).orderBy(desc(autopilotRuns.startedAt)).limit(12).all();
-  const summaries = db.select().from(threadSummaries).orderBy(desc(threadSummaries.updatedAt)).limit(12).all();
+  const runs = db
+    .select()
+    .from(autopilotRuns)
+    .orderBy(desc(autopilotRuns.startedAt))
+    .limit(12)
+    .all();
+  const summaries = db
+    .select()
+    .from(threadSummaries)
+    .orderBy(desc(threadSummaries.updatedAt))
+    .limit(12)
+    .all();
   const followUps = db
     .select({
       id: followUpReminders.id,
@@ -126,16 +143,40 @@ export function listAutopilotDashboard() {
     .orderBy(followUpReminders.dueAt)
     .limit(30)
     .all();
-  const observability = db.select().from(aiObservability).orderBy(desc(aiObservability.createdAt)).limit(20).all();
-  const outcomes = db.select().from(outcomeEvents).orderBy(desc(outcomeEvents.createdAt)).limit(20).all();
+  const observability = db
+    .select()
+    .from(aiObservability)
+    .orderBy(desc(aiObservability.createdAt))
+    .limit(20)
+    .all();
+  const outcomes = db
+    .select()
+    .from(outcomeEvents)
+    .orderBy(desc(outcomeEvents.createdAt))
+    .limit(20)
+    .all();
   const stats = {
     proposed: countQueue('proposed'),
     approved: countQueue('approved'),
     failed: countQueue('failed'),
     openFollowUps: followUps.length,
-    avgLatencyMs: Math.round(db.select({ value: sql<number>`coalesce(avg(latency_ms), 0)` }).from(aiObservability).get()?.value || 0)
+    avgLatencyMs: Math.round(
+      db
+        .select({ value: sql<number>`coalesce(avg(latency_ms), 0)` })
+        .from(aiObservability)
+        .get()?.value || 0
+    )
   };
-  return { policy: getAutopilotPolicy(), queue, runs, summaries, followUps, observability, outcomes, stats };
+  return {
+    policy: getAutopilotPolicy(),
+    queue,
+    runs,
+    summaries,
+    followUps,
+    observability,
+    outcomes,
+    stats
+  };
 }
 
 export async function runAutopilotNow() {
@@ -165,9 +206,11 @@ export async function runAutopilotNow() {
     const pendingSuggestions = db
       .select()
       .from(aiSuggestions)
-      .where(sql`ai_suggestions.status = 'pending' AND NOT EXISTS (
+      .where(
+        sql`ai_suggestions.status = 'pending' AND NOT EXISTS (
         SELECT 1 FROM agent_action_queue q WHERE q.suggestion_id = ai_suggestions.id
-      )`)
+      )`
+      )
       .orderBy(desc(aiSuggestions.createdAt))
       .limit(policy.maxMessagesPerRun)
       .all();
@@ -203,7 +246,11 @@ export async function runAutopilotNow() {
         suggestedCount += 1;
         const queued = enqueueSuggestion(suggestion.id, 'autopilot');
         if (queued) queuedCount += 1;
-        if (queued && canAutoExecute(suggestion, policy) && executedCount < policy.maxAutoActionsPerRun) {
+        if (
+          queued &&
+          canAutoExecute(suggestion, policy) &&
+          executedCount < policy.maxAutoActionsPerRun
+        ) {
           await approveQueueItems([queued.id]);
           await executeQueueItems([queued.id]);
           executedCount += 1;
@@ -254,7 +301,12 @@ export function startAutopilotScheduler() {
     if (!policy.autopilotEnabled || autopilotInFlight) return;
     autopilotInFlight = true;
     runAutopilotNow()
-      .catch((error) => console.warn('[triage] autopilot run failed', error instanceof Error ? error.message : error))
+      .catch((error) =>
+        console.warn(
+          '[triage] autopilot run failed',
+          error instanceof Error ? error.message : error
+        )
+      )
       .finally(() => {
         autopilotInFlight = false;
       });
@@ -262,7 +314,11 @@ export function startAutopilotScheduler() {
 }
 
 export function enqueueSuggestion(suggestionId: number, source = 'manual') {
-  const suggestion = db.select().from(aiSuggestions).where(eq(aiSuggestions.id, suggestionId)).get();
+  const suggestion = db
+    .select()
+    .from(aiSuggestions)
+    .where(eq(aiSuggestions.id, suggestionId))
+    .get();
   if (!suggestion) return null;
   const message = db.select().from(messages).where(eq(messages.id, suggestion.messageId)).get();
   if (!message) return null;
@@ -317,7 +373,12 @@ export function rejectQueueItems(ids: number[]) {
   const result = db
     .update(agentActionQueue)
     .set({ status: 'rejected', updatedAt: now })
-    .where(and(inArray(agentActionQueue.id, ids), inArray(agentActionQueue.status, ['proposed', 'approved', 'failed'])))
+    .where(
+      and(
+        inArray(agentActionQueue.id, ids),
+        inArray(agentActionQueue.status, ['proposed', 'approved', 'failed'])
+      )
+    )
     .run();
   return { updated: result.changes };
 }
@@ -326,12 +387,20 @@ export async function executeQueueItems(ids: number[]) {
   const rows = db
     .select()
     .from(agentActionQueue)
-    .where(and(inArray(agentActionQueue.id, ids), inArray(agentActionQueue.status, ['approved', 'failed'])))
+    .where(
+      and(
+        inArray(agentActionQueue.id, ids),
+        inArray(agentActionQueue.status, ['approved', 'failed'])
+      )
+    )
     .all();
   let executed = 0;
   for (const row of rows) {
     const now = nowIso();
-    db.update(agentActionQueue).set({ status: 'executing', updatedAt: now, errorMessage: null }).where(eq(agentActionQueue.id, row.id)).run();
+    db.update(agentActionQueue)
+      .set({ status: 'executing', updatedAt: now, errorMessage: null })
+      .where(eq(agentActionQueue.id, row.id))
+      .run();
     try {
       if (!row.suggestionId) throw new Error('Queue item has no suggestion');
       const result = await executeSuggestion(row.suggestionId);
@@ -369,7 +438,10 @@ export function recordOutcome(input: unknown) {
     .returning()
     .get();
   if (parsed.outcomeType === 'resolved' && parsed.messageId) {
-    db.update(followUpReminders).set({ status: 'done', updatedAt: nowIso() }).where(eq(followUpReminders.messageId, parsed.messageId)).run();
+    db.update(followUpReminders)
+      .set({ status: 'done', updatedAt: nowIso() })
+      .where(eq(followUpReminders.messageId, parsed.messageId))
+      .run();
   }
   return inserted;
 }
@@ -416,7 +488,11 @@ export function upsertThreadSummaryForMessage(messageId: number) {
 }
 
 function ensureFollowUpForMessage(messageId: number, suggestionId: number, policy: Policy) {
-  const suggestion = db.select().from(aiSuggestions).where(eq(aiSuggestions.id, suggestionId)).get();
+  const suggestion = db
+    .select()
+    .from(aiSuggestions)
+    .where(eq(aiSuggestions.id, suggestionId))
+    .get();
   if (!suggestion || !['reply', 'delegate'].includes(suggestion.recommendedAction)) return null;
   const existing = db
     .select()
@@ -443,14 +519,25 @@ function ensureFollowUpForMessage(messageId: number, suggestionId: number, polic
 function canAutoExecute(suggestion: typeof aiSuggestions.$inferSelect, policy: Policy) {
   if (policy.dryRunOnly) return false;
   if (suggestion.riskLevel !== 'low') return false;
-  if (['reply', 'forward', 'delegate'].includes(suggestion.recommendedAction) && policy.requireApprovalForSend) return false;
-  if (['move_to_folder', 'archive', 'spam'].includes(suggestion.recommendedAction)) return policy.allowAutoFileLowRisk;
+  if (
+    ['reply', 'forward', 'delegate'].includes(suggestion.recommendedAction) &&
+    policy.requireApprovalForSend
+  )
+    return false;
+  if (['move_to_folder', 'archive', 'spam'].includes(suggestion.recommendedAction))
+    return policy.allowAutoFileLowRisk;
   if (suggestion.recommendedAction === 'no_action') return policy.allowAutoNoActionLowRisk;
   return false;
 }
 
 function countQueue(status: typeof agentActionQueue.$inferSelect.status) {
-  return db.select({ count: sql<number>`count(*)` }).from(agentActionQueue).where(eq(agentActionQueue.status, status)).get()?.count || 0;
+  return (
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(agentActionQueue)
+      .where(eq(agentActionQueue.status, status))
+      .get()?.count || 0
+  );
 }
 
 function latestSuggestionIdSql() {
@@ -463,13 +550,17 @@ function titleForSuggestion(suggestion: typeof aiSuggestions.$inferSelect, subje
 }
 
 function approvalReasonForSuggestion(suggestion: typeof aiSuggestions.$inferSelect) {
-  if (['reply', 'forward', 'delegate'].includes(suggestion.recommendedAction)) return 'Human approval required before external communication or tool delegation.';
+  if (['reply', 'forward', 'delegate'].includes(suggestion.recommendedAction))
+    return 'Human approval required before external communication or tool delegation.';
   if (suggestion.riskLevel !== 'low') return `${suggestion.riskLevel} risk requires review.`;
   return suggestion.reasoningSummary;
 }
 
 function normalizeSubject(subject: string) {
-  return subject.toLowerCase().replace(/^(re|fwd?):\s*/i, '').trim();
+  return subject
+    .toLowerCase()
+    .replace(/^(re|fwd?):\s*/i, '')
+    .trim();
 }
 
 function normalizeDisplaySubject(subject: string) {
@@ -492,7 +583,9 @@ function extractQuestions(text: string) {
 }
 
 function extractCommitments(text: string) {
-  const lines = text.split(/\r?\n/).filter((line) => /\b(will|by|tomorrow|today|next week|follow up)\b/i.test(line));
+  const lines = text
+    .split(/\r?\n/)
+    .filter((line) => /\b(will|by|tomorrow|today|next week|follow up)\b/i.test(line));
   return lines.map((line) => line.trim().slice(0, 180)).slice(0, 5);
 }
 
@@ -506,6 +599,7 @@ function inferUrgency(text: string): 'low' | 'medium' | 'high' {
 function nextActionFor(text: string, urgency: 'low' | 'medium' | 'high') {
   if (/\?/.test(text)) return 'Answer the open question.';
   if (urgency === 'high') return 'Review and respond today.';
-  if (/(quote|pricing|order|wholesale)/i.test(text)) return 'Prepare an operational reply with next steps.';
+  if (/(quote|pricing|order|wholesale)/i.test(text))
+    return 'Prepare an operational reply with next steps.';
   return 'No immediate thread-level action detected.';
 }

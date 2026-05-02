@@ -48,7 +48,10 @@ export async function syncAccount(accountId: number) {
   }
   const provider = providerForAccount(account);
   const now = nowIso();
-  db.update(accounts).set({ syncStatus: 'syncing', syncError: null, updatedAt: now }).where(eq(accounts.id, accountId)).run();
+  db.update(accounts)
+    .set({ syncStatus: 'syncing', syncError: null, updatedAt: now })
+    .where(eq(accounts.id, accountId))
+    .run();
   try {
     const remoteFolders = await provider.listFolders(account);
     for (const folder of remoteFolders) {
@@ -73,9 +76,13 @@ export async function syncAccount(accountId: number) {
       const priorState = db
         .select()
         .from(folderSyncState)
-        .where(and(eq(folderSyncState.accountId, accountId), eq(folderSyncState.folderPath, folder.path)))
+        .where(
+          and(eq(folderSyncState.accountId, accountId), eq(folderSyncState.folderPath, folder.path))
+        )
         .get();
-      const remoteState = provider.folderState ? await provider.folderState(account, folder.path) : null;
+      const remoteState = provider.folderState
+        ? await provider.folderState(account, folder.path)
+        : null;
       const uidValidityChanged =
         Boolean(priorState?.uidValidity && remoteState?.uidValidity) &&
         priorState?.uidValidity !== remoteState?.uidValidity;
@@ -92,7 +99,12 @@ export async function syncAccount(accountId: number) {
         const existedBefore = db
           .select({ id: messages.id })
           .from(messages)
-          .where(and(eq(messages.accountId, accountId), eq(messages.providerMessageId, remote.providerMessageId)))
+          .where(
+            and(
+              eq(messages.accountId, accountId),
+              eq(messages.providerMessageId, remote.providerMessageId)
+            )
+          )
           .get();
         const saved = upsertRemoteMessage(accountId, remote);
         const uid = messageUid(remote.providerMessageId);
@@ -165,7 +177,12 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
             const existedBefore = db
               .select({ id: messages.id })
               .from(messages)
-              .where(and(eq(messages.accountId, accountId), eq(messages.providerMessageId, remote.providerMessageId)))
+              .where(
+                and(
+                  eq(messages.accountId, accountId),
+                  eq(messages.providerMessageId, remote.providerMessageId)
+                )
+              )
               .get();
             const inserted = upsertRemoteMessage(accountId, remote);
             if (inserted && !existedBefore) {
@@ -190,7 +207,12 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
               }
               await suggestForMessage(inserted.id);
               db.update(accounts)
-                .set({ lastSyncAt: nowIso(), syncStatus: 'idle', syncError: null, updatedAt: nowIso() })
+                .set({
+                  lastSyncAt: nowIso(),
+                  syncStatus: 'idle',
+                  syncError: null,
+                  updatedAt: nowIso()
+                })
                 .where(eq(accounts.id, accountId))
                 .run();
             }
@@ -221,33 +243,36 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
   }
 }
 
-function upsertRemoteMessage(accountId: number, remote: {
-  providerMessageId: string;
-  threadId?: string | null;
-  messageIdHeader?: string | null;
-  inReplyTo?: string | null;
-  references?: string | null;
-  folderPath: string;
-  subject: string;
-  from: string;
-  to: string;
-  cc?: string | null;
-  bcc?: string | null;
-  date: string;
-  bodyText: string;
-  bodyHtml?: string | null;
-  attachments?: Array<{
-    filename: string;
-    contentType: string;
-    sizeBytes: number;
-    contentId?: string | null;
-    disposition?: string | null;
-    contentBase64?: string | null;
-  }>;
-  isRead: boolean;
-  isAnswered: boolean;
-  isFlagged: boolean;
-}) {
+function upsertRemoteMessage(
+  accountId: number,
+  remote: {
+    providerMessageId: string;
+    threadId?: string | null;
+    messageIdHeader?: string | null;
+    inReplyTo?: string | null;
+    references?: string | null;
+    folderPath: string;
+    subject: string;
+    from: string;
+    to: string;
+    cc?: string | null;
+    bcc?: string | null;
+    date: string;
+    bodyText: string;
+    bodyHtml?: string | null;
+    attachments?: Array<{
+      filename: string;
+      contentType: string;
+      sizeBytes: number;
+      contentId?: string | null;
+      disposition?: string | null;
+      contentBase64?: string | null;
+    }>;
+    isRead: boolean;
+    isAnswered: boolean;
+    isFlagged: boolean;
+  }
+) {
   const saved = db
     .insert(messages)
     .values({

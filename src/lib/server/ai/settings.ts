@@ -36,7 +36,7 @@ export function upsertAiProfile(input: AiProfileInput) {
   const existing = getAiProfile(input.profile);
   const apiKeyEncrypted =
     input.apiKey === undefined
-      ? existing?.apiKeyEncrypted ?? null
+      ? (existing?.apiKeyEncrypted ?? null)
       : input.apiKey
         ? encryptSecret(input.apiKey)
         : null;

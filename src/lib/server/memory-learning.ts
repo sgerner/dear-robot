@@ -28,9 +28,25 @@ export function getOrCreateMemoryProfile() {
 
 export function getMemoryOverview() {
   const profile = getOrCreateMemoryProfile();
-  const rules = db.select().from(memoryRules).where(eq(memoryRules.isActive, true)).orderBy(desc(memoryRules.updatedAt)).limit(20).all();
-  const examples = db.select().from(memoryExamples).orderBy(desc(memoryExamples.createdAt)).limit(12).all();
-  const events = db.select().from(memoryEvents).orderBy(desc(memoryEvents.createdAt)).limit(20).all();
+  const rules = db
+    .select()
+    .from(memoryRules)
+    .where(eq(memoryRules.isActive, true))
+    .orderBy(desc(memoryRules.updatedAt))
+    .limit(20)
+    .all();
+  const examples = db
+    .select()
+    .from(memoryExamples)
+    .orderBy(desc(memoryExamples.createdAt))
+    .limit(12)
+    .all();
+  const events = db
+    .select()
+    .from(memoryEvents)
+    .orderBy(desc(memoryEvents.createdAt))
+    .limit(20)
+    .all();
   return { profile, rules, examples, events };
 }
 
@@ -57,13 +73,22 @@ export function setMemoryAdvancedMode(enabled: boolean) {
 }
 
 export function deleteMemoryRule(id: number) {
-  return db.update(memoryRules).set({ isActive: false, updatedAt: nowIso() }).where(eq(memoryRules.id, id)).run();
+  return db
+    .update(memoryRules)
+    .set({ isActive: false, updatedAt: nowIso() })
+    .where(eq(memoryRules.id, id))
+    .run();
 }
 
-export function buildMemoryPromptContext(input: { subject: string; bodyText: string; note?: string | null }) {
+export function buildMemoryPromptContext(input: {
+  subject: string;
+  bodyText: string;
+  note?: string | null;
+}) {
   const profile = getOrCreateMemoryProfile();
   const skillsMarkdown = readGlobalSkillsMarkdown();
-  const query = `${input.subject} ${input.bodyText.slice(0, 1200)} ${input.note || ''}`.toLowerCase();
+  const query =
+    `${input.subject} ${input.bodyText.slice(0, 1200)} ${input.note || ''}`.toLowerCase();
   const keywords = query
     .split(/\s+/)
     .map((part) => part.replace(/[^a-z0-9_-]/g, ''))
@@ -72,14 +97,32 @@ export function buildMemoryPromptContext(input: { subject: string; bodyText: str
   const ruleWhere = keywords.length
     ? and(
         eq(memoryRules.isActive, true),
-        or(...keywords.map((keyword) => like(memoryRules.scope, `%${keyword}%`)), ...keywords.map((keyword) => like(memoryRules.ruleText, `%${keyword}%`)))
+        or(
+          ...keywords.map((keyword) => like(memoryRules.scope, `%${keyword}%`)),
+          ...keywords.map((keyword) => like(memoryRules.ruleText, `%${keyword}%`))
+        )
       )
     : eq(memoryRules.isActive, true);
-  const rules = db.select().from(memoryRules).where(ruleWhere).orderBy(desc(memoryRules.confidence), desc(memoryRules.usageCount)).limit(6).all();
+  const rules = db
+    .select()
+    .from(memoryRules)
+    .where(ruleWhere)
+    .orderBy(desc(memoryRules.confidence), desc(memoryRules.usageCount))
+    .limit(6)
+    .all();
   const exampleWhere = keywords.length
-    ? or(...keywords.map((keyword) => like(memoryExamples.scope, `%${keyword}%`)), ...keywords.map((keyword) => like(memoryExamples.afterText, `%${keyword}%`)))
+    ? or(
+        ...keywords.map((keyword) => like(memoryExamples.scope, `%${keyword}%`)),
+        ...keywords.map((keyword) => like(memoryExamples.afterText, `%${keyword}%`))
+      )
     : undefined;
-  const examples = db.select().from(memoryExamples).where(exampleWhere).orderBy(desc(memoryExamples.score), desc(memoryExamples.createdAt)).limit(2).all();
+  const examples = db
+    .select()
+    .from(memoryExamples)
+    .where(exampleWhere)
+    .orderBy(desc(memoryExamples.score), desc(memoryExamples.createdAt))
+    .limit(2)
+    .all();
   return {
     coreProfile: profile.coreProfile,
     skillsMarkdown,
@@ -99,7 +142,12 @@ export function recordMemoryEvent(input: {
 }) {
   const now = nowIso();
   const message = db.select().from(messages).where(eq(messages.id, input.messageId)).get();
-  const scope = deriveScope(message?.subject || '', message?.from || '', input.note || '', message?.folderPath || '');
+  const scope = deriveScope(
+    message?.subject || '',
+    message?.from || '',
+    input.note || '',
+    message?.folderPath || ''
+  );
   const event = db
     .insert(memoryEvents)
     .values({
@@ -136,7 +184,12 @@ export function recordMemoryEvent(input: {
   const existing = db
     .select()
     .from(memoryRules)
-    .where(and(eq(memoryRules.scope, candidateRule.scope), eq(memoryRules.ruleText, candidateRule.ruleText)))
+    .where(
+      and(
+        eq(memoryRules.scope, candidateRule.scope),
+        eq(memoryRules.ruleText, candidateRule.ruleText)
+      )
+    )
     .get();
   if (existing) {
     db.update(memoryRules)
@@ -202,16 +255,36 @@ function deriveRule(beforeText: string, afterText: string, note: string | null, 
   const after = afterText.trim();
   if (!before || !after || before === after) return null;
   if (note && note.trim().length >= 4 && note.trim().length <= 140) {
-    return { kind: 'note_preference', scope, ruleText: `When editing drafts, prioritize: ${note.trim()}.`, confidence: 0.7 };
+    return {
+      kind: 'note_preference',
+      scope,
+      ruleText: `When editing drafts, prioritize: ${note.trim()}.`,
+      confidence: 0.7
+    };
   }
   if (after.length < before.length * 0.8) {
-    return { kind: 'style', scope, ruleText: 'Prefer shorter and more concise drafts.', confidence: 0.66 };
+    return {
+      kind: 'style',
+      scope,
+      ruleText: 'Prefer shorter and more concise drafts.',
+      confidence: 0.66
+    };
   }
   if (/^hi\b|^hello\b/i.test(after) && !/^hi\b|^hello\b/i.test(before)) {
-    return { kind: 'tone', scope, ruleText: 'Start customer-facing replies with a warm greeting.', confidence: 0.62 };
+    return {
+      kind: 'tone',
+      scope,
+      ruleText: 'Start customer-facing replies with a warm greeting.',
+      confidence: 0.62
+    };
   }
   if (/next step|timeline|by\s+\w+/i.test(after) && !/next step|timeline|by\s+\w+/i.test(before)) {
-    return { kind: 'structure', scope, ruleText: 'Include explicit next steps or timeline commitments when possible.', confidence: 0.64 };
+    return {
+      kind: 'structure',
+      scope,
+      ruleText: 'Include explicit next steps or timeline commitments when possible.',
+      confidence: 0.64
+    };
   }
   return null;
 }
@@ -219,7 +292,8 @@ function deriveRule(beforeText: string, afterText: string, note: string | null, 
 function deriveScope(subject: string, from: string, note: string, folderPath: string) {
   const joined = `${subject} ${from} ${note} ${folderPath}`.toLowerCase();
   if (joined.includes('refund') || joined.includes('chargeback')) return 'refund';
-  if (joined.includes('wholesale') || joined.includes('pricing') || joined.includes('quote')) return 'sales';
+  if (joined.includes('wholesale') || joined.includes('pricing') || joined.includes('quote'))
+    return 'sales';
   if (joined.includes('newsletter')) return 'newsletter';
   if (joined.includes('contract') || joined.includes('legal')) return 'legal';
   return 'general';
@@ -243,7 +317,12 @@ export function memoryOnboardingState() {
   const profile = getOrCreateMemoryProfile();
   const hasCoreProfile = profile.coreProfile.trim().length > 20;
   const hasSkills = readGlobalSkillsMarkdown().trim().length > 20;
-  const hasLearnedRules = (db.select({ count: sql<number>`count(*)` }).from(memoryRules).where(eq(memoryRules.isActive, true)).get()?.count || 0) > 0;
+  const hasLearnedRules =
+    (db
+      .select({ count: sql<number>`count(*)` })
+      .from(memoryRules)
+      .where(eq(memoryRules.isActive, true))
+      .get()?.count || 0) > 0;
   return {
     hasCoreProfile,
     hasSkills,

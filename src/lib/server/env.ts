@@ -22,7 +22,9 @@ const EnvSchema = z.object({
   AI_API_KEY: z.string().optional(),
   AI_FALLBACK_PROVIDER: z.string().default('gemini'),
   AI_FALLBACK_MODEL: z.string().optional(),
-  AI_FALLBACK_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
+  AI_FALLBACK_BASE_URL: z
+    .string()
+    .default('https://generativelanguage.googleapis.com/v1beta/openai/'),
   AI_FALLBACK_API_KEY: z.string().optional(),
   AI_ADVANCED_PROVIDER: z.string().default('deepseek'),
   AI_ADVANCED_MODEL: z.string().optional(),

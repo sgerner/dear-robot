@@ -43,27 +43,49 @@
 
 <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
   <h3 class="font-medium">Encrypted Browser Cache</h3>
-  <p class="mt-2 text-sm text-zinc-400">Optional client-side encryption for IndexedDB cache on shared devices. Use a local passphrase.</p>
+  <p class="mt-2 text-sm text-zinc-400">
+    Optional client-side encryption for IndexedDB cache on shared devices. Use a local passphrase.
+  </p>
   <div class="mt-3 flex flex-wrap items-center gap-2">
-    <input class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm md:w-auto md:flex-1" placeholder="Cache passphrase (local browser only)" type="password" bind:value={cachePassphrase} />
-    <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={saveCacheEncryption}>Save</button>
+    <input
+      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm md:w-auto md:flex-1"
+      placeholder="Cache passphrase (local browser only)"
+      type="password"
+      bind:value={cachePassphrase}
+    />
+    <button
+      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      onclick={saveCacheEncryption}>Save</button
+    >
   </div>
   <p class="mt-2 text-xs text-zinc-500">Status: {cacheEncrypted ? 'enabled' : 'disabled'}</p>
 </div>
 
 <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
   <h3 class="font-medium">Backups</h3>
-  <p class="mt-2 text-sm text-zinc-400">Create and restore `/data` snapshots for disaster recovery. Restore rewrites current DB state.</p>
+  <p class="mt-2 text-sm text-zinc-400">
+    Create and restore `/data` snapshots for disaster recovery. Restore rewrites current DB state.
+  </p>
   <div class="mt-3 flex flex-wrap gap-2">
-    <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black" onclick={createBackupNow}>Create Backup</button>
-    <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={refreshBackups}>Refresh</button>
+    <button
+      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      onclick={createBackupNow}>Create Backup</button
+    >
+    <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={refreshBackups}
+      >Refresh</button
+    >
   </div>
   <div class="mt-3 max-h-44 space-y-2 overflow-y-auto">
     {#if backups.length}
       {#each backups as backup (backup.id)}
-        <div class="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+        <div
+          class="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2"
+        >
           <p class="text-xs text-zinc-300">{new Date(backup.createdAt).toLocaleString()}</p>
-          <button class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300" onclick={() => restoreBackupNow(backup.id)}>Restore</button>
+          <button
+            class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300"
+            onclick={() => restoreBackupNow(backup.id)}>Restore</button
+          >
         </div>
       {/each}
     {:else}
@@ -74,30 +96,61 @@
 
 <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
   <h3 class="font-medium">Admin Audit Snapshot</h3>
-  <p class="mt-2 text-sm text-zinc-400">Quick visibility into executed actions, tool calls, and memory learning events.</p>
+  <p class="mt-2 text-sm text-zinc-400">
+    Quick visibility into executed actions, tool calls, and memory learning events.
+  </p>
   <div class="mt-3 flex flex-wrap gap-2">
-    <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={loadAuditSnapshot}>Load Snapshot</button>
+    <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={loadAuditSnapshot}
+      >Load Snapshot</button
+    >
   </div>
   {#if auditSnapshot}
     <div class="mt-3 grid gap-2 md:grid-cols-3">
-      <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Executed actions: {auditSnapshot.actions}</div>
-      <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Tool calls: {auditSnapshot.toolCalls}</div>
-      <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">Memory events: {auditSnapshot.memoryEvents}</div>
+      <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">
+        Executed actions: {auditSnapshot.actions}
+      </div>
+      <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">
+        Tool calls: {auditSnapshot.toolCalls}
+      </div>
+      <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">
+        Memory events: {auditSnapshot.memoryEvents}
+      </div>
     </div>
   {/if}
 </div>
 
 <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
   <h3 class="font-medium">Contacts Import/Export</h3>
-  <p class="mt-2 text-sm text-zinc-400">Export copies CSV to clipboard. Import accepts <code>email,name</code> or <code>account_id,email,name</code> rows.</p>
+  <p class="mt-2 text-sm text-zinc-400">
+    Export copies CSV to clipboard. Import accepts <code>email,name</code> or
+    <code>account_id,email,name</code> rows.
+  </p>
   <div class="mt-3 flex flex-wrap gap-2">
-    <button class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm" onclick={exportContacts}><Download size={15} /> Export CSV</button>
-    <button class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm" onclick={importContacts}><Upload size={15} /> Import CSV</button>
+    <button
+      class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm"
+      onclick={exportContacts}><Download size={15} /> Export CSV</button
+    >
+    <button
+      class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm"
+      onclick={importContacts}><Upload size={15} /> Import CSV</button
+    >
   </div>
   <div class="relative mt-3">
-    <textarea id="contacts-import-csv" class="min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none" placeholder="email,name&#10;person@example.com,Person Name" bind:value={contactsImportCsv}></textarea>
+    <textarea
+      id="contacts-import-csv"
+      class="min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none"
+      placeholder="email,name&#10;person@example.com,Person Name"
+      bind:value={contactsImportCsv}
+    ></textarea>
     <div class="absolute right-2 top-2">
-      <DictationButton targetId="contacts-import-csv" activeTargetId={dictationTargetId} recording={dictationActive} unavailable={dictationUnavailable} level={dictationLevel} onToggle={toggleDictation} />
+      <DictationButton
+        targetId="contacts-import-csv"
+        activeTargetId={dictationTargetId}
+        recording={dictationActive}
+        unavailable={dictationUnavailable}
+        level={dictationLevel}
+        onToggle={toggleDictation}
+      />
     </div>
   </div>
 </div>

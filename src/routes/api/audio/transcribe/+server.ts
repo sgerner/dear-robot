@@ -13,7 +13,9 @@ export async function POST({ request, url }) {
   if (!(file instanceof Blob)) throw error(400, 'Missing audio file');
   if (file.size <= 0) throw error(400, 'Audio file is empty');
   if (file.size > 20 * 1024 * 1024) throw error(400, 'Audio file exceeds 20MB');
-  const { language } = AudioTranscribeQuerySchema.parse({ language: url.searchParams.get('language') || undefined });
+  const { language } = AudioTranscribeQuerySchema.parse({
+    language: url.searchParams.get('language') || undefined
+  });
   const profile = getAiConfigForRuntime('audio', {
     profile: 'audio',
     label: 'Dictation (Speech-to-Text)',

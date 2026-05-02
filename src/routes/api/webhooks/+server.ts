@@ -11,7 +11,13 @@ const WebhookSchema = z.object({
 });
 
 export function GET() {
-  return json({ webhooks: db.select().from(webhookSubscriptions).orderBy(desc(webhookSubscriptions.createdAt)).all() });
+  return json({
+    webhooks: db
+      .select()
+      .from(webhookSubscriptions)
+      .orderBy(desc(webhookSubscriptions.createdAt))
+      .all()
+  });
 }
 
 export async function POST({ request }) {

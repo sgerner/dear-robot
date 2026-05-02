@@ -16,27 +16,36 @@ beforeEach(async () => {
 
 describe('Phase 1 email client services', () => {
   it('lists folders with counts and moves messages', async () => {
-    const { listFoldersWithCounts, listMessages, moveMessage } = await import('../src/lib/server/services/messages');
+    const { listFoldersWithCounts, listMessages, moveMessage } =
+      await import('../src/lib/server/services/messages');
     const inbox = listMessages({ folder: 'INBOX', limit: 10 })[0];
     expect(inbox).toBeTruthy();
     await moveMessage(inbox.id, 'Archive');
-    expect(listMessages({ folder: 'Archive', limit: 10 }).some((message) => message.id === inbox.id)).toBe(true);
-    expect(listFoldersWithCounts().some((folder) => folder.path === 'Archive' && folder.total > 0)).toBe(true);
+    expect(
+      listMessages({ folder: 'Archive', limit: 10 }).some((message) => message.id === inbox.id)
+    ).toBe(true);
+    expect(
+      listFoldersWithCounts().some((folder) => folder.path === 'Archive' && folder.total > 0)
+    ).toBe(true);
   });
 
   it('updates read and starred state through the provider abstraction', async () => {
-    const { listMessages, setMessageFlagged, setMessageRead } = await import('../src/lib/server/services/messages');
+    const { listMessages, setMessageFlagged, setMessageRead } =
+      await import('../src/lib/server/services/messages');
     const { recordedMockActions } = await import('../src/lib/server/email/mock');
     const message = listMessages({ limit: 10 })[0];
     await setMessageRead(message.id, true);
     await setMessageFlagged(message.id, true);
-    expect(listMessages({ view: 'starred', limit: 10 }).some((row) => row.id === message.id)).toBe(true);
+    expect(listMessages({ view: 'starred', limit: 10 }).some((row) => row.id === message.id)).toBe(
+      true
+    );
     expect(recordedMockActions().map((action) => action.type)).toContain('mark_read');
     expect(recordedMockActions().map((action) => action.type)).toContain('set_flagged');
   });
 
   it('saves drafts and sends compose payload with attachments', async () => {
-    const { listMessages, sendComposedMessage, upsertDraft, getMessageDetail } = await import('../src/lib/server/services/messages');
+    const { listMessages, sendComposedMessage, upsertDraft, getMessageDetail } =
+      await import('../src/lib/server/services/messages');
     const { recordedMockActions } = await import('../src/lib/server/email/mock');
     const message = listMessages({ limit: 10 })[0];
     const detail = getMessageDetail(message.id);
@@ -98,7 +107,8 @@ describe('Phase 1 email client services', () => {
   });
 
   it('imports and exports contacts as csv', async () => {
-    const { importContactsCsv, exportContactsCsv, listMessages } = await import('../src/lib/server/services/messages');
+    const { importContactsCsv, exportContactsCsv, listMessages } =
+      await import('../src/lib/server/services/messages');
     const accountId = listMessages({ limit: 1 })[0]?.accountId;
     expect(accountId).toBeTruthy();
     const importResult = importContactsCsv({
@@ -113,11 +123,13 @@ describe('Phase 1 email client services', () => {
 
   it('creates and executes an agent task plan with a configured tool', async () => {
     const { createAgentTool } = await import('../src/lib/server/agent/tools');
-    const { createTaskPlanForMessage, approveTaskRun, executeTaskRun } = await import('../src/lib/server/agent/tasks');
+    const { createTaskPlanForMessage, approveTaskRun, executeTaskRun } =
+      await import('../src/lib/server/agent/tasks');
     const { listMessages } = await import('../src/lib/server/services/messages');
     const message =
-      listMessages({ limit: 20 }).find((row) => `${row.subject} ${row.snippet}`.toLowerCase().includes('refund')) ||
-      listMessages({ limit: 1 })[0];
+      listMessages({ limit: 20 }).find((row) =>
+        `${row.subject} ${row.snippet}`.toLowerCase().includes('refund')
+      ) || listMessages({ limit: 1 })[0];
     createAgentTool({
       name: 'local-json',
       description: 'returns static JSON for testing',
@@ -126,9 +138,13 @@ describe('Phase 1 email client services', () => {
       args: ['-e', 'process.stdout.write(JSON.stringify({ok:true,source:"cli"}))'],
       readOnly: true
     });
-    const planned = await createTaskPlanForMessage(message.id, { note: 'Use ERP credit memo workflow' });
+    const planned = await createTaskPlanForMessage(message.id, {
+      note: 'Use ERP credit memo workflow'
+    });
     expect(planned?.run.id).toBeTruthy();
-    expect(planned?.steps.some((step) => step.kind === 'tool_call' && step.status === 'approved')).toBe(true);
+    expect(
+      planned?.steps.some((step) => step.kind === 'tool_call' && step.status === 'approved')
+    ).toBe(true);
     const approved = approveTaskRun(planned?.run.id || 0, {});
     expect(approved?.run.status).toBe('planned');
     const executed = await executeTaskRun(planned?.run.id || 0);

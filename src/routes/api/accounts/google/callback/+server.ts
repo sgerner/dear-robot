@@ -12,7 +12,10 @@ export async function GET({ url, cookies }) {
   if (!code || !verifier) throw error(400, 'Missing OAuth authorization code');
   try {
     const linked = await completeGoogleOauth(code, verifier);
-    throw redirect(302, `/?view=accounts&oauth=connected&email=${encodeURIComponent(linked.email)}`);
+    throw redirect(
+      302,
+      `/?view=accounts&oauth=connected&email=${encodeURIComponent(linked.email)}`
+    );
   } catch (err) {
     throw error(400, err instanceof Error ? err.message : 'Unable to complete Google OAuth');
   }

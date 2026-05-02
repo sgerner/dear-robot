@@ -160,7 +160,11 @@ export async function installCliPackage(input: CliInstallRequest) {
   };
 }
 
-export function persistCliInstall(input: CliInstallRequest, status: 'success' | 'failed', errorMessage: string | null) {
+export function persistCliInstall(
+  input: CliInstallRequest,
+  status: 'success' | 'failed',
+  errorMessage: string | null
+) {
   const manifest = readManifest();
   const idx = manifest.tools.findIndex(
     (item) => item.manager === input.manager && item.packageSpec === input.packageSpec
@@ -216,7 +220,9 @@ export function applyCliManifestOnStartup() {
           'success',
           result.warning
         );
-        appendBootstrapLog(`installed ${tool.manager} ${tool.packageSpec}${result.warning ? ` warning=${result.warning}` : ''}`);
+        appendBootstrapLog(
+          `installed ${tool.manager} ${tool.packageSpec}${result.warning ? ` warning=${result.warning}` : ''}`
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         persistCliInstall(
@@ -228,10 +234,11 @@ export function applyCliManifestOnStartup() {
           'failed',
           message
         );
-        appendBootstrapLog(`failed ${tool.manager} ${tool.packageSpec} error=${message.slice(0, 500)}`);
+        appendBootstrapLog(
+          `failed ${tool.manager} ${tool.packageSpec} error=${message.slice(0, 500)}`
+        );
       }
     }
     appendBootstrapLog('bootstrap complete');
   })();
 }
-

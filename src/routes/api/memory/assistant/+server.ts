@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { generateStructuredObject } from '$lib/server/ai/provider';
-import { getMemoryOverview, setMemoryAdvancedMode, updateCoreProfile } from '$lib/server/memory-learning';
+import {
+  getMemoryOverview,
+  setMemoryAdvancedMode,
+  updateCoreProfile
+} from '$lib/server/memory-learning';
 
 const RequestSchema = z.object({
   prompt: z.string().min(3).max(2000)
@@ -18,7 +22,12 @@ const ActionSchema = z.object({
 export async function POST({ request }) {
   const { prompt } = RequestSchema.parse(await request.json());
   const overview = getMemoryOverview();
-  const rules = overview.rules.map((rule) => ({ id: rule.id, scope: rule.scope, text: rule.ruleText, confidence: rule.confidence }));
+  const rules = overview.rules.map((rule) => ({
+    id: rule.id,
+    scope: rule.scope,
+    text: rule.ruleText,
+    confidence: rule.confidence
+  }));
   const messages = [
     {
       role: 'system',

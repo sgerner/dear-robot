@@ -2,11 +2,7 @@ type Bucket = { count: number; windowStartMs: number };
 
 const buckets = new Map<string, Bucket>();
 
-export function checkRateLimit(input: {
-  key: string;
-  maxPerMinute: number;
-  nowMs?: number;
-}) {
+export function checkRateLimit(input: { key: string; maxPerMinute: number; nowMs?: number }) {
   const now = input.nowMs ?? Date.now();
   const bucket = buckets.get(input.key);
   if (!bucket || now - bucket.windowStartMs >= 60_000) {
@@ -20,4 +16,3 @@ export function checkRateLimit(input: {
   buckets.set(input.key, bucket);
   return { allowed: true, remaining: Math.max(0, input.maxPerMinute - bucket.count) };
 }
-

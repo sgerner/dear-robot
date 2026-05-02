@@ -46,7 +46,9 @@ export type SendMailOptions = {
 
 export type MailProvider = {
   test(account: Account): Promise<{ ok: boolean; message: string }>;
-  listFolders(account: Account): Promise<Array<{ name: string; path: string; role?: string | null }>>;
+  listFolders(
+    account: Account
+  ): Promise<Array<{ name: string; path: string; role?: string | null }>>;
   backfill(account: Account, limit?: number, folderPath?: string): Promise<ProviderMessage[]>;
   fetchSinceUid?(
     account: Account,

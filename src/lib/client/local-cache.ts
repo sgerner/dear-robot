@@ -61,7 +61,9 @@ async function protectRecord(record: Record<string, unknown>) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(encryptionPassphrase, salt);
   const plaintext = new TextEncoder().encode(JSON.stringify(record));
-  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext));
+  const cipher = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
+  );
   return {
     id: record.id,
     __enc: true,
@@ -87,12 +89,17 @@ function openCache() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains('messages')) db.createObjectStore('messages', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('folders')) db.createObjectStore('folders', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('contacts')) db.createObjectStore('contacts', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('messages'))
+        db.createObjectStore('messages', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('folders'))
+        db.createObjectStore('folders', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('contacts'))
+        db.createObjectStore('contacts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
-      if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('draft_local')) db.createObjectStore('draft_local', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('outbox'))
+        db.createObjectStore('outbox', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('draft_local'))
+        db.createObjectStore('draft_local', { keyPath: 'id' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -166,7 +173,9 @@ export async function listOutbox() {
   });
   db.close();
   const resolved = await Promise.all(rows.map((row) => unprotectRecord(row)));
-  return resolved.filter((row): row is { id: string; payload: Record<string, unknown> } => Boolean(row?.id && row?.payload));
+  return resolved.filter((row): row is { id: string; payload: Record<string, unknown> } =>
+    Boolean(row?.id && row?.payload)
+  );
 }
 
 export async function deleteOutbox(id: string) {

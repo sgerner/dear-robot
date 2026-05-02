@@ -4,7 +4,10 @@ import { env, isProduction } from './env';
 const devKey = 'development-only-temporary-triage-key';
 
 function encryptionKey() {
-  return crypto.createHash('sha256').update(env.ENCRYPTION_KEY || devKey).digest();
+  return crypto
+    .createHash('sha256')
+    .update(env.ENCRYPTION_KEY || devKey)
+    .digest();
 }
 
 export function encryptSecret(value: string) {
@@ -19,7 +22,11 @@ export function decryptSecret(value: string | null | undefined) {
   if (!value) return '';
   const [ivRaw, tagRaw, encryptedRaw] = value.split('.');
   if (!ivRaw || !tagRaw || !encryptedRaw) return '';
-  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivRaw, 'base64'));
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    encryptionKey(),
+    Buffer.from(ivRaw, 'base64')
+  );
   decipher.setAuthTag(Buffer.from(tagRaw, 'base64'));
   return Buffer.concat([
     decipher.update(Buffer.from(encryptedRaw, 'base64')),
@@ -38,7 +45,10 @@ export function isValidSession(value: string | undefined) {
 
 export function csrfToken(sessionValue: string | undefined) {
   const secret = env.APP_SESSION_SECRET || 'dev-session-secret';
-  return crypto.createHmac('sha256', secret).update(sessionValue || 'anonymous').digest('base64url');
+  return crypto
+    .createHmac('sha256', secret)
+    .update(sessionValue || 'anonymous')
+    .digest('base64url');
 }
 
 export function sameOriginOrForm(headers: Headers) {

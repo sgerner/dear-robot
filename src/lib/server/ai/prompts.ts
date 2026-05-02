@@ -3,7 +3,10 @@ import type { EmailSuggestionInput } from './schema';
 export const TRIAGE_PROMPT_VERSION = 'triage-v1';
 
 export function buildSuggestionMessages(input: EmailSuggestionInput) {
-  const body = input.bodyText.length > 12000 ? `${input.bodyText.slice(0, 12000)}\n[truncated]` : input.bodyText;
+  const body =
+    input.bodyText.length > 12000
+      ? `${input.bodyText.slice(0, 12000)}\n[truncated]`
+      : input.bodyText;
   return [
     {
       role: 'system',

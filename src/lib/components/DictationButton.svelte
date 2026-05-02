@@ -66,7 +66,8 @@
   >
     {#if active}
       <span class="absolute inset-0 rounded-md bg-red-400/10"></span>
-      <span class="absolute inset-[-1px] rounded-md border border-red-100/40 dictation-core-ring"></span>
+      <span class="absolute inset-[-1px] rounded-md border border-red-100/40 dictation-core-ring"
+      ></span>
       <StopIcon size={14} class="relative z-20" />
     {:else}
       <Mic size={14} />

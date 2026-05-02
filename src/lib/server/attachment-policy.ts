@@ -59,4 +59,3 @@ export function evaluateAttachmentPolicy(input: {
   }
   return { allowed: true, reason: null, warnings } satisfies AttachmentPolicyResult;
 }
-

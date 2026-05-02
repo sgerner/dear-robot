@@ -3,7 +3,11 @@ import { and, eq } from 'drizzle-orm';
 import { db, nowIso } from '../db';
 import { agentTools, toolCalls } from '../db/schema';
 import { decryptSecret, encryptSecret } from '../security';
-import { deleteToolSkillsMarkdown, readToolSkillsMarkdown, writeToolSkillsMarkdown } from '../skills';
+import {
+  deleteToolSkillsMarkdown,
+  readToolSkillsMarkdown,
+  writeToolSkillsMarkdown
+} from '../skills';
 import { ToolCreateSchema, ToolUpdateSchema } from './schema';
 
 export function listAgentTools() {
@@ -58,7 +62,9 @@ export function createAgentTool(input: unknown) {
       authHeadersEncrypted: Object.keys(parsed.authHeaders).length
         ? encryptSecret(JSON.stringify(parsed.authHeaders))
         : null,
-      envEncrypted: Object.keys(parsed.env).length ? encryptSecret(JSON.stringify(parsed.env)) : null,
+      envEncrypted: Object.keys(parsed.env).length
+        ? encryptSecret(JSON.stringify(parsed.env))
+        : null,
       isEnabled: parsed.isEnabled,
       readOnly: parsed.readOnly,
       requireApprovalForWrite: parsed.requireApprovalForWrite,
@@ -92,7 +98,8 @@ export function updateAgentTool(id: number, input: unknown) {
     .update(agentTools)
     .set({
       name: parsed.name ?? existing.name,
-      description: parsed.description !== undefined ? parsed.description || null : existing.description,
+      description:
+        parsed.description !== undefined ? parsed.description || null : existing.description,
       kind: parsed.kind ?? existing.kind,
       endpoint: parsed.endpoint !== undefined ? parsed.endpoint || null : existing.endpoint,
       command: parsed.command !== undefined ? parsed.command || null : existing.command,
@@ -145,7 +152,8 @@ export async function executeTool(
   let status: 'completed' | 'failed' = 'completed';
   let responseJson = '';
   try {
-    const output = tool.kind === 'mcp_http' ? await runHttpTool(tool, input) : await runCliTool(tool, input);
+    const output =
+      tool.kind === 'mcp_http' ? await runHttpTool(tool, input) : await runCliTool(tool, input);
     responseJson = JSON.stringify(output);
     return { ok: true, output, durationMs: Date.now() - started };
   } catch (error) {
@@ -181,7 +189,8 @@ function sanitizeTool(tool: typeof agentTools.$inferSelect, skillsMarkdown?: str
     endpoint: tool.endpoint,
     command: tool.command,
     args: safeParseStringArray(tool.argsJson),
-    skillsMarkdown: skillsMarkdown !== undefined ? skillsMarkdown || '' : readToolSkillsMarkdown(tool.id),
+    skillsMarkdown:
+      skillsMarkdown !== undefined ? skillsMarkdown || '' : readToolSkillsMarkdown(tool.id),
     isEnabled: tool.isEnabled,
     readOnly: tool.readOnly,
     requireApprovalForWrite: tool.requireApprovalForWrite,
@@ -222,7 +231,9 @@ function safeParseStringArray(value: string | null) {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : [];
   } catch {
     return [];
   }

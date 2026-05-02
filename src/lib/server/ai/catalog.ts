@@ -64,7 +64,10 @@ async function fetchAnthropicModels(baseUrl: string, apiKey: string) {
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 220)}`);
   const parsed = JSON.parse(text) as { data?: Array<{ id?: string; display_name?: string }> };
   return (parsed.data || [])
-    .map((item) => ({ id: String(item.id || '').trim(), label: String(item.display_name || item.id || '').trim() }))
+    .map((item) => ({
+      id: String(item.id || '').trim(),
+      label: String(item.display_name || item.id || '').trim()
+    }))
     .filter((item) => item.id)
     .sort((a, b) => a.id.localeCompare(b.id));
 }

@@ -184,7 +184,8 @@ export const speechToTextProviders: SpeechProviderConfig[] = [
       {
         id: 'browser-default',
         label: 'Browser default',
-        blurb: 'Free browser-native dictation. Best in Chrome/Edge; Firefox support is inconsistent.'
+        blurb:
+          'Free browser-native dictation. Best in Chrome/Edge; Firefox support is inconsistent.'
       }
     ]
   },
@@ -228,8 +229,10 @@ export function getSpeechProvider(id: string | null | undefined) {
   return speechToTextProviders.find((provider) => provider.id === id) || speechToTextProviders[0];
 }
 
-export function getSpeechModel(providerId: string | null | undefined, modelId: string | null | undefined) {
+export function getSpeechModel(
+  providerId: string | null | undefined,
+  modelId: string | null | undefined
+) {
   const provider = getSpeechProvider(providerId);
   return provider.models.find((model) => model.id === modelId) || provider.models[0];
 }
-

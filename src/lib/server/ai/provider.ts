@@ -50,10 +50,12 @@ async function openAiCompatibleComplete(config: ProviderConfig, messages: ChatMe
       })
     });
     const text = await response.text();
-    if (!response.ok) throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
+    if (!response.ok)
+      throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
     const parsed = JSON.parse(text);
     const content = parsed?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') throw new ProviderError(`${config.provider} returned no message content`);
+    if (typeof content !== 'string')
+      throw new ProviderError(`${config.provider} returned no message content`);
     if (env.DEBUG_AI) console.log('[triage] ai response', { provider: config.provider, content });
     return content;
   } finally {
@@ -101,12 +103,14 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
       })
     });
     const text = await response.text();
-    if (!response.ok) throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
+    if (!response.ok)
+      throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
     const parsed = JSON.parse(text);
     const content = Array.isArray(parsed?.content)
       ? parsed.content.map((part: { text?: string }) => part?.text || '').join('')
       : '';
-    if (typeof content !== 'string' || !content) throw new ProviderError(`${config.provider} returned no message content`);
+    if (typeof content !== 'string' || !content)
+      throw new ProviderError(`${config.provider} returned no message content`);
     if (env.DEBUG_AI) console.log('[triage] ai response', { provider: config.provider, content });
     return content;
   } finally {
@@ -115,7 +119,9 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
 }
 
 async function completeChat(config: ProviderConfig, messages: ChatMessage[]) {
-  return config.transport === 'anthropic' ? anthropicComplete(config, messages) : openAiCompatibleComplete(config, messages);
+  return config.transport === 'anthropic'
+    ? anthropicComplete(config, messages)
+    : openAiCompatibleComplete(config, messages);
 }
 
 function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig {
@@ -138,7 +144,8 @@ function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig
       provider: env.AI_FALLBACK_PROVIDER || 'gemini',
       transport: 'openai_compatible' as const,
       model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
-      baseUrl: env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      baseUrl:
+        env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
       apiKey: env.AI_FALLBACK_API_KEY || undefined,
       preset: env.AI_FALLBACK_PROVIDER || 'gemini',
       isEnabled: true,
@@ -162,8 +169,14 @@ function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig
 
 function mockSuggestion(input: EmailSuggestionInput): EmailSuggestion {
   const haystack = `${input.subject}\n${input.sender}\n${input.bodyText}`.toLowerCase();
-  const folder = (name: string) => input.availableFolders.find((candidate) => candidate.toLowerCase() === name.toLowerCase()) ?? name;
-  if (haystack.includes('password') || haystack.includes('phishing') || haystack.includes('click http')) {
+  const folder = (name: string) =>
+    input.availableFolders.find((candidate) => candidate.toLowerCase() === name.toLowerCase()) ??
+    name;
+  if (
+    haystack.includes('password') ||
+    haystack.includes('phishing') ||
+    haystack.includes('click http')
+  ) {
     return {
       category: 'Suspicious',
       confidence: 0.98,
@@ -176,7 +189,11 @@ function mockSuggestion(input: EmailSuggestionInput): EmailSuggestion {
       risk_level: 'high'
     };
   }
-  if (haystack.includes('newsletter') || haystack.includes('digest') || haystack.includes('webinar')) {
+  if (
+    haystack.includes('newsletter') ||
+    haystack.includes('digest') ||
+    haystack.includes('webinar')
+  ) {
     return {
       category: 'Newsletter',
       confidence: 0.94,
@@ -202,7 +219,11 @@ function mockSuggestion(input: EmailSuggestionInput): EmailSuggestion {
       risk_level: haystack.includes('refund') || haystack.includes('chargeback') ? 'high' : 'low'
     };
   }
-  if (haystack.includes('refund') || haystack.includes('unacceptable') || haystack.includes('angry')) {
+  if (
+    haystack.includes('refund') ||
+    haystack.includes('unacceptable') ||
+    haystack.includes('angry')
+  ) {
     return {
       category: 'Customer Escalation',
       confidence: 0.88,
@@ -211,11 +232,16 @@ function mockSuggestion(input: EmailSuggestionInput): EmailSuggestion {
       draft_reply: `Hi,\n\nI am sorry this has taken extra follow-up. I am reviewing it now and will send a clear update as soon as possible.\n\nThank you for your patience.`,
       forward_to: null,
       delegate_instructions: null,
-      reasoning_summary: 'Angry customer and refund context require empathetic human-reviewed response.',
+      reasoning_summary:
+        'Angry customer and refund context require empathetic human-reviewed response.',
       risk_level: 'high'
     };
   }
-  if (haystack.includes('contract') || haystack.includes('chargeback') || haystack.includes('personal details')) {
+  if (
+    haystack.includes('contract') ||
+    haystack.includes('chargeback') ||
+    haystack.includes('personal details')
+  ) {
     return {
       category: 'Sensitive Legal Financial',
       confidence: 0.9,
@@ -245,7 +271,11 @@ function mockSuggestion(input: EmailSuggestionInput): EmailSuggestion {
     };
   }
   return {
-    category: haystack.includes('wholesale') ? 'Wholesale Inquiry' : haystack.includes('meeting') ? 'Scheduling' : 'General Reply',
+    category: haystack.includes('wholesale')
+      ? 'Wholesale Inquiry'
+      : haystack.includes('meeting')
+        ? 'Scheduling'
+        : 'General Reply',
     confidence: 0.82,
     recommended_action: 'reply',
     target_folder: null,
@@ -266,7 +296,10 @@ async function completeWithRepair(config: ProviderConfig, messages: ChatMessage[
   } catch (error) {
     const maxRepair = Math.max(0, env.AI_MAX_REPAIR_ATTEMPTS);
     if (maxRepair < 1) throw error;
-    const repairMessages = buildRepairMessages(raw, error instanceof Error ? error.message : 'Invalid output');
+    const repairMessages = buildRepairMessages(
+      raw,
+      error instanceof Error ? error.message : 'Invalid output'
+    );
     const repairedRaw = await completeChat(config, repairMessages);
     return { suggestion: parseSuggestion(repairedRaw), raw: repairedRaw, repaired: true };
   }
@@ -300,14 +333,21 @@ function buildGenericRepairMessages(raw: string, validationError: string) {
   ] satisfies ChatMessage[];
 }
 
-async function completeStructuredWithRepair<T>(config: ProviderConfig, messages: ChatMessage[], schema: z.ZodType<T>) {
+async function completeStructuredWithRepair<T>(
+  config: ProviderConfig,
+  messages: ChatMessage[],
+  schema: z.ZodType<T>
+) {
   const raw = await completeChat(config, messages);
   try {
     return { object: parseWithSchema(raw, schema), raw, repaired: false };
   } catch (error) {
     const maxRepair = Math.max(0, env.AI_MAX_REPAIR_ATTEMPTS);
     if (maxRepair < 1) throw error;
-    const repairMessages = buildGenericRepairMessages(raw, error instanceof Error ? error.message : 'Invalid output');
+    const repairMessages = buildGenericRepairMessages(
+      raw,
+      error instanceof Error ? error.message : 'Invalid output'
+    );
     const repairedRaw = await completeChat(config, repairMessages);
     return { object: parseWithSchema(repairedRaw, schema), raw: repairedRaw, repaired: true };
   }
@@ -365,7 +405,9 @@ export async function generateStructuredObject<T>(options: {
   }
 }
 
-export async function generateEmailSuggestion(input: EmailSuggestionInput): Promise<EmailSuggestionResult> {
+export async function generateEmailSuggestion(
+  input: EmailSuggestionInput
+): Promise<EmailSuggestionResult> {
   const primary = configFor('primary');
   if (primary.provider === 'mock') {
     return {
@@ -406,7 +448,10 @@ export async function generateEmailSuggestion(input: EmailSuggestionInput): Prom
           errorMessage: null
         };
       } catch (fallbackError) {
-        return errorSuggestion(input, `${describeError(primaryError)}; fallback failed: ${describeError(fallbackError)}`);
+        return errorSuggestion(
+          input,
+          `${describeError(primaryError)}; fallback failed: ${describeError(fallbackError)}`
+        );
       }
     }
     return errorSuggestion(input, describeError(primaryError));

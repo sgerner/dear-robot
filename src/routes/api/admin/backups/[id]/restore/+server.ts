@@ -8,4 +8,3 @@ export async function POST({ params }) {
     throw error(500, err instanceof Error ? err.message : 'Failed to restore backup');
   }
 }
-

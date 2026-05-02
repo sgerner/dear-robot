@@ -1,6 +1,10 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { installCliPackage, persistCliInstall, type CliInstallManager } from '$lib/server/agent/cli-installer';
+import {
+  installCliPackage,
+  persistCliInstall,
+  type CliInstallManager
+} from '$lib/server/agent/cli-installer';
 
 const InstallSchema = z.object({
   manager: z.enum(['npm', 'pnpm', 'yarn', 'bun', 'pipx', 'uv']) as z.ZodType<CliInstallManager>,

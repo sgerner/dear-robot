@@ -74,10 +74,11 @@ export function restoreBackup(id: string) {
     const liveTables = sqlite
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as Array<{ name: string }>;
-    const backupTables = (backupDb
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all() as Array<{ name: string }>)
-      .map((row) => row.name);
+    const backupTables = (
+      backupDb
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .all() as Array<{ name: string }>
+    ).map((row) => row.name);
     sqlite.exec(`ATTACH DATABASE '${backup.dbFile.replace(/'/g, "''")}' AS backup_restore; BEGIN;`);
     for (const table of liveTables.map((row) => row.name)) {
       if (table === 'messages_fts') continue;

@@ -8,7 +8,13 @@ export default [
   js.configs.recommended,
   ...svelte.configs['flat/recommended'],
   {
-    ignores: ['build/**', '.svelte-kit/**', 'node_modules/**', 'test-results/**', 'playwright-report/**']
+    ignores: [
+      'build/**',
+      '.svelte-kit/**',
+      'node_modules/**',
+      'test-results/**',
+      'playwright-report/**'
+    ]
   },
   {
     files: ['**/*.ts'],

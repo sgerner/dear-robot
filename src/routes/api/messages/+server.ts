@@ -1,5 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { BulkMessageActionSchema, MessageQuerySchema, bulkMessageAction, listMessages } from '$lib/server/services/messages';
+import {
+  BulkMessageActionSchema,
+  MessageQuerySchema,
+  bulkMessageAction,
+  listMessages
+} from '$lib/server/services/messages';
 
 export function GET({ url }) {
   const query = MessageQuerySchema.parse({

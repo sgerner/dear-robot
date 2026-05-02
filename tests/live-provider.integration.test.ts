@@ -13,7 +13,8 @@ suite('live provider integration (gated)', () => {
       process.env.SMTP_USERNAME,
       process.env.SMTP_PASSWORD
     ];
-    if (required.some((value) => !value)) throw new Error('Live provider test env vars are incomplete');
+    if (required.some((value) => !value))
+      throw new Error('Live provider test env vars are incomplete');
     const { encryptSecret } = await import('../src/lib/server/security');
     const { imapEmailProvider } = await import('../src/lib/server/email/imap');
     const account = {

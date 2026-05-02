@@ -3,7 +3,17 @@ import path from 'node:path';
 import { count, eq } from 'drizzle-orm';
 import { env } from '../env';
 import { encryptSecret } from '../security';
-import { aiProfiles, aiSuggestions, contacts, drafts, folders, messageAttachments, messages, accounts, automationPolicies } from './schema';
+import {
+  aiProfiles,
+  aiSuggestions,
+  contacts,
+  drafts,
+  folders,
+  messageAttachments,
+  messages,
+  accounts,
+  automationPolicies
+} from './schema';
 import { db, nowIso, sqlite } from './index';
 import { defaultAgentInstructions, ensureAgentInstructions } from '../memory';
 
@@ -19,7 +29,15 @@ type FixtureEmail = {
   seed_suggestion?: {
     category: string;
     confidence: number;
-    recommendedAction: 'reply' | 'forward' | 'move_to_folder' | 'delete' | 'spam' | 'delegate' | 'archive' | 'no_action';
+    recommendedAction:
+      | 'reply'
+      | 'forward'
+      | 'move_to_folder'
+      | 'delete'
+      | 'spam'
+      | 'delegate'
+      | 'archive'
+      | 'no_action';
     targetFolder: string | null;
     draftReply: string | null;
     forwardTo: string | null;
@@ -480,14 +498,16 @@ function seedMockDataIfEmpty() {
     })
     .returning()
     .get();
-  const folderRows = ['INBOX', 'Newsletters', 'Receipts', 'Spam Review', 'Archive', 'Trash'].map((name) => ({
-    accountId: account.id,
-    name,
-    path: name,
-    role: name === 'INBOX' ? 'inbox' : name.toLowerCase().replaceAll(' ', '_'),
-    createdAt: now,
-    updatedAt: now
-  }));
+  const folderRows = ['INBOX', 'Newsletters', 'Receipts', 'Spam Review', 'Archive', 'Trash'].map(
+    (name) => ({
+      accountId: account.id,
+      name,
+      path: name,
+      role: name === 'INBOX' ? 'inbox' : name.toLowerCase().replaceAll(' ', '_'),
+      createdAt: now,
+      updatedAt: now
+    })
+  );
   db.insert(folders).values(folderRows).run();
   for (const email of readFixtureEmails()) {
     const msg = db
@@ -601,7 +621,8 @@ function seedAiDefaults() {
         provider: env.AI_FALLBACK_PROVIDER || 'gemini',
         transport: 'openai_compatible',
         model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
-        baseUrl: env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        baseUrl:
+          env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
         apiKeyEncrypted: env.AI_FALLBACK_API_KEY ? encryptSecret(env.AI_FALLBACK_API_KEY) : null,
         preset: env.AI_FALLBACK_PROVIDER || 'gemini',
         isEnabled: true,
@@ -652,7 +673,8 @@ function migrateMessageClientColumns() {
     ['is_flagged', 'INTEGER NOT NULL DEFAULT 0']
   ];
   for (const [name, definition] of additions) {
-    if (!existing.has(name)) sqlite.exec(`ALTER TABLE messages ADD COLUMN "${name}" ${definition};`);
+    if (!existing.has(name))
+      sqlite.exec(`ALTER TABLE messages ADD COLUMN "${name}" ${definition};`);
   }
 }
 
@@ -667,12 +689,15 @@ function migrateAccountAuthColumns() {
     ['oauth_access_token_expires_at', 'TEXT']
   ];
   for (const [name, definition] of additions) {
-    if (!existing.has(name)) sqlite.exec(`ALTER TABLE accounts ADD COLUMN "${name}" ${definition};`);
+    if (!existing.has(name))
+      sqlite.exec(`ALTER TABLE accounts ADD COLUMN "${name}" ${definition};`);
   }
 }
 
 function migrateAutomationPolicyColumns() {
-  const columns = sqlite.prepare(`PRAGMA table_info(automation_policies)`).all() as Array<{ name: string }>;
+  const columns = sqlite.prepare(`PRAGMA table_info(automation_policies)`).all() as Array<{
+    name: string;
+  }>;
   const existing = new Set(columns.map((column) => column.name));
   const additions: Array<[string, string]> = [
     ['autopilot_enabled', 'INTEGER NOT NULL DEFAULT 0'],
@@ -685,7 +710,8 @@ function migrateAutomationPolicyColumns() {
     ['follow_up_days', 'INTEGER NOT NULL DEFAULT 2']
   ];
   for (const [name, definition] of additions) {
-    if (!existing.has(name)) sqlite.exec(`ALTER TABLE automation_policies ADD COLUMN "${name}" ${definition};`);
+    if (!existing.has(name))
+      sqlite.exec(`ALTER TABLE automation_policies ADD COLUMN "${name}" ${definition};`);
   }
 }
 
@@ -741,11 +767,17 @@ function extractContacts(value: string) {
     .split(',')
     .map((part) => {
       const match = part.match(/^(.*?)<([^>]+)>$/);
-      if (match) return { name: match[1].trim().replace(/^"|"$/g, '') || null, email: match[2].trim().toLowerCase() };
+      if (match)
+        return {
+          name: match[1].trim().replace(/^"|"$/g, '') || null,
+          email: match[2].trim().toLowerCase()
+        };
       const email = part.trim().toLowerCase();
       return email.includes('@') ? { name: null, email } : null;
     })
-    .filter((contact): contact is { name: string | null; email: string } => Boolean(contact?.email));
+    .filter((contact): contact is { name: string | null; email: string } =>
+      Boolean(contact?.email)
+    );
 }
 
 function readFixtureEmails(): FixtureEmail[] {

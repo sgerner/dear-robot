@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { defaultAgentInstructions, readAgentInstructions, writeAgentInstructions } from '$lib/server/memory';
+import {
+  defaultAgentInstructions,
+  readAgentInstructions,
+  writeAgentInstructions
+} from '$lib/server/memory';
 import {
   deleteMemoryRule,
   getMemoryOverview,
@@ -50,7 +54,8 @@ export async function POST({ request }) {
   const input = MemoryActionSchema.parse(payload);
   if (input.action === 'save_markdown') writeAgentInstructions(input.markdown);
   if (input.action === 'save_skills_markdown') writeGlobalSkillsMarkdown(input.skillsMarkdown);
-  if (input.action === 'reset_skills_markdown') writeGlobalSkillsMarkdown(defaultGlobalSkillsMarkdown);
+  if (input.action === 'reset_skills_markdown')
+    writeGlobalSkillsMarkdown(defaultGlobalSkillsMarkdown);
   if (input.action === 'save_core_profile') updateCoreProfile(input.coreProfile);
   if (input.action === 'set_advanced_mode') setMemoryAdvancedMode(input.enabled);
   if (input.action === 'delete_rule') deleteMemoryRule(input.id);

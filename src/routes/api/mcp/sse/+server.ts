@@ -59,7 +59,10 @@ export async function GET({ url }) {
           { name: 'set_read', args: { message_id: 'number', read: 'boolean' } },
           { name: 'set_flagged', args: { message_id: 'number', flagged: 'boolean' } },
           { name: 'generate_suggestion', args: { message_id: 'number' } },
-          { name: 'regenerate_suggestion', args: { message_id: 'number', note: 'string (optional)' } },
+          {
+            name: 'regenerate_suggestion',
+            args: { message_id: 'number', note: 'string (optional)' }
+          },
           { name: 'execute_suggestion', args: { suggestion_id: 'number' } }
         ]
       })}\n\n`,
@@ -82,14 +85,16 @@ async function toolResponse(payload: unknown) {
   const call = ToolCallSchema.parse(payload);
   if (call.tool === 'search_emails') {
     const query = String(call.args.query || '');
-    const messages = listMessages(MessageQuerySchema.parse({ q: query, limit: 20 })).map((message) => ({
-      id: message.id,
-      subject: message.subject,
-      from: message.from,
-      date: message.date,
-      category: message.category,
-      riskLevel: message.riskLevel
-    }));
+    const messages = listMessages(MessageQuerySchema.parse({ q: query, limit: 20 })).map(
+      (message) => ({
+        id: message.id,
+        subject: message.subject,
+        from: message.from,
+        date: message.date,
+        category: message.category,
+        riskLevel: message.riskLevel
+      })
+    );
     return json({ messages });
   }
   if (call.tool === 'get_email_context') {
@@ -99,7 +104,10 @@ async function toolResponse(payload: unknown) {
   }
   if (call.tool === 'list_folders') {
     const accountIdValue = call.args.account_id;
-    const accountId = accountIdValue == null || accountIdValue === '' ? undefined : z.coerce.number().int().positive().parse(accountIdValue);
+    const accountId =
+      accountIdValue == null || accountIdValue === ''
+        ? undefined
+        : z.coerce.number().int().positive().parse(accountIdValue);
     const folders = listFoldersWithCounts(accountId).map((folder) => ({
       id: folder.id,
       account_id: folder.accountId,

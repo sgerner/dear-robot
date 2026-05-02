@@ -13,13 +13,24 @@ export function buildAgentPlanMessages(input: {
   availableFolders: string[];
   existingSuggestion: EmailSuggestion | null;
   note: string | null;
-  tools: Array<{ name: string; description: string; kind: string; readOnly: boolean; skillsMarkdown?: string | null }>;
+  tools: Array<{
+    name: string;
+    description: string;
+    kind: string;
+    readOnly: boolean;
+    skillsMarkdown?: string | null;
+  }>;
 }) {
-  const body = input.bodyText.length > 16000 ? `${input.bodyText.slice(0, 16000)}\n[truncated]` : input.bodyText;
+  const body =
+    input.bodyText.length > 16000
+      ? `${input.bodyText.slice(0, 16000)}\n[truncated]`
+      : input.bodyText;
   const toolsList = input.tools.length
     ? input.tools
         .map((tool) => {
-          const lines = [`- ${tool.name} (${tool.kind}, ${tool.readOnly ? 'read-only' : 'read/write'}): ${tool.description}`];
+          const lines = [
+            `- ${tool.name} (${tool.kind}, ${tool.readOnly ? 'read-only' : 'read/write'}): ${tool.description}`
+          ];
           const playbook = truncateMarkdown(tool.skillsMarkdown || '', 1200);
           if (playbook) {
             lines.push(`  skills.md:\n${indent(playbook, '  ')}`);

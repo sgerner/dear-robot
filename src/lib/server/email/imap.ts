@@ -15,7 +15,9 @@ async function withMailboxThrottle<T>(accountId: number, op: () => Promise<T>) {
   const next = prior
     .catch(() => undefined)
     .then(async () => {
-      await new Promise((resolve) => setTimeout(resolve, Math.max(0, env.MAILBOX_OP_MIN_INTERVAL_MS)));
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(0, env.MAILBOX_OP_MIN_INTERVAL_MS))
+      );
       return op();
     });
   mailboxOpChains.set(accountId, next);
@@ -84,10 +86,17 @@ export const imapEmailProvider: MailProvider = {
           const parsed = msg.source ? await simpleParser(msg.source) : null;
           messages.push({
             providerMessageId: providerMessageId(folderPath, msg.uid),
-            threadId: threadIdFor(parsed?.messageId || null, parsed?.inReplyTo || null, parsed?.references || null, parsed?.subject || msg.envelope?.subject || ''),
+            threadId: threadIdFor(
+              parsed?.messageId || null,
+              parsed?.inReplyTo || null,
+              parsed?.references || null,
+              parsed?.subject || msg.envelope?.subject || ''
+            ),
             messageIdHeader: parsed?.messageId || null,
             inReplyTo: parsed?.inReplyTo || null,
-            references: Array.isArray(parsed?.references) ? parsed.references.join(' ') : parsed?.references || null,
+            references: Array.isArray(parsed?.references)
+              ? parsed.references.join(' ')
+              : parsed?.references || null,
             folderPath,
             subject: parsed?.subject || msg.envelope?.subject || '(no subject)',
             from: addressText(parsed?.from),
@@ -130,10 +139,17 @@ export const imapEmailProvider: MailProvider = {
           const parsed = msg.source ? await simpleParser(msg.source) : null;
           messages.push({
             providerMessageId: providerMessageId(folderPath, msg.uid),
-            threadId: threadIdFor(parsed?.messageId || null, parsed?.inReplyTo || null, parsed?.references || null, parsed?.subject || msg.envelope?.subject || ''),
+            threadId: threadIdFor(
+              parsed?.messageId || null,
+              parsed?.inReplyTo || null,
+              parsed?.references || null,
+              parsed?.subject || msg.envelope?.subject || ''
+            ),
             messageIdHeader: parsed?.messageId || null,
             inReplyTo: parsed?.inReplyTo || null,
-            references: Array.isArray(parsed?.references) ? parsed.references.join(' ') : parsed?.references || null,
+            references: Array.isArray(parsed?.references)
+              ? parsed.references.join(' ')
+              : parsed?.references || null,
             folderPath,
             subject: parsed?.subject || msg.envelope?.subject || '(no subject)',
             from: addressText(parsed?.from),
@@ -162,7 +178,11 @@ export const imapEmailProvider: MailProvider = {
     const client = await clientFor(account);
     await client.connect();
     try {
-      const status = await client.status(folderPath, { uidNext: true, uidValidity: true, messages: true });
+      const status = await client.status(folderPath, {
+        uidNext: true,
+        uidValidity: true,
+        messages: true
+      });
       return {
         uidValidity: status.uidValidity ? String(status.uidValidity) : null,
         highestUid: Math.max(0, Number(status.uidNext || 1) - 1)
@@ -178,10 +198,12 @@ export const imapEmailProvider: MailProvider = {
         await client.connect();
         const lock = await client.getMailboxLock('INBOX');
         try {
-          let known = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.exists : 0;
+          let known =
+            client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.exists : 0;
           while (!signal.aborted) {
             await client.idle();
-            const current = client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.exists : known;
+            const current =
+              client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.exists : known;
             if (current > known) {
               const start = known + 1;
               known = current;
@@ -194,10 +216,17 @@ export const imapEmailProvider: MailProvider = {
                 const parsed = msg.source ? await simpleParser(msg.source) : null;
                 await handlers.onMessage({
                   providerMessageId: providerMessageId('INBOX', msg.uid),
-                  threadId: threadIdFor(parsed?.messageId || null, parsed?.inReplyTo || null, parsed?.references || null, parsed?.subject || msg.envelope?.subject || ''),
+                  threadId: threadIdFor(
+                    parsed?.messageId || null,
+                    parsed?.inReplyTo || null,
+                    parsed?.references || null,
+                    parsed?.subject || msg.envelope?.subject || ''
+                  ),
                   messageIdHeader: parsed?.messageId || null,
                   inReplyTo: parsed?.inReplyTo || null,
-                  references: Array.isArray(parsed?.references) ? parsed.references.join(' ') : parsed?.references || null,
+                  references: Array.isArray(parsed?.references)
+                    ? parsed.references.join(' ')
+                    : parsed?.references || null,
                   folderPath: 'INBOX',
                   subject: parsed?.subject || msg.envelope?.subject || '(no subject)',
                   from: addressText(parsed?.from),
@@ -219,7 +248,8 @@ export const imapEmailProvider: MailProvider = {
           lock.release();
         }
       } catch (error) {
-        if (!signal.aborted) handlers.onError(error instanceof Error ? error : new Error(String(error)));
+        if (!signal.aborted)
+          handlers.onError(error instanceof Error ? error : new Error(String(error)));
       } finally {
         await client.logout().catch(() => undefined);
       }
@@ -235,7 +265,9 @@ export const imapEmailProvider: MailProvider = {
       try {
         const lock = await client.getMailboxLock(message.folderPath);
         try {
-          await client.messageMove(providerUid(message.providerMessageId), folderPath, { uid: true });
+          await client.messageMove(providerUid(message.providerMessageId), folderPath, {
+            uid: true
+          });
         } finally {
           lock.release();
         }
@@ -251,7 +283,9 @@ export const imapEmailProvider: MailProvider = {
       try {
         const lock = await client.getMailboxLock(message.folderPath);
         try {
-          await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Answered'], { uid: true });
+          await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Answered'], {
+            uid: true
+          });
         } finally {
           lock.release();
         }
@@ -267,8 +301,14 @@ export const imapEmailProvider: MailProvider = {
       try {
         const lock = await client.getMailboxLock(message.folderPath);
         try {
-          if (read) await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Seen'], { uid: true });
-          else await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Seen'], { uid: true });
+          if (read)
+            await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Seen'], {
+              uid: true
+            });
+          else
+            await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Seen'], {
+              uid: true
+            });
         } finally {
           lock.release();
         }
@@ -284,8 +324,14 @@ export const imapEmailProvider: MailProvider = {
       try {
         const lock = await client.getMailboxLock(message.folderPath);
         try {
-          if (flagged) await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Flagged'], { uid: true });
-          else await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Flagged'], { uid: true });
+          if (flagged)
+            await client.messageFlagsAdd(providerUid(message.providerMessageId), ['\\Flagged'], {
+              uid: true
+            });
+          else
+            await client.messageFlagsRemove(providerUid(message.providerMessageId), ['\\Flagged'], {
+              uid: true
+            });
         } finally {
           lock.release();
         }
@@ -305,11 +351,20 @@ export const imapEmailProvider: MailProvider = {
 
 function addressText(value: AddressObject | AddressObject[] | undefined) {
   if (!value) return '';
-  if (Array.isArray(value)) return value.map((item) => item.text).filter(Boolean).join(', ');
+  if (Array.isArray(value))
+    return value
+      .map((item) => item.text)
+      .filter(Boolean)
+      .join(', ');
   return value.text || '';
 }
 
-function threadIdFor(messageId: string | null, inReplyTo: string | null, references: string | string[] | null, subject: string) {
+function threadIdFor(
+  messageId: string | null,
+  inReplyTo: string | null,
+  references: string | string[] | null,
+  subject: string
+) {
   if (inReplyTo) return inReplyTo;
   if (Array.isArray(references) && references.length) return references[0];
   if (typeof references === 'string' && references.trim()) return references.trim().split(/\s+/)[0];
@@ -317,7 +372,10 @@ function threadIdFor(messageId: string | null, inReplyTo: string | null, referen
 }
 
 function normalizeSubject(subject: string) {
-  return subject.toLowerCase().replace(/^(re|fwd?):\s*/i, '').trim();
+  return subject
+    .toLowerCase()
+    .replace(/^(re|fwd?):\s*/i, '')
+    .trim();
 }
 
 function mapAttachments(
@@ -345,7 +403,9 @@ function providerMessageId(folderPath: string, uid: number | bigint | undefined)
 }
 
 function providerUid(providerMessageIdValue: string) {
-  const value = providerMessageIdValue.includes(':') ? providerMessageIdValue.split(':').at(-1) : providerMessageIdValue;
+  const value = providerMessageIdValue.includes(':')
+    ? providerMessageIdValue.split(':').at(-1)
+    : providerMessageIdValue;
   return Number(value);
 }
 
@@ -354,8 +414,15 @@ function mapFolderRole(path: string, specialUse: string | null) {
   const special = (specialUse || '').toLowerCase();
   if (special.includes('inbox') || normalized === 'inbox') return 'inbox';
   if (special.includes('archive') || normalized.includes('archive')) return 'archive';
-  if (special.includes('junk') || special.includes('spam') || normalized.includes('spam') || normalized.includes('junk')) return 'spam';
-  if (special.includes('trash') || normalized.includes('trash') || normalized.includes('deleted')) return 'trash';
+  if (
+    special.includes('junk') ||
+    special.includes('spam') ||
+    normalized.includes('spam') ||
+    normalized.includes('junk')
+  )
+    return 'spam';
+  if (special.includes('trash') || normalized.includes('trash') || normalized.includes('deleted'))
+    return 'trash';
   if (special.includes('sent') || normalized.includes('sent')) return 'sent';
   if (special.includes('drafts') || normalized.includes('drafts')) return 'drafts';
   return specialUse || null;
@@ -376,7 +443,9 @@ async function appendToSentFolder(account: Account, options: Parameters<typeof s
 
 async function findSentFolder(client: ImapFlow) {
   const boxes = await client.list();
-  const bySpecial = boxes.find((box) => (box.specialUse || '').toLowerCase().includes('sent'))?.path;
+  const bySpecial = boxes.find((box) =>
+    (box.specialUse || '').toLowerCase().includes('sent')
+  )?.path;
   if (bySpecial) return bySpecial;
   return boxes.find((box) => box.path.toLowerCase().includes('sent'))?.path ?? null;
 }

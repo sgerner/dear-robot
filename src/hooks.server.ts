@@ -47,12 +47,17 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
     if (isApi && !isLogin && !isMcp) {
       const key = `${session || event.getClientAddress()}::${event.url.pathname}`;
-      const limited = checkRateLimit({ key, maxPerMinute: Math.max(20, env.API_RATE_LIMIT_PER_MINUTE) });
+      const limited = checkRateLimit({
+        key,
+        maxPerMinute: Math.max(20, env.API_RATE_LIMIT_PER_MINUTE)
+      });
       if (!limited.allowed) throw error(429, 'Rate limit exceeded');
     }
     if (!sameOriginOrForm(event.request.headers)) throw error(403, 'Invalid origin');
     const headerToken = event.request.headers.get('x-csrf-token');
-    const formHeader = event.request.headers.get('content-type')?.includes('application/x-www-form-urlencoded');
+    const formHeader = event.request.headers
+      .get('content-type')
+      ?.includes('application/x-www-form-urlencoded');
     if (!isLogin && !isMcp && isApi && headerToken !== event.locals.csrfToken && !formHeader) {
       throw error(403, 'Invalid CSRF token');
     }

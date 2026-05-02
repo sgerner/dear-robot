@@ -5,12 +5,7 @@ import { db, nowIso } from '$lib/server/db';
 import { accounts, oauthProviders } from '$lib/server/db/schema';
 import { decryptSecret, encryptSecret } from '$lib/server/security';
 
-const GOOGLE_DEFAULT_SCOPES = [
-  'openid',
-  'email',
-  'profile',
-  'https://mail.google.com/'
-];
+const GOOGLE_DEFAULT_SCOPES = ['openid', 'email', 'profile', 'https://mail.google.com/'];
 
 export const GoogleOauthSettingsSchema = z.object({
   clientId: z.string().min(1),
@@ -139,7 +134,9 @@ export async function completeGoogleOauth(code: string, verifier: string) {
   if (!profile.emailAddress) throw new Error('Missing Gmail account email');
   const now = nowIso();
   const expiresAt =
-    typeof tokens.expires_in === 'number' ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null;
+    typeof tokens.expires_in === 'number'
+      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+      : null;
   const existing = db.select().from(accounts).where(eq(accounts.email, profile.emailAddress)).get();
   const values = {
     email: profile.emailAddress,
@@ -202,7 +199,9 @@ export async function refreshGoogleAccessToken(accountId: number) {
   const tokens = (await tokenResponse.json()) as { access_token: string; expires_in?: number };
   if (!tokens.access_token) throw new Error('Google token refresh returned no access token');
   const expiresAt =
-    typeof tokens.expires_in === 'number' ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null;
+    typeof tokens.expires_in === 'number'
+      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+      : null;
   db.update(accounts)
     .set({
       oauthAccessTokenEncrypted: encryptSecret(tokens.access_token),
@@ -216,8 +215,12 @@ export async function refreshGoogleAccessToken(accountId: number) {
 
 export async function getGoogleAccessToken(account: typeof accounts.$inferSelect) {
   if (account.authType !== 'oauth_gmail') return null;
-  const expiry = account.oauthAccessTokenExpiresAt ? Date.parse(account.oauthAccessTokenExpiresAt) : 0;
-  const existing = account.oauthAccessTokenEncrypted ? decryptSecret(account.oauthAccessTokenEncrypted) : null;
+  const expiry = account.oauthAccessTokenExpiresAt
+    ? Date.parse(account.oauthAccessTokenExpiresAt)
+    : 0;
+  const existing = account.oauthAccessTokenEncrypted
+    ? decryptSecret(account.oauthAccessTokenEncrypted)
+    : null;
   if (existing && expiry > Date.now() + 30_000) return existing;
   return refreshGoogleAccessToken(account.id);
 }

@@ -29,37 +29,39 @@ export const mockEmailProvider: MailProvider = {
   },
   async backfill(_account, limit = 100, folderPath = 'INBOX') {
     if (folderPath !== 'INBOX') return [];
-    return readFixtureEmails().slice(0, limit).map(
-      (email): ProviderMessage => ({
-        providerMessageId: `${folderPath}:${email.id}`,
-        threadId: email.thread_id ?? null,
-        messageIdHeader: `<${email.id}@fixtures.triage.local>`,
-        inReplyTo: null,
-        references: null,
-        folderPath,
-        subject: email.subject,
-        from: email.from,
-        to: email.to,
-        cc: email.cc ?? null,
-        bcc: null,
-        date: email.date,
-        bodyText: email.body_text,
-        bodyHtml: null,
-        attachments: [
-          {
-            filename: 'note.txt',
-            contentType: 'text/plain',
-            sizeBytes: 18,
-            contentId: null,
-            disposition: 'attachment',
-            contentBase64: Buffer.from('fixture attachment', 'utf8').toString('base64')
-          }
-        ],
-        isRead: false,
-        isAnswered: false,
-        isFlagged: false
-      })
-    );
+    return readFixtureEmails()
+      .slice(0, limit)
+      .map(
+        (email): ProviderMessage => ({
+          providerMessageId: `${folderPath}:${email.id}`,
+          threadId: email.thread_id ?? null,
+          messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+          inReplyTo: null,
+          references: null,
+          folderPath,
+          subject: email.subject,
+          from: email.from,
+          to: email.to,
+          cc: email.cc ?? null,
+          bcc: null,
+          date: email.date,
+          bodyText: email.body_text,
+          bodyHtml: null,
+          attachments: [
+            {
+              filename: 'note.txt',
+              contentType: 'text/plain',
+              sizeBytes: 18,
+              contentId: null,
+              disposition: 'attachment',
+              contentBase64: Buffer.from('fixture attachment', 'utf8').toString('base64')
+            }
+          ],
+          isRead: false,
+          isAnswered: false,
+          isFlagged: false
+        })
+      );
   },
   async fetchSinceUid(_account, folderPath, sinceUidExclusive, limit = 100) {
     if (folderPath !== 'INBOX') return [];
@@ -119,7 +121,12 @@ export const mockEmailProvider: MailProvider = {
     mockActions.push({ type: 'mark_read', accountId: account.id, messageId: message.id, read });
   },
   async setFlagged(account: Account, message: Message, flagged: boolean) {
-    mockActions.push({ type: 'set_flagged', accountId: account.id, messageId: message.id, flagged });
+    mockActions.push({
+      type: 'set_flagged',
+      accountId: account.id,
+      messageId: message.id,
+      flagged
+    });
   },
   async send(account: Account, options) {
     const messageId = `mock-sent-${Date.now()}-${mockActions.length}`;
@@ -139,5 +146,7 @@ function readFixtureEmails(): Array<{
   date: string;
   body_text: string;
 }> {
-  return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'tests/fixtures/emails.json'), 'utf8'));
+  return JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'tests/fixtures/emails.json'), 'utf8')
+  );
 }

@@ -1,5 +1,9 @@
 import { error, json } from '@sveltejs/kit';
-import { GoogleOauthSettingsSchema, getGoogleOauthSettings, upsertGoogleOauthSettings } from '$lib/server/oauth/google';
+import {
+  GoogleOauthSettingsSchema,
+  getGoogleOauthSettings,
+  upsertGoogleOauthSettings
+} from '$lib/server/oauth/google';
 
 export function GET() {
   return json({ settings: getGoogleOauthSettings() });

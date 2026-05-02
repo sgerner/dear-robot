@@ -28,7 +28,10 @@ export async function transcribeWithConfiguredProvider(
   if (provider.id === 'deepgram') {
     return deepgramTranscribe(profile, blob, language);
   }
-  throw error(400, `${provider.label} batch transcription is not yet configured. Enable streaming fallback or pick a batch-capable provider.`);
+  throw error(
+    400,
+    `${provider.label} batch transcription is not yet configured. Enable streaming fallback or pick a batch-capable provider.`
+  );
 }
 
 async function openAiStyleTranscribe(profile: AudioRuntimeProfile, blob: Blob, language?: string) {
@@ -78,4 +81,3 @@ async function deepgramTranscribe(profile: AudioRuntimeProfile, blob: Blob, lang
   };
   return payload.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
 }
-

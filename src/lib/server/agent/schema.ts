@@ -41,13 +41,16 @@ const ToolBaseSchema = z.object({
 });
 
 export const ToolCreateSchema = ToolBaseSchema.superRefine((value, ctx) => {
-    if (value.kind === 'mcp_http' && !value.endpoint) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'endpoint is required for mcp_http tools' });
-    }
-    if (value.kind === 'cli' && !value.command) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'command is required for cli tools' });
-    }
-  });
+  if (value.kind === 'mcp_http' && !value.endpoint) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'endpoint is required for mcp_http tools'
+    });
+  }
+  if (value.kind === 'cli' && !value.command) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'command is required for cli tools' });
+  }
+});
 
 export const ToolUpdateSchema = ToolBaseSchema.partial().extend({
   isEnabled: z.boolean().optional()

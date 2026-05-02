@@ -12,4 +12,3 @@ export async function POST() {
     throw error(500, err instanceof Error ? err.message : 'Failed to create backup');
   }
 }
-

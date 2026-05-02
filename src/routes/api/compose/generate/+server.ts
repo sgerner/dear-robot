@@ -38,7 +38,8 @@ async function generateWithOpenAiCompatible(
       })
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`${profile.provider} ${response.status}: ${text.slice(0, 240)}`);
+    if (!response.ok)
+      throw new Error(`${profile.provider} ${response.status}: ${text.slice(0, 240)}`);
     const parsed = JSON.parse(text);
     return String(parsed?.choices?.[0]?.message?.content || '').trim();
   } finally {
@@ -65,7 +66,8 @@ export async function POST({ request }) {
   const { prompt, to, subject, context } = GenerateComposeSchema.parse(await request.json());
   const profile = profileForCompose();
   if (!profile.isEnabled) throw error(400, 'Primary AI profile is disabled');
-  if (profile.transport !== 'openai_compatible') throw error(400, 'Compose generation currently supports OpenAI-compatible profiles only');
+  if (profile.transport !== 'openai_compatible')
+    throw error(400, 'Compose generation currently supports OpenAI-compatible profiles only');
   let contextText = '';
   if (context?.messageId) {
     const detail = getMessageDetail(context.messageId);

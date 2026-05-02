@@ -1,7 +1,14 @@
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, nowIso } from '../db';
-import { accounts, aiSuggestions, executedActions, feedbackLog, folders, messages } from '../db/schema';
+import {
+  accounts,
+  aiSuggestions,
+  executedActions,
+  feedbackLog,
+  folders,
+  messages
+} from '../db/schema';
 import { encryptSecret } from '../security';
 import { providerForAccount } from '../email/provider';
 import { stopSyncWorkerForAccount } from '../sync';
@@ -79,7 +86,9 @@ function pruneSeededDemoDataIfSafe(input: z.infer<typeof AccountInputSchema>) {
   if (input.host === 'mock' && input.email === 'mock@example.test') return;
   const currentAccounts = db.select().from(accounts).all();
   if (currentAccounts.some((account) => account.host !== 'mock')) return;
-  const demoAccounts = currentAccounts.filter((account) => account.host === 'mock' && account.email === 'mock@example.test');
+  const demoAccounts = currentAccounts.filter(
+    (account) => account.host === 'mock' && account.email === 'mock@example.test'
+  );
   for (const account of demoAccounts) {
     removeAccount(account.id);
   }
@@ -114,7 +123,11 @@ export function disableAccount(id: number) {
 
 export function removeAccount(id: number) {
   stopSyncWorkerForAccount(id);
-  const rows = db.select({ id: messages.id }).from(messages).where(eq(messages.accountId, id)).all();
+  const rows = db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(eq(messages.accountId, id))
+    .all();
   for (const row of rows) {
     db.delete(executedActions).where(eq(executedActions.messageId, row.id)).run();
     db.delete(feedbackLog).where(eq(feedbackLog.messageId, row.id)).run();

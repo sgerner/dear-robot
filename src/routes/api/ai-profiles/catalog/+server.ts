@@ -24,4 +24,3 @@ export async function POST({ request }) {
     throw error(400, err instanceof Error ? err.message : 'Unable to fetch model catalog');
   }
 }
-

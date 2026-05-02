@@ -1,7 +1,17 @@
 import { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, nowIso } from '../db';
-import { accounts, aiSuggestions, contacts, drafts, executedActions, feedbackLog, folders, messageAttachments, messages } from '../db/schema';
+import {
+  accounts,
+  aiSuggestions,
+  contacts,
+  drafts,
+  executedActions,
+  feedbackLog,
+  folders,
+  messageAttachments,
+  messages
+} from '../db/schema';
 import { readAgentInstructions } from '../memory';
 import { buildMemoryPromptContext, recordMemoryEvent } from '../memory-learning';
 import { generateEmailSuggestion } from '../ai/provider';
@@ -48,7 +58,10 @@ export const BulkMessageActionSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.action === 'move' && !value.folderPath) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'folderPath is required when action is move' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'folderPath is required when action is move'
+      });
     }
   });
 
@@ -132,10 +145,23 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   if (query.folder) where.push(eq(messages.folderPath, query.folder));
   const ftsQuery = query.q ? toFtsQuery(query.q) : '';
   const likePattern = query.q ? `%${query.q}%` : '';
-  if (ftsQuery) where.push(sql`messages.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${ftsQuery})`);
-  else if (query.q) where.push(or(like(messages.subject, likePattern), like(messages.from, likePattern), like(messages.to, likePattern), like(messages.bodyText, likePattern)));
+  if (ftsQuery)
+    where.push(
+      sql`messages.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${ftsQuery})`
+    );
+  else if (query.q)
+    where.push(
+      or(
+        like(messages.subject, likePattern),
+        like(messages.from, likePattern),
+        like(messages.to, likePattern),
+        like(messages.bodyText, likePattern)
+      )
+    );
   if (query.view === 'pending') {
-    where.push(sql`EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.message_id = messages.id AND s.status = 'pending')`);
+    where.push(
+      sql`EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.message_id = messages.id AND s.status = 'pending')`
+    );
   }
   if (query.view === 'executed') {
     where.push(sql`EXISTS (SELECT 1 FROM executed_actions a WHERE a.message_id = messages.id)`);
@@ -177,12 +203,23 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
     const fallbackWhere = [];
     if (query.accountId) fallbackWhere.push(eq(messages.accountId, query.accountId));
     if (query.folder) fallbackWhere.push(eq(messages.folderPath, query.folder));
-    fallbackWhere.push(or(like(messages.subject, likePattern), like(messages.from, likePattern), like(messages.to, likePattern), like(messages.bodyText, likePattern)));
+    fallbackWhere.push(
+      or(
+        like(messages.subject, likePattern),
+        like(messages.from, likePattern),
+        like(messages.to, likePattern),
+        like(messages.bodyText, likePattern)
+      )
+    );
     if (query.view === 'pending') {
-      fallbackWhere.push(sql`EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.message_id = messages.id AND s.status = 'pending')`);
+      fallbackWhere.push(
+        sql`EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.message_id = messages.id AND s.status = 'pending')`
+      );
     }
     if (query.view === 'executed') {
-      fallbackWhere.push(sql`EXISTS (SELECT 1 FROM executed_actions a WHERE a.message_id = messages.id)`);
+      fallbackWhere.push(
+        sql`EXISTS (SELECT 1 FROM executed_actions a WHERE a.message_id = messages.id)`
+      );
     }
     if (query.view === 'starred') fallbackWhere.push(eq(messages.isFlagged, true));
     if (query.view === 'unread') fallbackWhere.push(eq(messages.isRead, false));
@@ -220,19 +257,36 @@ export function getMessageDetail(id: number) {
   const message = db.select().from(messages).where(eq(messages.id, id)).get();
   if (!message) return null;
   const account = db.select().from(accounts).where(eq(accounts.id, message.accountId)).get();
-  const attachments = db.select().from(messageAttachments).where(eq(messageAttachments.messageId, id)).all();
+  const attachments = db
+    .select()
+    .from(messageAttachments)
+    .where(eq(messageAttachments.messageId, id))
+    .all();
   const suggestions = db
     .select()
     .from(aiSuggestions)
     .where(eq(aiSuggestions.messageId, id))
     .orderBy(desc(aiSuggestions.createdAt))
     .all();
-  const executed = db.select().from(executedActions).where(eq(executedActions.messageId, id)).orderBy(desc(executedActions.createdAt)).all();
+  const executed = db
+    .select()
+    .from(executedActions)
+    .where(eq(executedActions.messageId, id))
+    .orderBy(desc(executedActions.createdAt))
+    .all();
   const threadKey = message.threadId || normalizedSubject(message.subject);
   const thread = db
     .select()
     .from(messages)
-    .where(and(eq(messages.accountId, message.accountId), or(eq(messages.threadId, threadKey), like(messages.subject, `%${normalizedSubject(message.subject)}%`))))
+    .where(
+      and(
+        eq(messages.accountId, message.accountId),
+        or(
+          eq(messages.threadId, threadKey),
+          like(messages.subject, `%${normalizedSubject(message.subject)}%`)
+        )
+      )
+    )
     .orderBy(messages.date)
     .limit(50)
     .all();
@@ -260,7 +314,9 @@ export function getAttachment(messageId: number, attachmentId: number) {
   return db
     .select()
     .from(messageAttachments)
-    .where(and(eq(messageAttachments.id, attachmentId), eq(messageAttachments.messageId, messageId)))
+    .where(
+      and(eq(messageAttachments.id, attachmentId), eq(messageAttachments.messageId, messageId))
+    )
     .get();
 }
 
@@ -305,7 +361,11 @@ export function exportContactsCsv(accountId?: number) {
     .all();
   const header = 'account_id,email,name,source,last_seen_at';
   const body = rows
-    .map((row) => [row.accountId ?? '', row.email, row.name ?? '', row.source, row.lastSeenAt].map(csvEscape).join(','))
+    .map((row) =>
+      [row.accountId ?? '', row.email, row.name ?? '', row.source, row.lastSeenAt]
+        .map(csvEscape)
+        .join(',')
+    )
     .join('\n');
   return `${header}\n${body}\n`;
 }
@@ -417,15 +477,16 @@ export async function moveMessage(id: number, folderPath: string) {
   if (!detail?.message || !detail.account) throw new Error('Message not found');
   const provider = providerForAccount(detail.account);
   await provider.move(detail.account, detail.message, folderPath);
-  return db.update(messages).set({ folderPath, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
+  return db
+    .update(messages)
+    .set({ folderPath, updatedAt: nowIso() })
+    .where(eq(messages.id, id))
+    .returning()
+    .get();
 }
 
 export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionSchema>) {
-  const rows = db
-    .select()
-    .from(messages)
-    .where(inArray(messages.id, input.messageIds))
-    .all();
+  const rows = db.select().from(messages).where(inArray(messages.id, input.messageIds)).all();
   let processed = 0;
   for (const row of rows) {
     if (input.action === 'move') await moveMessage(row.id, input.folderPath || 'INBOX');
@@ -443,7 +504,12 @@ export async function setMessageRead(id: number, read: boolean) {
   if (!detail?.message || !detail.account) throw new Error('Message not found');
   const provider = providerForAccount(detail.account);
   await provider.markRead(detail.account, detail.message, read);
-  return db.update(messages).set({ isRead: read, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
+  return db
+    .update(messages)
+    .set({ isRead: read, updatedAt: nowIso() })
+    .where(eq(messages.id, id))
+    .returning()
+    .get();
 }
 
 export async function setMessageFlagged(id: number, flagged: boolean) {
@@ -451,7 +517,12 @@ export async function setMessageFlagged(id: number, flagged: boolean) {
   if (!detail?.message || !detail.account) throw new Error('Message not found');
   const provider = providerForAccount(detail.account);
   await provider.setFlagged(detail.account, detail.message, flagged);
-  return db.update(messages).set({ isFlagged: flagged, updatedAt: nowIso() }).where(eq(messages.id, id)).returning().get();
+  return db
+    .update(messages)
+    .set({ isFlagged: flagged, updatedAt: nowIso() })
+    .where(eq(messages.id, id))
+    .returning()
+    .get();
 }
 
 export function updateFolderRole(id: number, role: z.infer<typeof FolderRoleSchema>['role']) {
@@ -474,7 +545,9 @@ export async function sendComposedMessage(input: z.infer<typeof ComposeSendSchem
   }
   const account = db.select().from(accounts).where(eq(accounts.id, input.accountId)).get();
   if (!account) throw new Error('Account not found');
-  const source = input.sourceMessageId ? db.select().from(messages).where(eq(messages.id, input.sourceMessageId)).get() : null;
+  const source = input.sourceMessageId
+    ? db.select().from(messages).where(eq(messages.id, input.sourceMessageId)).get()
+    : null;
   const provider = providerForAccount(account);
   const sent = await provider.send(account, {
     to: input.to,
@@ -489,20 +562,38 @@ export async function sendComposedMessage(input: z.infer<typeof ComposeSendSchem
   });
   if (source && ['reply', 'reply_all'].includes(input.mode)) {
     await provider.markAnswered(account, source);
-    db.update(messages).set({ isAnswered: true, updatedAt: nowIso() }).where(eq(messages.id, source.id)).run();
+    db.update(messages)
+      .set({ isAnswered: true, updatedAt: nowIso() })
+      .where(eq(messages.id, source.id))
+      .run();
   }
   const now = nowIso();
   upsertContactsFromAddressList(account.id, [input.to, input.cc || '', input.bcc || ''], now);
   if (input.draftId) {
-    db.update(drafts).set({ status: 'sent', updatedAt: now }).where(eq(drafts.id, input.draftId)).run();
+    db.update(drafts)
+      .set({ status: 'sent', updatedAt: now })
+      .where(eq(drafts.id, input.draftId))
+      .run();
   }
-  return { ok: true, messageId: sent.messageId, sourceMessageId: source?.id ?? null, draftId: input.draftId ?? null };
+  return {
+    ok: true,
+    messageId: sent.messageId,
+    sourceMessageId: source?.id ?? null,
+    draftId: input.draftId ?? null
+  };
 }
 
-export async function suggestForMessage(id: number, options: { note?: string | null; existing?: EmailSuggestion | null } = {}) {
+export async function suggestForMessage(
+  id: number,
+  options: { note?: string | null; existing?: EmailSuggestion | null } = {}
+) {
   const detail = getMessageDetail(id);
   if (!detail?.message || !detail.account) throw new Error('Message not found');
-  const folderRows = db.select().from(folders).where(eq(folders.accountId, detail.message.accountId)).all();
+  const folderRows = db
+    .select()
+    .from(folders)
+    .where(eq(folders.accountId, detail.message.accountId))
+    .all();
   const input = {
     agentInstructions: readAgentInstructions(),
     memoryContext: buildMemoryPromptContext({
@@ -638,7 +729,11 @@ export function rejectSuggestion(id: number) {
 export async function executeSuggestion(id: number) {
   const suggestion = db.select().from(aiSuggestions).where(eq(aiSuggestions.id, id)).get();
   if (!suggestion) throw new Error('Suggestion not found');
-  const existing = db.select().from(executedActions).where(eq(executedActions.suggestionId, id)).get();
+  const existing = db
+    .select()
+    .from(executedActions)
+    .where(eq(executedActions.suggestionId, id))
+    .get();
   if (existing?.status === 'executed') return existing;
   const message = db.select().from(messages).where(eq(messages.id, suggestion.messageId)).get();
   if (!message) throw new Error('Message not found');
@@ -657,7 +752,10 @@ export async function executeSuggestion(id: number) {
       inReplyTo: message.threadId
     });
     await provider.markAnswered(account, message);
-    db.update(messages).set({ isAnswered: true, updatedAt: now }).where(eq(messages.id, message.id)).run();
+    db.update(messages)
+      .set({ isAnswered: true, updatedAt: now })
+      .where(eq(messages.id, message.id))
+      .run();
     details = sent;
   } else if (action === 'forward') {
     if (!suggestion.forwardTo) throw new Error('Forward action requires forward_to');
@@ -671,17 +769,27 @@ export async function executeSuggestion(id: number) {
     const target = resolveTargetFolder(message.accountId, suggestion);
     if (target) {
       await provider.move(account, message, target);
-      db.update(messages).set({ folderPath: target, updatedAt: now }).where(eq(messages.id, message.id)).run();
+      db.update(messages)
+        .set({ folderPath: target, updatedAt: now })
+        .where(eq(messages.id, message.id))
+        .run();
       details = { targetFolder: target };
     } else {
       details = { handledWithoutMove: true };
     }
   } else if (action === 'delegate') {
-    details = await dispatchDelegateWebhooks(message.id, suggestion.id, suggestion.delegateInstructions || '');
+    details = await dispatchDelegateWebhooks(
+      message.id,
+      suggestion.id,
+      suggestion.delegateInstructions || ''
+    );
   } else {
     details = { handled: true };
   }
-  db.update(aiSuggestions).set({ status: 'executed', updatedAt: now }).where(eq(aiSuggestions.id, id)).run();
+  db.update(aiSuggestions)
+    .set({ status: 'executed', updatedAt: now })
+    .where(eq(aiSuggestions.id, id))
+    .run();
   return db
     .insert(executedActions)
     .values({
@@ -699,27 +807,50 @@ export async function executeSuggestion(id: number) {
 function resolveTargetFolder(accountId: number, suggestion: typeof aiSuggestions.$inferSelect) {
   const folderRows = db.select().from(folders).where(eq(folders.accountId, accountId)).all();
   const find = (...names: string[]) =>
-    folderRows.find((folder) => names.some((name) => folder.path.toLowerCase() === name.toLowerCase()))?.path;
-  const findByRole = (role: string) => folderRows.find((folder) => folder.role?.toLowerCase() === role)?.path;
-  if (suggestion.recommendedAction === 'move_to_folder') return suggestion.targetFolder || undefined;
+    folderRows.find((folder) =>
+      names.some((name) => folder.path.toLowerCase() === name.toLowerCase())
+    )?.path;
+  const findByRole = (role: string) =>
+    folderRows.find((folder) => folder.role?.toLowerCase() === role)?.path;
+  if (suggestion.recommendedAction === 'move_to_folder')
+    return suggestion.targetFolder || undefined;
   if (suggestion.recommendedAction === 'archive') return findByRole('archive') || find('Archive');
-  if (suggestion.recommendedAction === 'spam') return findByRole('spam') || find('Spam', 'Junk', 'Spam Review');
-  if (suggestion.recommendedAction === 'delete') return findByRole('trash') || find('Trash', 'Deleted Items');
+  if (suggestion.recommendedAction === 'spam')
+    return findByRole('spam') || find('Spam', 'Junk', 'Spam Review');
+  if (suggestion.recommendedAction === 'delete')
+    return findByRole('trash') || find('Trash', 'Deleted Items');
   return undefined;
 }
 
-async function dispatchDelegateWebhooks(messageId: number, suggestionId: number, instructions: string) {
-  const subscriptions = db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.eventType, 'delegate')).all();
+async function dispatchDelegateWebhooks(
+  messageId: number,
+  suggestionId: number,
+  instructions: string
+) {
+  const subscriptions = db
+    .select()
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.eventType, 'delegate'))
+    .all();
   const payload = JSON.stringify({ event: 'delegate', messageId, suggestionId, instructions });
   const results = [];
   for (const subscription of subscriptions) {
     try {
       const headers: Record<string, string> = { 'content-type': 'application/json' };
-      if (subscription.secret) headers['x-triage-signature'] = signWebhookPayload(payload, subscription.secret);
-      const response = await fetch(subscription.targetUrl, { method: 'POST', headers, body: payload });
+      if (subscription.secret)
+        headers['x-triage-signature'] = signWebhookPayload(payload, subscription.secret);
+      const response = await fetch(subscription.targetUrl, {
+        method: 'POST',
+        headers,
+        body: payload
+      });
       results.push({ id: subscription.id, ok: response.ok, status: response.status });
     } catch (error) {
-      results.push({ id: subscription.id, ok: false, error: error instanceof Error ? error.message : String(error) });
+      results.push({
+        id: subscription.id,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
   return { webhookResults: results };
@@ -728,14 +859,22 @@ async function dispatchDelegateWebhooks(messageId: number, suggestionId: number,
 function toFtsQuery(input: string) {
   const tokens = input
     .split(/\s+/)
-    .map((token) => token.trim().toLowerCase().replace(/[^a-z0-9@._-]/g, ''))
+    .map((token) =>
+      token
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9@._-]/g, '')
+    )
     .filter(Boolean);
   if (!tokens.length) return '';
   return tokens.map((token) => `${token}*`).join(' AND ');
 }
 
 function normalizedSubject(subject: string) {
-  return subject.toLowerCase().replace(/^(re|fwd?):\s*/i, '').trim();
+  return subject
+    .toLowerCase()
+    .replace(/^(re|fwd?):\s*/i, '')
+    .trim();
 }
 
 function upsertContactsFromAddressList(accountId: number, values: string[], seenAt: string) {
@@ -765,11 +904,17 @@ function extractContacts(value: string) {
     .split(',')
     .map((part) => {
       const match = part.trim().match(/^(.*?)<([^>]+)>$/);
-      if (match) return { name: match[1].trim().replace(/^"|"$/g, '') || null, email: match[2].trim().toLowerCase() };
+      if (match)
+        return {
+          name: match[1].trim().replace(/^"|"$/g, '') || null,
+          email: match[2].trim().toLowerCase()
+        };
       const email = part.trim().toLowerCase();
       return email.includes('@') ? { name: null, email } : null;
     })
-    .filter((contact): contact is { name: string | null; email: string } => Boolean(contact?.email));
+    .filter((contact): contact is { name: string | null; email: string } =>
+      Boolean(contact?.email)
+    );
 }
 
 function parseAttachments(value: string | null) {
