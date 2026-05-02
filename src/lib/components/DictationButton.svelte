@@ -50,23 +50,23 @@
   {/if}
   <button
     type="button"
-    class={`relative z-10 inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-md border text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-red-200/90 bg-red-500/20 text-red-50 shadow-[0_0_22px_rgba(248,113,113,0.9)]' : 'border-white/10 bg-white/[0.03]'} ${className}`}
+    class={`relative z-10 inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-lg border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-destructive/80 bg-destructive/15 text-destructive-foreground shadow-[0_0_22px_rgba(220,38,38,0.7)]' : 'border-border bg-muted/40'} ${className}`}
     disabled={unavailable || (recording && !active)}
     aria-label={active ? 'Stop transcription' : label}
     title={active ? 'Stop transcription' : label}
     aria-pressed={active}
     style={active
       ? `box-shadow:
-          0 0 ${glowDistance}px rgba(248, 113, 113, ${glowOpacity}),
+          0 0 ${glowDistance}px rgba(220, 38, 38, ${glowOpacity}),
           0 0 ${Math.max(18, glowDistance - 2)}px rgba(255, 255, 255, ${0.18 + intensity * 0.34}),
-          0 0 0 1px rgba(248, 113, 113, ${0.48 + intensity * 0.32});
+          0 0 0 1px rgba(220, 38, 38, ${0.48 + intensity * 0.32});
          animation: dictation-button-breathe ${pulseDuration} ease-in-out infinite;`
       : ''}
     onclick={() => onToggle(targetId)}
   >
     {#if active}
-      <span class="absolute inset-0 rounded-md bg-red-400/10"></span>
-      <span class="absolute inset-[-1px] rounded-md border border-red-100/40 dictation-core-ring"
+      <span class="absolute inset-0 rounded-lg bg-destructive/10"></span>
+      <span class="absolute inset-[-1px] rounded-lg border border-destructive/40 dictation-core-ring"
       ></span>
       <StopIcon size={14} class="relative z-20" />
     {:else}

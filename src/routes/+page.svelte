@@ -1,33 +1,17 @@
 <script lang="ts">
   import {
     Bot,
-    Archive,
     ChevronLeft,
-    Keyboard,
     Menu,
-    Eye,
-    EyeOff,
-    FolderOpen,
-    Forward,
     Inbox,
-    Loader2,
     Mail,
     PenLine,
-    RefreshCw,
-    Reply,
-    ReplyAll,
-    Search,
-    Send,
     Settings,
-    Star,
-    Paperclip,
-    ShieldAlert,
-    Trash2,
+    Sparkles,
     X
   } from 'lucide-svelte';
   import { goto, invalidateAll } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
-  import { flip } from 'svelte/animate';
   import { fade, fly } from 'svelte/transition';
   import {
     cacheEncryptionEnabled,
@@ -41,8 +25,12 @@
     setCacheMeta
   } from '$lib/client/local-cache';
   import ComposeDrawer from '$lib/components/ComposeDrawer.svelte';
-  import DictationButton from '$lib/components/DictationButton.svelte';
   import MobileQuickActions from '$lib/components/MobileQuickActions.svelte';
+  import InboxSidebar from '$lib/components/InboxSidebar.svelte';
+  import MessageList from '$lib/components/MessageList.svelte';
+  import MessageDetail from '$lib/components/MessageDetail.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import Card from '$lib/components/ui/Card.svelte';
   import SettingsAccounts from '$lib/components/settings/SettingsAccounts.svelte';
   import SettingsAdvanced from '$lib/components/settings/SettingsAdvanced.svelte';
   import SettingsCategoryList from '$lib/components/settings/SettingsCategoryList.svelte';
@@ -2205,9 +2193,9 @@
   }
 
   function riskClass(risk: string | null | undefined) {
-    if (risk === 'high') return 'border-red-400/40 bg-red-400/10 text-red-200';
-    if (risk === 'medium') return 'border-amber-300/40 bg-amber-300/10 text-amber-100';
-    return 'border-accent-line bg-accent-soft text-accent';
+    if (risk === 'high') return 'border-destructive/30 bg-destructive/10 text-destructive';
+    if (risk === 'medium') return 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400';
+    return 'border-primary/30 bg-primary/10 text-primary';
   }
 
   function quickActionMeta(actionId: QuickActionId | SwipeActionId) {
@@ -2228,13 +2216,13 @@
   function quickActionButtonClass(actionId: QuickActionId, compact = false) {
     const meta = quickActionCatalog.find((action) => action.id === actionId);
     const base = compact
-      ? 'grid place-items-center rounded-md border p-2 transition-all duration-150 active:scale-95'
-      : 'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0';
+      ? 'grid place-items-center rounded-lg border p-2 text-sm transition-all duration-200 active:scale-95'
+      : 'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0';
     if (meta?.tone === 'danger')
-      return `${base} border-red-400/30 bg-red-400/[0.04] text-red-100 hover:bg-red-400/10`;
+      return `${base} border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:shadow-lg hover:shadow-destructive/20`;
     if (meta?.tone === 'accent')
-      return `${base} border-accent/40 bg-accent text-black shadow-sm shadow-accent/20 hover:shadow-accent/30`;
-    return `${base} border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.08]`;
+      return `${base} border-primary/30 bg-gradient-to-b from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/40 hover:border-primary/50`;
+    return `${base} border-border bg-muted/40 text-foreground hover:bg-muted hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10`;
   }
 
   async function runQuickAction(actionId: QuickActionId, messageId = data.selected?.message?.id) {
@@ -2356,1179 +2344,463 @@
 </svelte:head>
 
 <main
-  class="relative grid h-screen grid-cols-1 overflow-hidden pt-16 text-zinc-100 md:grid-cols-[76px_minmax(320px,430px)_1fr] md:pt-0"
+  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground md:grid-cols-[60px_minmax(300px,380px)_1fr] md:pt-0"
 >
   {#if isLoading}
-    <div class="fixed left-0 right-0 top-0 z-50 h-1 bg-accent/20" transition:fade>
-      <div class="h-full bg-accent animate-pulse" style="width: 30%"></div>
-    </div>
-    <div
-      class="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border border-accent/20 bg-black/80 px-3 py-1.5 text-xs text-accent backdrop-blur-md"
-      transition:fade
-    >
-      <Loader2 size={14} class="animate-spin" />
-      <span>Working...</span>
+    <div class="fixed left-0 right-0 top-0 z-50 h-0.5 bg-primary/20" transition:fade>
+      <div class="h-full w-1/3 bg-primary animate-pulse"></div>
     </div>
   {/if}
 
   {#if mobileMenuOpen}
     <button
-      class="fixed inset-0 z-40 bg-black/70 md:hidden"
-      aria-label="Close navigation drawer"
+      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+      aria-label="Close navigation"
       onclick={() => (mobileMenuOpen = false)}
+      transition:fade={{ duration: 150 }}
     ></button>
     <aside
-      class="fixed left-0 top-0 z-50 h-full w-[82vw] max-w-xs border-r border-white/10 bg-black/95 p-4 backdrop-blur-md md:hidden"
-      in:fly={{ x: -24, duration: 180 }}
+      class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-border bg-background md:hidden"
+      in:fly={{ x: -24, duration: 200 }}
     >
-      <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-        <div class="min-w-0">
-          <p class="text-sm font-semibold text-zinc-100">Navigate</p>
-          <p class="truncate text-[11px] text-zinc-500">
-            {view === 'operations' ? 'AI operations' : view === 'settings' ? 'Settings' : 'Inbox'}
-          </p>
+      <div class="flex items-center justify-between border-b border-border/60 px-4 py-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Mail size={14} />
+          </div>
+          <p class="text-sm font-semibold text-foreground">Triage</p>
         </div>
         <button
-          class="rounded-md border border-white/10 p-2 text-zinc-300"
+          class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           onclick={() => (mobileMenuOpen = false)}
         >
           <X size={16} />
         </button>
       </div>
-      <div class="mt-4 space-y-2 overflow-y-auto pr-1">
+      <div class="space-y-1 p-3">
         <button
-          class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`}
+          class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => setQuickView('inbox')}
         >
           <Inbox size={18} />
-          <span class="text-sm font-medium">Inbox</span>
+          <span>Inbox</span>
         </button>
         <button
-          class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'operations' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`}
+          class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => openOperations('autopilot')}
         >
           <Bot size={18} />
-          <span class="text-sm font-medium">AI Operations</span>
+          <span>AI Operations</span>
         </button>
         <button
-          class={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${view === 'settings' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 bg-white/[0.03] text-zinc-300'}`}
+          class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => openSettings('accounts')}
         >
           <Settings size={18} />
-          <span class="text-sm font-medium">Settings</span>
+          <span>Settings</span>
         </button>
-        {#if ['inbox', 'unread', 'starred', 'pending'].includes(view)}
-          <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-            <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Inbox filters</p>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
-                onclick={() => setQuickView('inbox')}>All</button
-              >
-              <button
-                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
-                onclick={() => setQuickView('unread')}>Unread</button
-              >
-              <button
-                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
-                onclick={() => setQuickView('starred')}>Starred</button
-              >
-              <button
-                class={`rounded-full border px-3 py-1.5 text-xs ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-300'}`}
-                onclick={() => setQuickView('pending')}>Pending</button
-              >
-            </div>
-          </div>
-        {/if}
+      </div>
+      <div class="flex-1"></div>
+      <div class="border-t border-border/60 p-3">
+        <button
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200"
+          onclick={() => openCompose('compose')}
+        >
+          <PenLine size={18} />
+          <span>Compose</span>
+        </button>
       </div>
     </aside>
   {/if}
 
+  <!-- Mobile Header -->
   <header
-    class="fixed left-0 right-0 top-0 z-30 flex h-12 items-center gap-2 border-b border-white/10 bg-black/90 px-2 backdrop-blur-md md:hidden"
+    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/80 backdrop-cinematic px-3 md:hidden"
   >
     <div class="flex items-center gap-1">
       <button
-        class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200"
+        class="rounded-lg p-2 text-foreground hover:bg-muted transition-colors"
         aria-label="Open navigation"
         onclick={() => (mobileMenuOpen = true)}
       >
-        <Menu size={18} />
+        <Menu size={20} />
       </button>
       {#if view === 'settings' || view === 'operations' || data.query?.messageId}
         <button
-          class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200"
+          class="rounded-lg p-2 text-foreground hover:bg-muted transition-colors"
           aria-label="Back"
           onclick={mobileBack}
         >
-          <ChevronLeft size={18} />
+          <ChevronLeft size={20} />
         </button>
       {/if}
     </div>
     <div class="min-w-0 flex-1 text-center">
-      <p class="truncate text-sm font-medium text-zinc-100">{mobileHeaderTitle}</p>
+      <p class="truncate text-sm font-semibold text-foreground">{mobileHeaderTitle}</p>
     </div>
     <button
-      class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-200"
+      class="rounded-lg p-2 text-primary hover:bg-primary/10 transition-colors"
       aria-label="Compose"
       title="Compose"
       onclick={() => openCompose('compose')}
     >
-      <PenLine size={18} />
+      <PenLine size={20} />
     </button>
   </header>
 
-  <!-- Desktop Sidebar -->
+  <!-- Desktop Icon Rail -->
   <nav
-    class="glass z-10 hidden flex-col items-center gap-3 border-y-0 border-l-0 px-3 py-4 md:flex"
+    class="z-10 hidden flex-col items-center gap-1 border-r border-border/60 bg-background/80 backdrop-cinematic px-2 pt-4 md:flex"
   >
-    <div class="mb-4 grid h-10 w-10 place-items-center rounded-md bg-accent text-black">
-      <Mail size={20} />
+    <div class="mb-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+      <Mail size={18} />
     </div>
+    <div class="flex flex-col gap-1">
+      <button
+        class={`rounded-xl p-3 transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        title="Inbox"
+        onclick={() => setQuickView('inbox')}
+      >
+        <Inbox size={20} />
+      </button>
+      <button
+        class={`rounded-xl p-3 transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        title="Operations"
+        onclick={() => openOperations('autopilot')}
+      >
+        <Bot size={20} />
+      </button>
+      <button
+        class={`rounded-xl p-3 transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        title="Settings"
+        onclick={() => openSettings()}
+      >
+        <Settings size={20} />
+      </button>
+    </div>
+    <div class="flex-1"></div>
     <button
-      class={`focus-ring rounded-md p-3 text-zinc-300 ${isInboxView(view) ? 'bg-white/10' : ''}`}
-      title="Inbox"
-      onclick={() => setQuickView('inbox')}
+      class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/30 hover:scale-105 active:scale-95"
+      title="Compose (c)"
+      onclick={() => openCompose('compose')}
     >
-      <Inbox size={20} />
-    </button>
-    <button
-      class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'operations' ? 'bg-white/10' : ''}`}
-      title="Operations"
-      onclick={() => openOperations('autopilot')}
-    >
-      <Bot size={20} />
-    </button>
-    <button
-      class={`focus-ring rounded-md p-3 text-zinc-300 ${view === 'settings' ? 'bg-white/10' : ''}`}
-      title="Settings"
-      onclick={() => openSettings()}
-    >
-      <Settings size={20} />
+      <PenLine size={20} />
     </button>
   </nav>
 
-  <!-- Floating Compose Button -->
-  <button
-    class="fixed bottom-6 right-6 z-30 hidden h-14 w-14 items-center justify-center rounded-full bg-accent text-black shadow-lg shadow-accent/30 transition-transform hover:scale-105 focus-ring md:flex"
-    aria-label="Compose"
-    title="Compose (c)"
-    onclick={() => openCompose('compose')}
-  >
-    <PenLine size={24} />
-  </button>
-
   <section
-    class={`border-r border-white/10 bg-black/30 pb-16 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:block' : 'block'}`}
+    class={`border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
   >
-    <div class="border-b border-white/10 p-4">
+    <div class="border-b border-border/60 p-4">
       {#if onboardingTitle && onboardingBody}
-        <div class="mb-3 rounded-lg border border-accent/25 bg-accent/10 p-3 text-sm">
-          <p class="font-medium text-accent">{onboardingTitle}</p>
-          <p class="mt-1 text-xs leading-5 text-zinc-300">{onboardingBody}</p>
-          <div class="mt-3 flex flex-wrap gap-2">
+        <div class="mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4" transition:slide={{ duration: 200 }}>
+          <div class="flex items-start gap-3">
+            <div class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Sparkles size={14} class="text-primary" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-sm text-foreground">{onboardingTitle}</p>
+              <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{onboardingBody}</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <Button variant="default" size="sm" onclick={() => openSettings()}>Open config</Button>
+                {#if data.onboarding?.needsEmailSetup}
+                  <Button variant="outline" size="sm" onclick={() => openSettings()}>Add mailbox</Button>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      {#if isInboxView(view)}
+        <InboxSidebar
+          {view}
+          bind:search
+          bind:accountFilter
+          accounts={data.accounts}
+          folders={data.folders}
+          query={data.query}
+          bind:foldersExpanded
+          bind:showShortcutHelp
+          {isInboxView}
+          {setQuickView}
+          {applySearch}
+          {scheduleSearch}
+          {searchInput}
+          {selectFolder}
+        />
+      {:else if view === 'operations'}
+        <div class="space-y-4" in:fade={{ duration: 150 }}>
+          <div class="flex rounded-lg border border-border/60 bg-muted/30 p-1">
             <button
-              class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black"
-              onclick={() => openSettings()}
-            >
-              Open config
-            </button>
-            {#if data.onboarding?.needsEmailSetup}
-              <button
-                class="rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300"
-                onclick={() => openSettings()}
-              >
-                Add mailbox
-              </button>
-            {/if}
+              class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              onclick={() => openOperations('autopilot')}>Autopilot</button>
+            <button
+              class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              onclick={() => openOperations('executed')}>Executed</button>
           </div>
-        </div>
-      {/if}
-      <h1 class="hidden text-lg font-semibold md:block">Triage</h1>
-      {#if isInboxView(view)}
-        <div
-          class="mt-4 flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-3 py-2"
-        >
-          <Search size={16} class="text-zinc-500" />
-          <input
-            bind:this={searchInput}
-            class="w-full bg-transparent text-sm outline-none"
-            placeholder="Search mail..."
-            bind:value={search}
-            oninput={scheduleSearch}
-            onkeydown={(event) => event.key === 'Enter' && applySearch({ clearMessage: true })}
-          />
-          <button
-            type="button"
-            class="rounded-md border border-white/10 bg-white/[0.03] p-2 text-zinc-300 hover:bg-white/[0.06]"
-            title={showShortcutHelp ? 'Hide keyboard shortcuts' : 'Show keyboard shortcuts'}
-            aria-label={showShortcutHelp ? 'Hide keyboard shortcuts' : 'Show keyboard shortcuts'}
-            onclick={() => (showShortcutHelp = !showShortcutHelp)}
-          >
-            <Keyboard size={14} />
-          </button>
-        </div>
-        <div class="mt-2">
-          <select
-            class="w-full rounded-md border border-white/10 bg-black/30 px-2 py-2 text-xs text-zinc-300 outline-none"
-            bind:value={accountFilter}
-            onchange={() => applySearch({ clearMessage: true })}
-          >
-            <option value="">All accounts</option>
-            {#each data.accounts as account (account.id)}
-              <option value={String(account.id)}>{account.email}</option>
-            {/each}
-          </select>
-        </div>
-        <div class="mt-2">
-          <button
-            class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-white/[0.05]"
-            onclick={() => (foldersExpanded = !foldersExpanded)}
-            aria-expanded={foldersExpanded}
-          >
-            <span class="flex min-w-0 items-center gap-2">
-              <FolderOpen size={14} class="shrink-0" />
-              <span class="truncate">Folders</span>
-            </span>
-            <span class="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
-              {foldersExpanded ? 'Hide' : `Show ${data.folders.length}`}
-              <ChevronLeft size={12} class={foldersExpanded ? 'rotate-90' : '-rotate-90'} />
-            </span>
-          </button>
-          {#if foldersExpanded}
-            <div class="space-y-1 pl-1">
-              {#each folderGroups() as group (group.accountId)}
-                <div class="rounded-md border border-white/10 bg-white/[0.03] p-1">
-                  <div class="flex items-center justify-between gap-2 px-2 py-1">
-                    <p class="truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">
-                      {group.accountEmail}
-                    </p>
-                    {#if accountFilter}
-                      <span
-                        class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-zinc-500"
-                        >{group.folders.length}</span
-                      >
-                    {/if}
-                  </div>
-                  <div class="space-y-1">
-                    {#each group.folders as folder (folder.id)}
-                      <button
-                        class={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-white/[0.05] ${data.query?.folder === folder.path && String(data.query?.accountId || '') === String(folder.accountId) ? 'bg-white/[0.08] text-accent' : 'text-zinc-400'}`}
-                        onclick={() => selectFolder(folder.accountId, folder.path)}
-                      >
-                        <span class="flex min-w-0 items-center gap-2">
-                          <FolderOpen size={14} class="shrink-0" />
-                          <span class="truncate">{folder.path}</span>
-                        </span>
-                        <span class="shrink-0 text-[11px] text-zinc-500"
-                          >{folder.unread ? `${folder.unread}/` : ''}{folder.total}</span
-                        >
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/each}
+          <Card class="p-4" hover>
+            <div class="flex items-center gap-2 mb-2">
+              <Bot size={16} class="text-primary" />
+              <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI Operations</p>
             </div>
-          {/if}
-        </div>
-      {/if}
-      {#if isInboxView(view)}
-        <div class="mt-3 flex flex-wrap gap-1.5">
-          <button
-            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'inbox' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
-            onclick={() => setQuickView('inbox')}>All</button
-          >
-          <button
-            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'unread' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
-            onclick={() => setQuickView('unread')}>Unread</button
-          >
-          <button
-            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'starred' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
-            onclick={() => setQuickView('starred')}>Starred</button
-          >
-          <button
-            class={`rounded-full border px-2.5 py-1 text-[11px] ${view === 'pending' ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/10 text-zinc-400'}`}
-            onclick={() => setQuickView('pending')}>Pending</button
-          >
-        </div>
-        {#if showShortcutHelp}
-          <div class="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-zinc-300">
-            <div class="flex items-center gap-2 text-zinc-200">
-              <Keyboard size={14} class="text-accent" />
-              <span class="font-medium">Keyboard shortcuts</span>
+            <h2 class="text-sm font-semibold text-foreground">
+              {operationsCategory === 'autopilot' ? 'Autopilot' : 'Executed actions'}
+            </h2>
+            <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {operationsCategory === 'autopilot'
+                ? `Review pending AI actions. ${data.autopilot?.stats?.proposed || 0} items waiting.`
+                : `Review the log. ${data.executed?.length || 0} actions recorded.`}
+            </p>
+            <div class="mt-4 flex gap-2">
+              <Button variant="outline" size="sm" onclick={() => openOperations(operationsCategory)}>Refresh</Button>
+              {#if operationsCategory === 'autopilot'}
+                <Button variant="default" size="sm" onclick={runAutopilot}>Run</Button>
+              {/if}
             </div>
-            <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">/</kbd> search</div>
-              <div>
-                <kbd class="rounded border border-white/10 px-1.5 py-0.5">j</kbd>/<kbd
-                  class="rounded border border-white/10 px-1.5 py-0.5">k</kbd
-                > move
-              </div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">c</kbd> compose</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">r</kbd> reply</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">a</kbd> reply all</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">f</kbd> forward</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">s</kbd> star</div>
-              <div>
-                <kbd class="rounded border border-white/10 px-1.5 py-0.5">u</kbd> unread/read
-              </div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">e</kbd> archive</div>
-              <div><kbd class="rounded border border-white/10 px-1.5 py-0.5">#</kbd> trash</div>
-              <div>
-                <kbd class="rounded border border-white/10 px-1.5 py-0.5">?</kbd> toggle help
-              </div>
-            </div>
-          </div>
-        {/if}
-      {/if}
+          </Card>
+        </div>
+{:else if view === 'settings'}
+         <div class="space-y-1" in:fade={{ duration: 150 }}>
+           <h2 class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3">Settings</h2>
+           {#each settingsCategories as category (category.key)}
+             <button
+               class={`w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${settingsCategory === category.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+               onclick={() => openSettingsCategory(category.key)}
+             >
+               <p class="text-sm font-medium">{category.label}</p>
+               <p class="mt-0.5 text-xs text-muted-foreground/80">{category.detail}</p>
+             </button>
+           {/each}
+         </div>
+       {/if}
+
       {#if status}
-        <p class="mt-3 text-xs text-accent">{status}</p>
+        <div class="mt-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2" transition:slide={{ duration: 200 }}>
+          <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
+          <p class="text-xs font-medium text-primary">{status}</p>
+        </div>
       {/if}
     </div>
 
-    {#if view === 'operations'}
-      <div class="space-y-3 overflow-y-auto p-4" in:fade={{ duration: 150 }}>
-        <div class="flex rounded-md border border-white/10 p-1 text-xs">
-          <button
-            class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-            onclick={() => openOperations('autopilot')}>Autopilot</button
-          >
-          <button
-            class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-            onclick={() => openOperations('executed')}>Executed</button
-          >
-        </div>
-        <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-          <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">AI Operations</p>
-          <h2 class="mt-2 text-sm font-medium text-zinc-200">
-            {operationsCategory === 'autopilot' ? 'Autopilot' : 'Executed actions'}
-          </h2>
-          <p class="mt-1 text-xs leading-5 text-zinc-500">
-            {operationsCategory === 'autopilot'
-              ? `Review pending AI actions and run the agent when needed. ${data.autopilot?.stats?.proposed || 0} items are waiting.`
-              : `Review the execution log and audit trail. ${data.executed?.length || 0} actions recorded.`}
-          </p>
-          <div class="mt-3 flex gap-2">
-            <button
-              class="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300"
-              onclick={() => openOperations(operationsCategory)}
-            >
-              Refresh
-            </button>
-            {#if operationsCategory === 'autopilot'}
-              <button
-                class="rounded-md bg-accent px-3 py-1 text-[11px] font-medium text-black"
-                onclick={runAutopilot}>Run</button
-              >
-            {/if}
-          </div>
-        </div>
-      </div>
-    {:else if view === 'settings'}
-      <div class="space-y-2 overflow-y-auto p-4" in:fade={{ duration: 150 }}>
-        <h2 class="text-sm font-medium text-zinc-300">Settings</h2>
-        {#each settingsCategories as category (category.key)}
-          <button
-            class={`w-full rounded-lg border px-3 py-2 text-left transition-all duration-150 hover:-translate-y-0.5 ${settingsCategory === category.key ? 'border-accent/40 bg-accent/10 text-accent shadow-sm shadow-accent/10' : 'border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]'}`}
-            onclick={() => openSettingsCategory(category.key)}
-          >
-            <p class="text-sm font-medium">{category.label}</p>
-            <p class="mt-1 text-xs text-zinc-500">{category.detail}</p>
-          </button>
-        {/each}
-      </div>
-    {:else}
-      <div class="h-[calc(100vh-108px)] overflow-y-auto" in:fade={{ duration: 150 }}>
-        {#each data.messages as message (message.id)}
-          <div
-            class="relative overflow-hidden border-b border-white/5"
-            animate:flip={{ duration: 180 }}
-          >
-            <div
-              class="absolute inset-y-0 left-0 flex w-44 items-center gap-2 bg-accent/15 px-4 text-xs text-accent transition-opacity duration-150"
-              style={`opacity: ${swiping?.id === message.id && swiping.deltaX > 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}
-            >
-              <Archive size={15} />
-              <span
-                >{swipeLabel(
-                  swiping?.id === message.id && swiping.deltaX > 0
-                    ? swipeActionForDelta(swiping.deltaX)
-                    : swipeSettings.rightShort
-                )}</span
-              >
-            </div>
-            <div
-              class="absolute inset-y-0 right-0 flex w-44 items-center justify-end gap-2 bg-red-500/15 px-4 text-xs text-red-100 transition-opacity duration-150"
-              style={`opacity: ${swiping?.id === message.id && swiping.deltaX < 0 ? Math.min(1, Math.abs(swiping.deltaX) / 120) : 0}`}
-            >
-              <span
-                >{swipeLabel(
-                  swiping?.id === message.id && swiping.deltaX < 0
-                    ? swipeActionForDelta(swiping.deltaX)
-                    : swipeSettings.leftShort
-                )}</span
-              >
-              <Trash2 size={15} />
-            </div>
-            <button
-              data-testid="message-row"
-              class={`relative block w-full touch-pan-y bg-black px-4 py-3 text-left transition-[background,transform,box-shadow] duration-150 hover:bg-white/[0.04] ${data.selected?.message?.id === message.id ? 'bg-white/[0.06]' : ''}`}
-              style={`transform: translateX(${swiping?.id === message.id ? swiping.deltaX : 0}px); box-shadow: ${swiping?.id === message.id && Math.abs(swiping.deltaX) > 56 ? '0 10px 30px rgba(0,0,0,0.28)' : 'none'}`}
-              onpointerdown={(event) => startSwipe(event, message.id)}
-              onpointermove={updateSwipe}
-              onpointerup={(event) => finishSwipe(event, message.id)}
-              onpointercancel={cancelSwipe}
-              onkeydown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  selectMessage(message.id);
-                }
-              }}
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex min-w-0 items-center gap-2">
-                  <p
-                    class={`truncate text-sm ${message.isRead ? 'font-medium text-zinc-400' : 'font-semibold text-zinc-100'}`}
-                  >
-                    {message.from}
-                  </p>
-                </div>
-                <time class="shrink-0 text-xs text-zinc-500"
-                  >{new Date(message.date).toLocaleDateString()}</time
-                >
-              </div>
-              <p
-                class={`mt-1 truncate text-sm ${message.isRead ? 'text-zinc-300' : 'font-medium text-white'}`}
-              >
-                {message.isFlagged ? '★ ' : ''}{message.subject}
-              </p>
-              <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{message.snippet}</p>
-              <div class="mt-2 flex items-center gap-2">
-                <span
-                  class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500"
-                  >{message.folderPath}</span
-                >
-                <span
-                  class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-400"
-                  >{message.accountEmail}</span
-                >
-                {#if message.suggestionStatus}
-                  <span
-                    class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(message.riskLevel)}`}
-                    >{message.recommendedAction}</span
-                  >
-                {/if}
-              </div>
-            </button>
-          </div>
-        {/each}
-      </div>
+    {#if isInboxView(view)}
+      <MessageList
+        messages={data.messages}
+        selectedId={data.selected?.message?.id ?? null}
+        {swiping}
+        swipeSettings={swipeSettings}
+        {view}
+        {swipeLabel}
+        {swipeActionForDelta}
+        {startSwipe}
+        {updateSwipe}
+        {finishSwipe}
+        {cancelSwipe}
+        {selectMessage}
+        {riskClass}
+      />
     {/if}
   </section>
 
   <section
-    class={`min-w-0 overflow-y-auto pb-40 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
+    class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
   >
-    {#if data.selected && !['settings', 'operations'].includes(view)}
-      <article class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
-        <header class="border-b border-white/10 pb-6">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400"
-              >{data.selected.account?.email}</span
-            >
-            <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400"
-              >{data.selected.message.folderPath}</span
-            >
-          </div>
-          <h2 class="mt-4 text-2xl font-semibold tracking-tight md:text-3xl">
-            {data.selected.message.subject}
-          </h2>
-          <p class="mt-3 text-sm text-zinc-400">
-            From {data.selected.message.from} to {data.selected.message.to} · {new Date(
-              data.selected.message.date
-            ).toLocaleString()}
-          </p>
-        </header>
-
-        <div
-          class="sticky top-0 z-10 hidden flex-wrap items-center gap-2 border-b border-white/10 bg-black/75 py-3 backdrop-blur-md md:flex"
-          in:fly={{ y: -6, duration: 180 }}
-        >
-          {#each quickActionIds as actionId (actionId)}
-            <button
-              data-testid={actionId === 'reply_all'
-                ? 'reply-all'
-                : actionId === 'archive'
-                  ? 'quick-action-archive'
-                  : undefined}
-              class={quickActionButtonClass(actionId)}
-              onclick={() => runQuickAction(actionId)}
-            >
-              {#if actionId === 'reply'}<Reply size={16} />
-              {:else if actionId === 'reply_all'}<ReplyAll size={16} />
-              {:else if actionId === 'forward'}<Forward size={16} />
-              {:else if actionId === 'archive'}<Archive size={16} />
-              {:else if actionId === 'delete'}<Trash2 size={16} />
-              {:else if actionId === 'spam'}<ShieldAlert size={16} />
-              {:else if actionId === 'toggle_read'}
-                {#if data.selected.message.isRead}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
-              {:else if actionId === 'star'}<Star size={16} />{/if}
-              {quickActionMeta(actionId)?.label}
-            </button>
-          {/each}
-          <select
-            class="min-w-44 rounded-md border border-white/10 bg-black/60 px-3 py-2 text-sm text-zinc-200 outline-none"
-            onchange={(event) => moveSelected(event.currentTarget.value)}
-          >
-            <option value="">Move...</option>
-            {#each data.folders.filter((folder) => folder.accountId === data.selected?.message.accountId) as folder (folder.id)}
-              <option value={folder.path}>{folder.path}</option>
-            {/each}
-          </select>
-        </div>
-
-        {#if data.selected.suggestion}
-          <section
-            class={`mt-8 rounded-lg border p-4 md:p-5 ${riskClass(data.selected.suggestion.riskLevel)}`}
-            data-testid="ai-action-card"
-            in:fly={{ y: 20, duration: 300, delay: 100 }}
-          >
-            <div class="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p class="text-xs uppercase tracking-[0.18em] opacity-80">AI Action Card</p>
-                <h3 class="mt-2 text-xl font-semibold">{data.selected.suggestion.category}</h3>
-                <p class="mt-2 text-sm opacity-90">{data.selected.suggestion.reasoningSummary}</p>
-              </div>
-              <div class="flex flex-wrap gap-2 text-xs">
-                <span class="rounded-full border border-current/20 px-2 py-1"
-                  >{data.selected.suggestion.recommendedAction}</span
-                >
-                <span class="rounded-full border border-current/20 px-2 py-1"
-                  >{data.selected.suggestion.riskLevel} risk</span
-                >
-              </div>
-            </div>
-            {#if data.selected.suggestion.targetFolder}
-              <p class="mt-4 text-sm">Target folder: {data.selected.suggestion.targetFolder}</p>
-            {/if}
-            {#if data.selected.suggestion.delegateInstructions}
-              <p class="mt-4 text-sm">Delegate: {data.selected.suggestion.delegateInstructions}</p>
-            {/if}
-            {#if data.selected.suggestion.draftReply || ['reply', 'forward'].includes(data.selected.suggestion.recommendedAction)}
-              <label class="mt-5 block text-sm font-medium" for="draft-reply">Draft</label>
-              <div class="relative mt-2">
-                <textarea
-                  id="draft-reply"
-                  data-testid="draft-reply"
-                  class="min-h-44 w-full resize-y rounded-md border border-current/20 bg-black/30 p-3 pr-12 text-sm text-white outline-none"
-                  bind:value={draftText}
-                ></textarea>
-                <div class="absolute right-2 top-2">
-                  <DictationButton
-                    targetId="draft-reply"
-                    activeTargetId={dictationTarget?.id || null}
-                    recording={dictationActive}
-                    unavailable={dictationUnavailable}
-                    level={dictationLevel}
-                    onToggle={toggleDictation}
-                  />
-                </div>
-              </div>
-            {/if}
-            <div class="mt-5 flex flex-wrap items-center gap-2">
-              <button
-                data-testid="execute-suggestion"
-                class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
-                onclick={executeSuggestion}><Send size={16} /> Execute</button
-              >
-              <button
-                class="rounded-md border border-current/20 px-3 py-2 text-sm"
-                onclick={saveEdit}>Save Edit</button
-              >
-              <button
-                class="rounded-md border border-current/20 px-3 py-2 text-sm"
-                onclick={rejectSuggestion}>Reject</button
-              >
-              <div class="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto md:flex-1">
-                <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <input
-                    id="regen-note"
-                    class="min-w-0 flex-1 rounded-md border border-current/20 bg-black/30 px-3 py-2 text-sm text-white"
-                    placeholder="Tweak this suggestion..."
-                    bind:value={regenNote}
-                  />
-                  <DictationButton
-                    targetId="regen-note"
-                    activeTargetId={dictationTarget?.id || null}
-                    recording={dictationActive}
-                    unavailable={dictationUnavailable}
-                    level={dictationLevel}
-                    onToggle={toggleDictation}
-                  />
-                </div>
-                <button
-                  class="flex items-center gap-2 rounded-md border border-current/20 px-3 py-2 text-sm"
-                  onclick={regenerate}><RefreshCw size={16} /> Regenerate</button
-                >
-              </div>
-            </div>
-          </section>
-        {:else}
-          <div in:fade>
-            <button
-              class="mt-6 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
-              onclick={() => generateSuggestion(data.selected?.message.id ?? 0)}
-              >Generate suggestion</button
-            >
-          </div>
-        {/if}
-
-        <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
-          <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Outcome Learning</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
-              onclick={() => recordMessageOutcome('resolved')}>Resolved</button
-            >
-            <button
-              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
-              onclick={() => recordMessageOutcome('needs_followup')}>Needs follow-up</button
-            >
-            <button
-              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
-              onclick={() => recordMessageOutcome('bad_draft')}>Bad draft</button
-            >
-            <button
-              class="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
-              onclick={() => recordMessageOutcome('wrong_action')}>Wrong action</button
-            >
-          </div>
-        </section>
-
-        <section
-          class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5"
-          data-testid="agent-task-card"
-        >
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Agent Task Plan</p>
-              <h3 class="mt-1 text-lg font-semibold">Action Graph</h3>
-            </div>
-            <button
-              data-testid="plan-task"
-              class="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200"
-              onclick={createTaskPlan}
-            >
-              <Bot size={15} />
-              Plan Task
-            </button>
-          </div>
-          <div class="mt-3 flex gap-2">
-            <div class="flex min-w-0 flex-1 items-center gap-2">
-              <input
-                id="task-note"
-                class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none"
-                placeholder="Add planning note (optional)..."
-                bind:value={taskNote}
-              />
-              <DictationButton
-                targetId="task-note"
-                activeTargetId={dictationTarget?.id || null}
-                recording={dictationActive}
-                unavailable={dictationUnavailable}
-                level={dictationLevel}
-                onToggle={toggleDictation}
-              />
-            </div>
-          </div>
-          {#if data.tasks?.length}
-            <div class="mt-4 space-y-3">
-              {#each data.tasks as task (task.run.id)}
-                <article class="rounded-md border border-white/10 bg-black/30 p-3">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p class="text-sm font-medium">{task.run.summary}</p>
-                      <p class="text-xs text-zinc-500">
-                        {task.run.status} · {task.run.complexity} · {task.run.providerUsed}/{task
-                          .run.modelUsed}
-                      </p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                      <button
-                        data-testid="approve-task"
-                        class="rounded-md border border-white/10 px-2 py-1 text-xs"
-                        onclick={() => approveTask(task.run.id)}>Approve all</button
-                      >
-                      <button
-                        data-testid="execute-task"
-                        class="rounded-md border border-white/10 px-2 py-1 text-xs"
-                        onclick={() => executeTask(task.run.id)}>Execute</button
-                      >
-                      <button
-                        class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200"
-                        onclick={() => rejectTask(task.run.id)}>Reject</button
-                      >
-                    </div>
-                  </div>
-                  {#if task.run.errorMessage}
-                    <p class="mt-2 text-xs text-red-200">{task.run.errorMessage}</p>
-                  {/if}
-                  {#if task.run.resultSummary}
-                    <p class="mt-2 text-xs text-accent">{task.run.resultSummary}</p>
-                  {/if}
-                  <div class="mt-3 space-y-2">
-                    {#each task.steps as step (step.id)}
-                      <div class="rounded-md border border-white/10 px-2 py-2">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                          <p class="text-xs font-medium">{step.title}</p>
-                          <div class="flex items-center gap-2">
-                            <span
-                              class={`rounded-full border px-2 py-0.5 text-[11px] ${riskClass(step.riskLevel)}`}
-                              >{step.status}</span
-                            >
-                            {#if step.status === 'pending'}
-                              <button
-                                class="rounded-md border border-white/10 px-2 py-0.5 text-[11px]"
-                                onclick={() => approveTask(task.run.id, step.id)}>Approve</button
-                              >
-                            {/if}
-                          </div>
-                        </div>
-                        <p class="mt-1 text-xs text-zinc-400">{step.details}</p>
-                        {#if step.toolName}
-                          <p class="mt-1 text-[11px] text-zinc-500">Tool: {step.toolName}</p>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                </article>
-              {/each}
-            </div>
-          {:else}
-            <p class="mt-3 text-xs text-zinc-500">No task plan yet for this message.</p>
-          {/if}
-        </section>
-
-        {#if data.selected.thread?.length > 1}
-          <section class="mt-8 rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-5">
-            <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Conversation</p>
-            <div class="mt-4 space-y-3">
-              {#each data.selected.thread as item (item.id)}
-                <button
-                  class={`w-full rounded-md border p-3 text-left ${item.id === data.selected.message.id ? 'border-accent/40 bg-accent-soft' : 'border-white/10 bg-black/20'}`}
-                  onclick={() => selectMessage(item.id)}
-                >
-                  <div class="flex items-center justify-between gap-3">
-                    <p class="truncate text-sm font-medium">{item.from}</p>
-                    <time class="shrink-0 text-xs text-zinc-500"
-                      >{new Date(item.date).toLocaleString()}</time
-                    >
-                  </div>
-                  <p class="mt-1 truncate text-xs text-zinc-400">{item.subject}</p>
-                  <p class="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.bodyText}</p>
-                </button>
-              {/each}
-            </div>
-          </section>
-        {/if}
-
-        <section
-          class="prose prose-invert mt-8 max-w-none rounded-lg border border-white/10 bg-white/[0.03] p-4 md:p-6"
-        >
-          {#if data.selected.message.safeBodyHtml}
-            <div class="mb-4 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-              <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Message Body</p>
-              <div class="flex items-center gap-2 rounded-md border border-white/10 p-1 text-xs">
-                <button
-                  class={`rounded px-2 py-1 ${bodyMode === 'html' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-                  onclick={() => (bodyMode = 'html')}>HTML</button
-                >
-                <button
-                  class={`rounded px-2 py-1 ${bodyMode === 'text' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-                  onclick={() => (bodyMode = 'text')}>Text</button
-                >
-              </div>
-            </div>
-          {/if}
-          {#if bodyMode === 'html' && data.selected.message.safeBodyHtml}
-            <article class="email-html overflow-x-auto text-sm leading-7 text-zinc-200">
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-              {@html data.selected.message.safeBodyHtml}
-            </article>
-          {:else}
-            <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-zinc-200">{data
-                .selected.message.bodyText}</pre>
-          {/if}
-        </section>
-
-        {#if data.selected.attachments?.length}
-          <details class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-            <summary
-              class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm text-zinc-300"
-            >
-              <span class="inline-flex items-center gap-2">
-                <Paperclip size={14} class="text-zinc-500" />
-                <span>Attachments</span>
-                <span
-                  class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500"
-                  >{data.selected.attachments.length}</span
-                >
-              </span>
-              <span class="text-xs text-zinc-500">Show files</span>
-            </summary>
-            <div class="mt-3 flex flex-wrap gap-2">
-              {#each data.selected.attachments as attachment (attachment.id)}
-                <a
-                  class="inline-flex items-center gap-2 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
-                  href={`/api/messages/${data.selected.message.id}/attachments/${attachment.id}`}
-                >
-                  <Paperclip size={13} />
-                  <span>{attachment.filename}</span>
-                  <span class="text-zinc-500"
-                    >{Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB</span
-                  >
-                </a>
-              {/each}
-            </div>
-          </details>
-        {/if}
-      </article>
-    {:else if view === 'operations'}
-      <div class="mx-auto max-w-5xl p-8" in:fade={{ duration: 150 }}>
-        <div class="mb-4 flex rounded-md border border-white/10 p-1 text-xs">
+<MessageDetail
+      selected={data.selected}
+      {view}
+      quickActionIds={quickActionIds}
+      {quickActionMeta}
+      {runQuickAction}
+      {moveSelected}
+      folders={data.folders}
+      bind:bodyMode
+      bind:draftText
+      bind:regenNote
+      bind:taskNote
+      dictationTargetId={dictationTarget?.id || null}
+      {dictationActive}
+      {dictationUnavailable}
+      {dictationLevel}
+      {toggleDictation}
+      {executeSuggestion}
+      {saveEdit}
+      {rejectSuggestion}
+      {regenerate}
+      {generateSuggestion}
+      {recordMessageOutcome}
+      {createTaskPlan}
+      {selectMessage}
+      {riskClass}
+      {approveTask}
+      {rejectTask}
+      {executeTask}
+    />
+    {#if view === 'operations'}
+      <div class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
+        <div class="mb-6 flex rounded-lg border border-border/60 bg-muted/30 p-1">
           <button
-            class={`rounded px-2 py-1 ${operationsCategory === 'autopilot' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-            onclick={() => openOperations('autopilot')}>Autopilot</button
-          >
+            class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            onclick={() => openOperations('autopilot')}>Autopilot</button>
           <button
-            class={`rounded px-2 py-1 ${operationsCategory === 'executed' ? 'bg-accent text-black' : 'text-zinc-400'}`}
-            onclick={() => openOperations('executed')}>Executed</button
-          >
+            class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            onclick={() => openOperations('executed')}>Executed</button>
         </div>
         {#if operationsCategory === 'autopilot'}
           <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p class="text-xs uppercase tracking-[0.18em] text-accent">AI Operations</p>
-              <h2 class="mt-2 text-2xl font-semibold">Autopilot Control Room</h2>
-              <p class="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+              <p class="text-xs font-medium text-primary">AI Operations</p>
+              <h2 class="mt-1 text-2xl font-semibold text-foreground">Autopilot Control Room</h2>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 The agent scans mail, proposes actions, tracks follow-ups, and keeps a decision log.
                 Sends, forwards, and delegation stay approval-gated.
               </p>
             </div>
-            <button
-              class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
-              onclick={runAutopilot}>Run Autopilot</button
-            >
+            <Button variant="default" onclick={runAutopilot}>Run Autopilot</Button>
           </div>
 
           <section class="mt-6 grid gap-3 md:grid-cols-4">
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-2xl font-semibold">{data.autopilot?.stats?.proposed || 0}</p>
-              <p class="mt-1 text-xs text-zinc-500">Awaiting review</p>
-            </div>
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-2xl font-semibold">{data.autopilot?.stats?.approved || 0}</p>
-              <p class="mt-1 text-xs text-zinc-500">Approved</p>
-            </div>
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-2xl font-semibold">{data.autopilot?.stats?.openFollowUps || 0}</p>
-              <p class="mt-1 text-xs text-zinc-500">Open follow-ups</p>
-            </div>
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-2xl font-semibold">{data.autopilot?.stats?.avgLatencyMs || 0}ms</p>
-              <p class="mt-1 text-xs text-zinc-500">AI latency</p>
-            </div>
+            {#each [{value: data.autopilot?.stats?.proposed || 0, label: 'Awaiting review'}, {value: data.autopilot?.stats?.approved || 0, label: 'Approved'}, {value: data.autopilot?.stats?.openFollowUps || 0, label: 'Open follow-ups'}, {value: `${data.autopilot?.stats?.avgLatencyMs || 0}ms`, label: 'AI latency'}] as stat, i (i)}
+              <Card class="p-4">
+                <p class="text-2xl font-semibold text-foreground">{stat.value}</p>
+                <p class="mt-1 text-xs text-muted-foreground">{stat.label}</p>
+              </Card>
+            {/each}
           </section>
 
-          <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 class="font-medium">Policy</h3>
-                <p class="mt-1 text-sm text-zinc-400">
-                  Keep this boring: simulation first, explicit sends always.
-                </p>
+          <section class="mt-6">
+            <Card class="p-5">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 class="font-medium text-foreground">Policy</h3>
+                  <p class="mt-1 text-sm text-muted-foreground">Keep this boring: simulation first, explicit sends always.</p>
+                </div>
+                <Button variant="default" size="sm" onclick={saveAutopilotPolicy}>Save Policy</Button>
               </div>
-              <button
-                class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
-                onclick={saveAutopilotPolicy}>Save Policy</button
-              >
-            </div>
-            <div class="mt-4 grid gap-3 md:grid-cols-2">
-              <label
-                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
-              >
-                <span>Autopilot enabled</span>
-                <input type="checkbox" bind:checked={autopilotPolicy.autopilotEnabled} />
-              </label>
-              <label
-                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
-              >
-                <span>Dry-run only</span>
-                <input type="checkbox" bind:checked={autopilotPolicy.dryRunOnly} />
-              </label>
-              <label
-                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
-              >
-                <span>Auto-file low-risk mail</span>
-                <input type="checkbox" bind:checked={autopilotPolicy.allowAutoFileLowRisk} />
-              </label>
-              <label
-                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3 text-sm"
-              >
-                <span>Auto-handle low-risk no-action</span>
-                <input type="checkbox" bind:checked={autopilotPolicy.allowAutoNoActionLowRisk} />
-              </label>
-              <label class="rounded-md border border-white/10 bg-black/20 p-3 text-sm">
-                <span>Messages per run</span>
-                <input
-                  class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2"
-                  type="number"
-                  min="1"
-                  max="200"
-                  bind:value={autopilotPolicy.maxMessagesPerRun}
-                />
-              </label>
-              <label class="rounded-md border border-white/10 bg-black/20 p-3 text-sm">
-                <span>Max auto actions per run</span>
-                <input
-                  class="mt-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2"
-                  type="number"
-                  min="0"
-                  max="100"
-                  bind:value={autopilotPolicy.maxAutoActionsPerRun}
-                />
-              </label>
-            </div>
+              <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Autopilot enabled</span><input type="checkbox" bind:checked={autopilotPolicy.autopilotEnabled} />
+                </label>
+                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Dry-run only</span><input type="checkbox" bind:checked={autopilotPolicy.dryRunOnly} />
+                </label>
+                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Auto-file low-risk mail</span><input type="checkbox" bind:checked={autopilotPolicy.allowAutoFileLowRisk} />
+                </label>
+                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Auto-handle low-risk no-action</span><input type="checkbox" bind:checked={autopilotPolicy.allowAutoNoActionLowRisk} />
+                </label>
+                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Messages per run</span><input class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring" type="number" min="1" max="200" bind:value={autopilotPolicy.maxMessagesPerRun} />
+                </label>
+                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Max auto actions per run</span><input class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring" type="number" min="0" max="100" bind:value={autopilotPolicy.maxAutoActionsPerRun} />
+                </label>
+              </div>
+            </Card>
           </section>
 
           <section class="mt-6 grid gap-4 xl:grid-cols-2">
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-              <h3 class="font-medium">Recent Runs</h3>
+            <Card class="p-5">
+              <h3 class="font-medium text-foreground">Recent Runs</h3>
               <div class="mt-4 space-y-2">
                 {#each data.autopilot?.runs || [] as run (run.id)}
-                  <div class="rounded-md border border-white/10 bg-black/20 p-3">
-                    <p class="text-sm">{run.status} · {run.mode}</p>
-                    <p class="mt-1 text-xs text-zinc-500">
-                      Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}
-                    </p>
-                    {#if run.errorMessage}<p class="mt-1 text-xs text-red-200">
-                        {run.errorMessage}
-                      </p>{/if}
+                  <div class="rounded-md border border-border bg-background/50 p-3">
+                    <p class="text-sm text-foreground">{run.status} · {run.mode}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}</p>
+                    {#if run.errorMessage}<p class="mt-1 text-xs text-destructive">{run.errorMessage}</p>{/if}
                   </div>
                 {:else}
-                  <p class="text-sm text-zinc-500">No runs yet.</p>
+                  <p class="text-sm text-muted-foreground">No runs yet.</p>
                 {/each}
               </div>
-            </div>
-            <div class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-              <h3 class="font-medium">Thread Intelligence</h3>
+            </Card>
+            <Card class="p-5">
+              <h3 class="font-medium text-foreground">Thread Intelligence</h3>
               <div class="mt-4 space-y-2">
                 {#each data.autopilot?.summaries || [] as summary (summary.id)}
-                  <article class="rounded-md border border-white/10 bg-black/20 p-3">
-                    <p class="truncate text-sm font-medium">{summary.subject}</p>
-                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">
-                      {summary.summary}
-                    </p>
-                    <p class="mt-2 text-xs text-accent">{summary.nextAction}</p>
-                  </article>
+                  <Card class="p-3">
+                    <p class="truncate text-sm font-medium text-foreground">{summary.subject}</p>
+                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{summary.summary}</p>
+                    <p class="mt-2 text-xs text-primary">{summary.nextAction}</p>
+                  </Card>
                 {:else}
-                  <p class="text-sm text-zinc-500">Run autopilot to build thread summaries.</p>
+                  <p class="text-sm text-muted-foreground">Run autopilot to build thread summaries.</p>
                 {/each}
               </div>
-            </div>
+            </Card>
           </section>
 
-          <section class="mt-6 rounded-lg border border-white/10 bg-white/[0.03] p-5">
-            <h3 class="font-medium">AI Observability</h3>
-            <div class="mt-4 overflow-x-auto">
-              <table class="w-full text-left text-xs">
-                <thead class="text-zinc-500">
-                  <tr
-                    ><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th><th
-                      >Prompt</th
-                    ></tr
-                  >
-                </thead>
-                <tbody>
-                  {#each data.autopilot?.observability || [] as item (item.id)}
-                    <tr class="border-t border-white/10">
-                      <td class="py-2">{item.operation}</td>
-                      <td>{item.provider}/{item.model}</td>
-                      <td>{item.status}</td>
-                      <td>{item.latencyMs}ms</td>
-                      <td>{item.promptHash}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+          <section class="mt-6">
+            <Card class="p-5">
+              <h3 class="font-medium text-foreground">AI Observability</h3>
+              <div class="mt-4 overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="text-muted-foreground">
+                    <tr><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th><th>Prompt</th></tr>
+                  </thead>
+                  <tbody>
+                    {#each data.autopilot?.observability || [] as item (item.id)}
+                      <tr class="border-t border-border"><td class="py-2 text-foreground">{item.operation}</td><td class="text-foreground">{item.provider}/{item.model}</td><td class="text-foreground">{item.status}</td><td class="text-foreground">{item.latencyMs}ms</td><td class="text-muted-foreground">{item.promptHash}</td></tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           </section>
         {:else if operationsCategory === 'executed'}
-          <h2 class="text-2xl font-semibold">Executed Actions</h2>
+          <h2 class="text-2xl font-semibold text-foreground">Executed Actions</h2>
           <div class="mt-6 space-y-3">
             {#each data.executed as action (action.id)}
-              <article class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                <p class="font-medium">{action.actionType}</p>
-                <p class="text-sm text-zinc-500">
-                  {action.status} · {new Date(action.createdAt).toLocaleString()}
-                </p>
-                <pre
-                  class="mt-3 overflow-auto rounded-md bg-black/30 p-3 text-xs text-zinc-400">{action.detailsJson}</pre>
-              </article>
+              <Card class="p-4">
+                <p class="font-medium text-foreground">{action.actionType}</p>
+                <p class="text-sm text-muted-foreground">{action.status} · {new Date(action.createdAt).toLocaleString()}</p>
+                <pre class="mt-3 overflow-auto rounded-md bg-background p-3 text-xs text-muted-foreground">{action.detailsJson}</pre>
+              </Card>
             {:else}
-              <p
-                class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-zinc-500"
-              >
-                No executed actions yet.
-              </p>
+              <p class="rounded-md border border-border bg-card p-3 text-xs text-muted-foreground">No executed actions yet.</p>
             {/each}
           </div>
         {/if}
       </div>
     {:else if view === 'settings'}
-      <div
-        class="h-[calc(100dvh-3rem)] overflow-y-auto p-4 md:h-auto md:p-8"
-        in:fade={{ duration: 150 }}
-      >
+      <div class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         {#if isMobileViewport && !mobileSettingsDetailOpen}
-          <h2 class="text-2xl font-semibold">Settings</h2>
-          <p class="mt-2 text-zinc-400">Choose what you want to configure.</p>
+          <h2 class="text-2xl font-semibold text-foreground">Settings</h2>
+          <p class="mt-2 text-muted-foreground">Choose what you want to configure.</p>
           <SettingsCategoryList
-            categories={settingsCategories as unknown as Array<{
-              key: string;
-              label: string;
-              detail: string;
-            }>}
+            categories={settingsCategories as unknown as Array<{key: string; label: string; detail: string}>}
             selected={settingsCategory}
             onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
           />
         {:else}
-          <h2 class="text-2xl font-semibold">Configuration</h2>
+          <h2 class="text-2xl font-semibold text-foreground">Configuration</h2>
           {#if settingsCategory === 'accounts'}
-            <SettingsAccounts
-              {data}
-              bind:accountForm
-              bind:googleOauthSettings
-              {googleOauthHasSecret}
-              {googleOauthConnectedEmail}
-              dictationTargetId={dictationTarget?.id || null}
-              {dictationActive}
-              {dictationUnavailable}
-              {dictationLevel}
-              {toggleDictation}
-              {accountAction}
-              {addAccount}
-              {saveGoogleOauthSettings}
-              {startGoogleConnect}
-            />
+            <SettingsAccounts {data} bind:accountForm bind:googleOauthSettings {googleOauthHasSecret} {googleOauthConnectedEmail} dictationTargetId={dictationTarget?.id || null} {dictationActive} {dictationUnavailable} {dictationLevel} {toggleDictation} {accountAction} {addAccount} {saveGoogleOauthSettings} {startGoogleConnect} />
           {/if}
           {#if settingsCategory === 'memory'}
-            <SettingsMemory
-              {data}
-              bind:memoryAssistantPrompt
-              bind:coreProfileText
-              bind:memoryAdvancedMode
-              bind:memoryText
-              bind:skillsText
-              dictationTargetId={dictationTarget?.id || null}
-              {dictationActive}
-              {dictationUnavailable}
-              {dictationLevel}
-              {toggleDictation}
-              {applyMemoryAssistant}
-              {saveCoreProfile}
-              {saveSkills}
-              {resetSkills}
-              {setAdvancedMemoryMode}
-              {saveMemory}
-              {resetMemory}
-              {removeMemoryRule}
-            />
+            <SettingsMemory {data} bind:memoryAssistantPrompt bind:coreProfileText bind:memoryAdvancedMode bind:memoryText bind:skillsText dictationTargetId={dictationTarget?.id || null} {dictationActive} {dictationUnavailable} {dictationLevel} {toggleDictation} {applyMemoryAssistant} {saveCoreProfile} {saveSkills} {resetSkills} {setAdvancedMemoryMode} {saveMemory} {resetMemory} {removeMemoryRule} />
           {/if}
           {#if settingsCategory === 'models'}
-            <SettingsModels
-              {data}
-              {coreAiProfileKeys}
-              bind:aiProfileForms
-              bind:profileMode
-              bind:profileEnvValues
-              {aiProfileRecommendations}
-              {modelsDevProviders}
-              {loadModelsDevCatalog}
-              {selectCatalogProviderForProfile}
-              {selectedCatalogModels}
-              {selectedCatalogProvider}
-              {requiredEnvVars}
-              {setProfileMode}
-              {testAiProfile}
-              {saveAiProfile}
-              {modelsDevLoading}
-              bind:audioProviderId
-              bind:audioModelId
-              bind:audioApiKey
-              {audioProvider}
-              {audioModels}
-              {selectAudioProvider}
-              {saveAudioDictationProfile}
-            />
+            <SettingsModels {data} {coreAiProfileKeys} bind:aiProfileForms bind:profileMode bind:profileEnvValues {aiProfileRecommendations} {modelsDevProviders} {loadModelsDevCatalog} {selectCatalogProviderForProfile} {selectedCatalogModels} {selectedCatalogProvider} {requiredEnvVars} {setProfileMode} {testAiProfile} {saveAiProfile} {modelsDevLoading} bind:audioProviderId bind:audioModelId bind:audioApiKey {audioProvider} {audioModels} {selectAudioProvider} {saveAudioDictationProfile} />
           {/if}
           {#if settingsCategory === 'tools'}
             <SettingsTools
-              {data}
-              {copyToClipboard}
-              {testAgentTool}
-              {toggleAgentTool}
-              {removeAgentTool}
-              {addAgentTool}
-              {saveToolSkills}
-              {saveToolConfig}
-              {installCliPackage}
-              {addWebhook}
+              {data} {copyToClipboard} {testAgentTool} {toggleAgentTool}
+              {removeAgentTool} {addAgentTool} {saveToolSkills} {saveToolConfig}
+              {installCliPackage} {addWebhook}
               bind:agentToolForm
               bind:cliInstallForm
               bind:webhookTarget
             />
           {/if}
           {#if settingsCategory === 'interface'}
-            <SettingsInterface
-              {quickActionCatalog}
-              {quickActionIds}
-              {resetInterfacePreferences}
-              {setQuickActionEnabled}
-              {moveQuickAction}
-              {swipeSettings}
-              {swipeActionCatalog}
-              {updateSwipeSetting}
-              folderGroups={folderGroups()}
-              {saveFolderRole}
-              {folderRoleOptions}
-            />
+            <SettingsInterface {quickActionCatalog} {quickActionIds} {resetInterfacePreferences} {setQuickActionEnabled} {moveQuickAction} {swipeSettings} {swipeActionCatalog} {updateSwipeSetting} folderGroups={folderGroups()} {saveFolderRole} {folderRoleOptions} />
           {/if}
           {#if settingsCategory === 'advanced'}
-            <SettingsAdvanced
-              bind:cachePassphrase
-              {cacheEncrypted}
-              {saveCacheEncryption}
-              {backups}
-              {createBackupNow}
-              {refreshBackups}
-              {restoreBackupNow}
-              {auditSnapshot}
-              {loadAuditSnapshot}
-              bind:contactsImportCsv
-              {exportContacts}
-              {importContacts}
-              dictationTargetId={dictationTarget?.id || null}
-              {dictationActive}
-              {dictationUnavailable}
-              {dictationLevel}
-              {toggleDictation}
-            />
+            <SettingsAdvanced bind:cachePassphrase {cacheEncrypted} {saveCacheEncryption} {backups} {createBackupNow} {refreshBackups} {restoreBackupNow} {auditSnapshot} {loadAuditSnapshot} bind:contactsImportCsv {exportContacts} {importContacts} dictationTargetId={dictationTarget?.id || null} {dictationActive} {dictationUnavailable} {dictationLevel} {toggleDictation} />
           {/if}
         {/if}
       </div>
-    {:else}
-      <div class="grid h-full place-items-center text-zinc-500" in:fade>No message selected</div>
     {/if}
   </section>
 
