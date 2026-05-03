@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Plus, ChevronDown, ChevronRight, Folder, Sparkles } from 'lucide-svelte';
+  import { fade } from 'svelte/transition';
+  import { Plus, ChevronDown, ChevronRight, Folder, Sparkles, Loader2, Check, X } from 'lucide-svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
@@ -21,7 +22,13 @@
     testNewAccount,
     discoverAccountSettings,
     saveGoogleOauthSettings,
-    startGoogleConnect
+    startGoogleConnect,
+    accountAddState = 'idle',
+    accountAddError = '',
+    accountTestState = 'idle',
+    accountTestError = '',
+    accountDiscoverState = 'idle',
+    accountDiscoverError = ''
   } = $props<{
     data: any;
     accountForm: {
@@ -60,6 +67,12 @@
     discoverAccountSettings: () => void | Promise<void>;
     saveGoogleOauthSettings: () => void | Promise<void>;
     startGoogleConnect: () => void;
+    accountAddState?: 'idle' | 'loading' | 'success' | 'error';
+    accountAddError?: string;
+    accountTestState?: 'idle' | 'loading' | 'success' | 'error';
+    accountTestError?: string;
+    accountDiscoverState?: 'idle' | 'loading' | 'success' | 'error';
+    accountDiscoverError?: string;
   }>();
 
   let expandedAccounts = $state<Record<number, boolean>>({});
@@ -159,21 +172,50 @@
   >
     <div class="flex items-center justify-between">
       <h3 class="text-sm font-medium">Add IMAP/SMTP Account</h3>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5"
-          onclick={testNewAccount}
-        >
-          Test Connection
-        </button>
-        <button
-          type="submit"
-          class="btn-cinematic flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-        >
-          <Plus size={14} />
-          Add Account
-        </button>
+      <div class="flex flex-col items-end gap-2">
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5 disabled:opacity-50"
+            onclick={testNewAccount}
+            disabled={accountTestState === 'loading'}
+          >
+            {#if accountTestState === 'loading'}
+              <Loader2 size={13} class="animate-spin" />
+              Testing…
+            {:else if accountTestState === 'success'}
+              <Check size={13} class="text-emerald-400" />
+              Connected
+            {:else if accountTestState === 'error'}
+              <X size={13} class="text-red-400" />
+              Failed
+            {:else}
+              Test Connection
+            {/if}
+          </button>
+          <button
+            type="submit"
+            class="btn-cinematic flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+            disabled={accountAddState === 'loading'}
+          >
+            {#if accountAddState === 'loading'}
+              <Loader2 size={13} class="animate-spin" />
+              Adding…
+            {:else if accountAddState === 'success'}
+              <Check size={13} />
+              Added
+            {:else}
+              <Plus size={14} />
+              Add Account
+            {/if}
+          </button>
+        </div>
+        {#if accountTestState === 'error' && accountTestError}
+          <p class="text-[10px] text-red-400 font-medium max-w-[240px] text-right leading-tight" transition:fade>{accountTestError}</p>
+        {/if}
+        {#if accountAddState === 'error' && accountAddError}
+          <p class="text-[10px] text-red-400 font-medium max-w-[240px] text-right leading-tight" transition:fade>{accountAddError}</p>
+        {/if}
       </div>
     </div>
 
@@ -193,13 +235,27 @@
             type="button"
             class="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 disabled:opacity-50"
             onclick={discoverAccountSettings}
-            disabled={!accountForm.email || !accountForm.email.includes('@')}
+            disabled={!accountForm.email || !accountForm.email.includes('@') || accountDiscoverState === 'loading'}
             title="Autodiscover settings"
           >
-            <Sparkles size={14} class="text-primary" />
-            <span>Discover</span>
+            {#if accountDiscoverState === 'loading'}
+              <Loader2 size={14} class="animate-spin text-primary" />
+              <span>Discovering…</span>
+            {:else if accountDiscoverState === 'success'}
+              <Check size={14} class="text-emerald-400" />
+              <span>Discovered</span>
+            {:else if accountDiscoverState === 'error'}
+              <X size={14} class="text-red-400" />
+              <span>Failed</span>
+            {:else}
+              <Sparkles size={14} class="text-primary" />
+              <span>Discover</span>
+            {/if}
           </button>
         </div>
+        {#if accountDiscoverState === 'error' && accountDiscoverError}
+          <p class="text-[10px] text-red-400 font-medium leading-tight" transition:fade>{accountDiscoverError}</p>
+        {/if}
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">

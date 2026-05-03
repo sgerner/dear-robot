@@ -11,7 +11,7 @@ import {
 } from '../db/schema';
 import { encryptSecret } from '../security';
 import { providerForAccount } from '../email/provider';
-import { stopSyncWorkerForAccount } from '../sync';
+import { startSyncWorkerForAccount, stopSyncWorkerForAccount } from '../sync';
 
 export const AccountInputSchema = z.object({
   email: z.string().email(),
@@ -57,7 +57,7 @@ export function getAccount(id: number) {
   return db.select().from(accounts).where(eq(accounts.id, id)).get();
 }
 
-export function createAccount(input: z.infer<typeof AccountInputSchema>) {
+export async function createAccount(input: z.infer<typeof AccountInputSchema>) {
   pruneSeededDemoDataIfSafe(input);
   const now = nowIso();
   const created = db
@@ -79,7 +79,16 @@ export function createAccount(input: z.infer<typeof AccountInputSchema>) {
     })
     .returning()
     .get();
+  if (created.isEnabled) {
+    await syncNewAccount(created.id);
+  }
   return publicAccount(created);
+}
+
+async function syncNewAccount(accountId: number) {
+  const { syncAccount } = await import('../sync');
+  await syncAccount(accountId);
+  startSyncWorkerForAccount(accountId, { runInitialSync: false });
 }
 
 function pruneSeededDemoDataIfSafe(input: z.infer<typeof AccountInputSchema>) {

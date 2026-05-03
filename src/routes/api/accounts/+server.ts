@@ -7,5 +7,5 @@ export function GET() {
 
 export async function POST({ request }) {
   const input = AccountInputSchema.parse(await request.json());
-  return json({ account: createAccount(input) }, { status: 201 });
+  return json({ account: await createAccount(input) }, { status: 201 });
 }

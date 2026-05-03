@@ -195,18 +195,18 @@ describe('Phase 1 email client services', () => {
   it('removes seeded demo mail when the first real account is added', async () => {
     const { createAccount, listAccounts } = await import('../src/lib/server/services/accounts');
     expect(listAccounts().some((account) => account.host === 'mock')).toBe(true);
-    createAccount({
+    await createAccount({
       email: 'real@example.com',
-      host: 'imap.example.com',
+      host: 'mock',
       port: 993,
       username: 'real@example.com',
       password: 'secret',
-      smtpHost: 'smtp.example.com',
+      smtpHost: 'mock',
       smtpPort: 465,
       smtpUsername: 'real@example.com',
       smtpPassword: 'secret'
     });
-    expect(listAccounts().some((account) => account.host === 'mock')).toBe(false);
+    expect(listAccounts().some((account) => account.email === 'mock@example.test')).toBe(false);
     expect(listAccounts().some((account) => account.email === 'real@example.com')).toBe(true);
   });
 
@@ -238,5 +238,16 @@ describe('Phase 1 email client services', () => {
     const unknown = await discoverAccountSettings('test@nonexistent-domain-12345.com');
     expect(unknown).toBeTruthy(); // Should return guessed settings
     expect(unknown?.host).toBe('imap.nonexistent-domain-12345.com');
+  });
+
+  it('defaults the root inbox view to inbox messages only', async () => {
+    const { load } = await import('../src/routes/+page.server');
+    const result = load({ url: new URL('http://localhost/') } as any);
+    expect(result.query.folder).toBe('INBOX');
+    expect(result.messages.length).toBeGreaterThan(0);
+    expect(result.messages.every((message) => message.folderPath === 'INBOX')).toBe(true);
+
+    const folderResult = load({ url: new URL('http://localhost/?folder=Archive') } as any);
+    expect(folderResult.query.folder).toBe('Archive');
   });
 });

@@ -20,11 +20,13 @@ export function startSyncEngine() {
   for (const account of enabled) startSyncWorkerForAccount(account.id);
 }
 
-export function startSyncWorkerForAccount(accountId: number) {
+export function startSyncWorkerForAccount(accountId: number, options?: { runInitialSync?: boolean }) {
   if (workers.has(accountId)) return;
   const abortController = new AbortController();
   void runWatchLoop(accountId, abortController.signal);
-  void syncAccount(accountId);
+  if (options?.runInitialSync !== false) {
+    void syncAccount(accountId);
+  }
   const pollTimer = setInterval(() => void syncAccount(accountId), 5 * 60 * 1000);
   workers.set(accountId, { abortController, pollTimer });
 }

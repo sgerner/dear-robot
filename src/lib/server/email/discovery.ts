@@ -1,4 +1,4 @@
-import { dns } from 'node:dns/promises';
+import { resolveSrv } from 'node:dns/promises';
 
 export type DiscoveredSettings = {
   host: string;
@@ -57,8 +57,8 @@ async function tryMozillaAutoconfig(domain: string, email: string): Promise<Disc
 async function tryDnsSrv(domain: string, email: string): Promise<DiscoveredSettings | null> {
   try {
     const [imapSrv, smtpSrv] = await Promise.all([
-      dns.resolveSrv(`_imaps._tcp.${domain}`).catch(() => []),
-      dns.resolveSrv(`_submission._tcp.${domain}`).catch(() => [])
+      resolveSrv(`_imaps._tcp.${domain}`).catch(() => []),
+      resolveSrv(`_submission._tcp.${domain}`).catch(() => [])
     ]);
 
     if (imapSrv.length && smtpSrv.length) {

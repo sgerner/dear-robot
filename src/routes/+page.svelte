@@ -13,6 +13,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade, fly, slide } from 'svelte/transition';
+  import type { ModelsDevModel, ModelsDevProvider } from '$lib/server/ai/modelsdev';
   import {
     cacheEncryptionEnabled,
     deleteOutbox,
@@ -68,6 +69,13 @@
   let isLoading = $state(false);
   let search = $state('');
   let accountFilter = $state<string>('');
+  type ButtonState = 'idle' | 'loading' | 'success' | 'error';
+  let accountAddState = $state<ButtonState>('idle');
+  let accountAddError = $state('');
+  let accountTestState = $state<ButtonState>('idle');
+  let accountTestError = $state('');
+  let accountDiscoverState = $state<ButtonState>('idle');
+  let accountDiscoverError = $state('');
   let accountForm = $state({
     email: '',
     host: '',
@@ -179,17 +187,7 @@
     >
   >({});
   let aiCatalogOptions = $state<Record<string, Array<{ id: string; label: string }>>>({});
-  let modelsDevProviders = $state<
-    Array<{
-      id: string;
-      name: string;
-      npm: string | null;
-      api: string | null;
-      env: string[];
-      doc: string | null;
-      models: Array<{ id: string; label: string }>;
-    }>
-  >([]);
+  let modelsDevProviders = $state<Array<ModelsDevProvider>>([]);
   let modelsDevLoaded = $state(false);
   let modelsDevLoading = $state(false);
   let profileMode = $state<Record<string, 'catalog' | 'manual'>>({
@@ -591,6 +589,9 @@
       params.delete('folder');
       params.delete('accountId');
     }
+    if (['inbox', 'unread', 'starred', 'pending'].includes(nextView)) {
+      params.delete('folder');
+    }
     await goto(`/?${params.toString()}`);
   }
 
@@ -904,47 +905,97 @@
   }
 
   async function addAccount() {
-    status = 'Adding account...';
-    await api('/api/accounts', { method: 'POST', body: JSON.stringify(accountForm) });
-    accountForm = {
-      email: '',
-      host: '',
-      port: 993,
-      username: '',
-      password: '',
-      smtpHost: '',
-      smtpPort: 465,
-      smtpUsername: '',
-      smtpPassword: ''
-    };
-    status = 'Account added';
-    await invalidateAll();
+    accountAddState = 'loading';
+    accountAddError = '';
+    try {
+      await api('/api/accounts', { method: 'POST', body: JSON.stringify(accountForm) });
+      accountForm = {
+        email: '',
+        host: '',
+        port: 993,
+        username: '',
+        password: '',
+        smtpHost: '',
+        smtpPort: 465,
+        smtpUsername: '',
+        smtpPassword: ''
+      };
+      accountAddState = 'success';
+      status = 'Account added';
+      await invalidateAll();
+    } catch (err: any) {
+      accountAddState = 'error';
+      accountAddError = err.message || 'Failed to add account';
+      status = accountAddError;
+    } finally {
+      if (accountAddState === 'success') {
+        setTimeout(() => {
+          accountAddState = 'idle';
+        }, 3000);
+      }
+    }
   }
 
   async function testNewAccount() {
-    status = 'Testing account credentials...';
-    const result = await api('/api/accounts/test', {
-      method: 'POST',
-      body: JSON.stringify(accountForm)
-    });
-    status = result.ok ? 'Connection successful!' : `Connection failed: ${result.message}`;
+    accountTestState = 'loading';
+    accountTestError = '';
+    try {
+      const result = await api('/api/accounts/test', {
+        method: 'POST',
+        body: JSON.stringify(accountForm)
+      });
+      if (result.ok) {
+        accountTestState = 'success';
+        status = 'Connection successful!';
+      } else {
+        accountTestState = 'error';
+        accountTestError = result.message || 'Connection test failed';
+        status = `Connection failed: ${result.message}`;
+      }
+    } catch (err: any) {
+      accountTestState = 'error';
+      accountTestError = err.message || 'Connection test failed';
+      status = accountTestError;
+    } finally {
+      if (accountTestState === 'success') {
+        setTimeout(() => {
+          accountTestState = 'idle';
+        }, 3000);
+      }
+    }
   }
 
   async function discoverAccountSettings() {
     if (!accountForm.email || !accountForm.email.includes('@')) return;
-    status = 'Discovering settings...';
-    const result = await api('/api/accounts/discover', {
-      method: 'POST',
-      body: JSON.stringify({ email: accountForm.email })
-    });
-    if (result.ok && result.settings) {
-      accountForm = {
-        ...accountForm,
-        ...result.settings
-      };
-      status = 'Settings discovered';
-    } else {
-      status = 'Could not discover settings';
+    accountDiscoverState = 'loading';
+    accountDiscoverError = '';
+    try {
+      const result = await api('/api/accounts/discover', {
+        method: 'POST',
+        body: JSON.stringify({ email: accountForm.email })
+      });
+      if (result.ok && result.settings) {
+        accountForm = {
+          ...accountForm,
+          ...result.settings
+        };
+        accountDiscoverState = 'success';
+        status = 'Settings discovered';
+      } else {
+        accountDiscoverState = 'error';
+        accountDiscoverError = result.message || 'Could not discover settings';
+        status = accountDiscoverError;
+      }
+    } catch (err: any) {
+      accountDiscoverState = 'error';
+      accountDiscoverError = err.message || 'Could not discover settings';
+      status = accountDiscoverError;
+    } finally {
+      if (accountDiscoverState === 'success') {
+        setTimeout(() => {
+          accountDiscoverState = 'idle';
+        }, 3000);
+      }
     }
   }
 
@@ -2984,6 +3035,12 @@
               {discoverAccountSettings}
               {saveGoogleOauthSettings}
               {startGoogleConnect}
+              {accountAddState}
+              {accountAddError}
+              {accountTestState}
+              {accountTestError}
+              {accountDiscoverState}
+              {accountDiscoverError}
               />
           {/if}
           {#if settingsCategory === 'memory'}

@@ -30,6 +30,11 @@ export function load({ url }) {
     folder: url.searchParams.get('folder') || undefined,
     limit: url.searchParams.get('limit') || 80
   });
+  const inboxScopedView = !query.view || ['inbox', 'unread', 'starred', 'pending'].includes(query.view);
+  const effectiveQuery = {
+    ...query,
+    folder: query.folder || (inboxScopedView ? 'INBOX' : undefined)
+  };
   const accounts = listAccounts();
   const aiProfiles = listAiProfiles();
   const hasConfiguredAiProfile = aiProfiles.some(
@@ -39,7 +44,7 @@ export function load({ url }) {
   const demoMailboxPresent = accounts.some(
     (account) => account.host === 'mock' && account.email === 'mock@example.test'
   );
-  const messages = listMessages(query);
+  const messages = listMessages(effectiveQuery);
   const messageParam = url.searchParams.get('message');
   const selectedId = messageParam ? Number(messageParam) : messages[0]?.id || 0;
   const selected = selectedId ? getMessageDetail(selectedId) : null;
@@ -49,7 +54,7 @@ export function load({ url }) {
 
   return {
     query: {
-      ...query,
+      ...effectiveQuery,
       messageId: messageParam ? Number(messageParam) : null,
       settings: url.searchParams.get('settings') || 'accounts',
       ops: url.searchParams.get('ops') || 'autopilot',
@@ -57,9 +62,9 @@ export function load({ url }) {
       email: url.searchParams.get('email') || null
     },
     accounts,
-    folders: listFoldersWithCounts(query.accountId),
+    folders: listFoldersWithCounts(effectiveQuery.accountId),
     contacts: listContacts('', 100),
-    drafts: listDrafts(query.accountId),
+    drafts: listDrafts(effectiveQuery.accountId),
     messages,
     selected,
     tasks: listTaskRuns(selected?.message?.id)
