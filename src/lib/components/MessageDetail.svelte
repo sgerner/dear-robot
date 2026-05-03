@@ -407,7 +407,7 @@
           </div>
 
           <!-- Task Plan (nested within AI panel) -->
-          <div class="border-t border-border/20 px-4 md:px-5 py-4">
+          <div class="border-t border-border/20 px-4 md:px-5 pb-4">
             <div class="flex items-center justify-between gap-2 mb-3">
               <div class="flex items-center gap-2">
                 <Bot size={13} class="text-primary" />
