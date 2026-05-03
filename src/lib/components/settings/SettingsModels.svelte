@@ -192,7 +192,7 @@
       <div>
         <h2 class="text-xl font-semibold tracking-tight text-foreground">AI & Model Registry</h2>
         <p class="text-sm text-muted-foreground">
-          Configure model profiles for triage, fallbacks, and advanced reasoning.
+          Configure model profiles for dear-robot, fallbacks, and advanced reasoning.
         </p>
       </div>
     </div>

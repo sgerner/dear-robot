@@ -19,11 +19,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATA_DIR=/data
-ENV DB_PATH=/data/triage.db
-RUN addgroup --system triage && adduser --system --ingroup triage triage && mkdir -p /data && chown -R triage:triage /data
-COPY --from=build --chown=triage:triage /app/build ./build
-COPY --from=build --chown=triage:triage /app/package.json ./package.json
-COPY --from=deps --chown=triage:triage /app/node_modules ./node_modules
-USER triage
+ENV DB_PATH=/data/dear-robot.db
+RUN addgroup --system dear-robot && adduser --system --ingroup dear-robot dear-robot && mkdir -p /data && chown -R dear-robot:dear-robot /data
+COPY --from=build --chown=dear-robot:dear-robot /app/build ./build
+COPY --from=build --chown=dear-robot:dear-robot /app/package.json ./package.json
+COPY --from=deps --chown=dear-robot:dear-robot /app/node_modules ./node_modules
+USER dear-robot
 EXPOSE 3000
 CMD ["node", "build"]

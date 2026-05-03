@@ -838,7 +838,7 @@ async function dispatchDelegateWebhooks(
     try {
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (subscription.secret)
-        headers['x-triage-signature'] = signWebhookPayload(payload, subscription.secret);
+        headers['x-dear-robot-signature'] = signWebhookPayload(payload, subscription.secret);
       const response = await fetch(subscription.targetUrl, {
         method: 'POST',
         headers,

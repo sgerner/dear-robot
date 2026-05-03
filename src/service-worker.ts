@@ -1,6 +1,6 @@
 import { build, files, version } from '$service-worker';
 
-const CACHE = `triage-${version}`;
+const CACHE = `dear-robot-${version}`;
 const ASSETS = [...build, ...files];
 const DEV = import.meta.env.DEV;
 

@@ -56,15 +56,15 @@
 - `npm run test:e2e` (escalated for local server binding)
 - `npm run eval:ai` (escalated for `tsx` IPC socket)
 - `npm run build`
-- `docker build -t triage .`
-- Re-run pass after UX/search fixes: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
-- Phase 1 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
+- `docker build -t dear-robot .`
+- Re-run pass after UX/search fixes: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t dear-robot .`
+- Phase 1 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t dear-robot .`
 - Live credential smoke check: IMAP connect/list succeeded with 8 folders; SMTP `verify()` succeeded. No live messages were sent and no mailbox state was changed.
 - Phase 2 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`
-- Phase 3 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
-- Phase 4 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t triage .`
+- Phase 3 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t dear-robot .`
+- Phase 4 pass: `npm run check`, `npm run lint`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, `docker build -t dear-robot .`
 - Feature pass (audio + gmail oauth): `npm run check`, `npm run test:unit`, `npm run test:e2e`
-- AI Autopilot pass: `npm run check`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run lint`, `npm run build`, `docker build -t triage .`
+- AI Autopilot pass: `npm run check`, `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run lint`, `npm run build`, `docker build -t dear-robot .`
 - Interface/swipe pass: `npm run check`, `npm run test:unit`, `npm run test:e2e`, `npm run build`
 
 ## Current Test Status
@@ -75,7 +75,7 @@
 - `npm run test:e2e`: pass, 7 tests.
 - `npm run eval:ai`: pass with real DeepSeek credentials and structured outputs for all fixtures.
 - `npm run build`: pass.
-- `docker build -t triage .`: pass.
+- `docker build -t dear-robot .`: pass.
 
 ## Recovery Instructions
 
@@ -87,4 +87,4 @@ If interrupted:
 4. Inspect `tests/`.
 5. Run `npm run check`.
 6. Fix the first compiler/runtime error.
-7. Continue with `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, and `docker build -t triage .`.
+7. Continue with `npm run test:unit`, `npm run test:e2e`, `npm run eval:ai`, `npm run build`, and `docker build -t dear-robot .`.

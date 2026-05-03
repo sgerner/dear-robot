@@ -1,6 +1,6 @@
-# Triage
+# Dear Robot
 
-Triage is a self-hosted SvelteKit webmail triage application that keeps architecture simple and UX fast:
+Dear Robot is a self-hosted SvelteKit webmail dear-robot application that keeps architecture simple and UX fast:
 
 - Multi-account IMAP + SMTP
 - Folder-based email client controls
@@ -35,7 +35,7 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 
 ### Data + files
 
-- Database default: `/data/triage.db`
+- Database default: `/data/dear-robot.db`
 - Override path: `DB_PATH`
 - Memory file: `/data/AGENT_INSTRUCTIONS.md`
 
@@ -92,8 +92,8 @@ Triage is a self-hosted SvelteKit webmail triage application that keeps architec
 ### Fresh clone
 
 ```bash
-git clone <your-repo-url> triage
-cd triage
+git clone <your-repo-url> dear-robot
+cd dear-robot
 npm install
 # create .env manually from the template in section 4
 npm run dev
@@ -200,7 +200,7 @@ npm run test:unit
 npm run test:e2e
 npm run eval:ai
 npm run build
-docker build -t triage .
+docker build -t dear-robot .
 ```
 
 ### Tagged release flow
@@ -208,7 +208,7 @@ docker build -t triage .
 ```bash
 git checkout main
 git pull --ff-only
-git tag -a v1.0.0 -m "Triage v1.0.0"
+git tag -a v1.0.0 -m "Dear Robot v1.0.0"
 git push origin v1.0.0
 ```
 
@@ -234,7 +234,7 @@ Create a repo-root `.env`:
 NODE_ENV=development
 PORT=3000
 DATA_DIR=/data
-DB_PATH=/data/triage.db
+DB_PATH=/data/dear-robot.db
 
 # Security
 APP_SESSION_SECRET=
@@ -291,7 +291,7 @@ Startup fails in production if any are missing:
 
 ### Development behavior
 
-If `ENCRYPTION_KEY` is not set in development, Triage logs a warning and uses a temporary dev-only key.
+If `ENCRYPTION_KEY` is not set in development, Dear Robot logs a warning and uses a temporary dev-only key.
 
 ---
 
@@ -322,17 +322,17 @@ docker compose up --build
 ### Direct Docker run
 
 ```bash
-docker build -t triage .
+docker build -t dear-robot .
 docker run \
   -p 3000:3000 \
-  -v triage-data:/data \
+  -v dear-robot-data:/data \
   --env-file .env \
-  triage
+  dear-robot
 ```
 
 Volume mount `/data` persists:
 
-- `triage.db`
+- `dear-robot.db`
 - `AGENT_INSTRUCTIONS.md`
 
 ---
@@ -398,7 +398,7 @@ Each profile supports:
 
 Recommended starting points:
 
-- Fast triage: `deepseek-v4-flash`
+- Fast dear-robot: `deepseek-v4-flash`
 - Balanced default: `gemini-2.5-flash`
 - Strong planning: `deepseek-v4-pro`
 - Careful long-form drafting: `claude-sonnet-4`
@@ -505,7 +505,7 @@ The app includes:
 - `/manifest.webmanifest`
 - service worker asset caching
 - standalone display mode for installable browser/PWA use
-- IndexedDB database named `triage-client-cache`
+- IndexedDB database named `dear-robot-client-cache`
 
 The local cache stores recent message-list rows, folders, contacts, and cache metadata. It is intended for faster UI startup and PWA ergonomics; the server SQLite database remains authoritative.
 
@@ -559,7 +559,7 @@ Memory file:
 Usage:
 
 - edited in-app
-- included in every triage prompt
+- included in every dear-robot prompt
 - affects future suggestion tone/rules/routing
 
 ---
@@ -641,7 +641,7 @@ npm run test:unit
 npm run test:e2e
 npm run eval:ai
 npm run build
-docker build -t triage .
+docker build -t dear-robot .
 ```
 
 ---
@@ -725,7 +725,7 @@ Cause:
 
 Action:
 
-- add `-v triage-data:/data` or compose volume
+- add `-v dear-robot-data:/data` or compose volume
 
 ---
 

@@ -9,7 +9,7 @@
 
 <main class="grid min-h-screen place-items-center px-6">
   <form method="POST" class="glass w-full max-w-sm rounded-lg p-6">
-    <p class="text-xs uppercase tracking-[0.2em] text-accent">Triage</p>
+    <p class="text-xs uppercase tracking-[0.2em] text-accent">Dear Robot</p>
     <h1 class="mt-3 text-2xl font-semibold text-white">Local access</h1>
     <label class="mt-6 block text-sm text-zinc-300" for="password">Password</label>
     <input

@@ -699,7 +699,7 @@
     if (typeof localStorage === 'undefined') return;
     try {
       const savedQuickActions = JSON.parse(
-        localStorage.getItem('triage.quickActions') || 'null'
+        localStorage.getItem('dear-robot.quickActions') || 'null'
       ) as QuickActionId[] | null;
       if (Array.isArray(savedQuickActions)) {
         const allowed = savedQuickActions.filter((id): id is QuickActionId =>
@@ -708,7 +708,7 @@
         if (allowed.length) quickActionIds = allowed;
       }
       const savedSwipes = JSON.parse(
-        localStorage.getItem('triage.swipeActions') || 'null'
+        localStorage.getItem('dear-robot.swipeActions') || 'null'
       ) as Partial<typeof swipeSettings> | null;
       if (savedSwipes) {
         swipeSettings = {
@@ -731,8 +731,8 @@
 
   function saveUiPreferences() {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem('triage.quickActions', JSON.stringify(quickActionIds));
-    localStorage.setItem('triage.swipeActions', JSON.stringify(swipeSettings));
+    localStorage.setItem('dear-robot.quickActions', JSON.stringify(quickActionIds));
+    localStorage.setItem('dear-robot.swipeActions', JSON.stringify(swipeSettings));
   }
 
   function setQuickActionEnabled(actionId: QuickActionId, enabled: boolean) {
@@ -2426,13 +2426,13 @@
             'Settings'
           : 'Settings'
         : data.query?.messageId
-          ? data.selected?.message?.subject || 'Triage'
-          : 'Triage'
+          ? data.selected?.message?.subject || 'Dear Robot'
+          : 'Dear Robot'
   );
 </script>
 
 <svelte:head>
-  <title>Triage</title>
+  <title>Dear Robot</title>
 </svelte:head>
 
 <main
@@ -2462,7 +2462,7 @@
           >
             <Mail size={14} />
           </div>
-          <p class="text-sm font-semibold text-foreground">Triage</p>
+          <p class="text-sm font-semibold text-foreground">Dear Robot</p>
         </div>
         <button
           class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"

@@ -35,7 +35,7 @@ export const mockEmailProvider: MailProvider = {
         (email): ProviderMessage => ({
           providerMessageId: `${folderPath}:${email.id}`,
           threadId: email.thread_id ?? null,
-          messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+          messageIdHeader: `<${email.id}@fixtures.dear-robot.local>`,
           inReplyTo: null,
           references: null,
           folderPath,
@@ -74,7 +74,7 @@ export const mockEmailProvider: MailProvider = {
         ({ email }): ProviderMessage => ({
           providerMessageId: `${folderPath}:${email.id}`,
           threadId: email.thread_id ?? null,
-          messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+          messageIdHeader: `<${email.id}@fixtures.dear-robot.local>`,
           inReplyTo: null,
           references: null,
           folderPath,

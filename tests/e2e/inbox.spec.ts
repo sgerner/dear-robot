@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-test('triages and executes a mock reply action', async ({ page }) => {
+test('dear-robots and executes a mock reply action', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Password').fill('test-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Triage' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dear Robot' })).toBeVisible();
 
   await page
     .getByTestId('message-row')

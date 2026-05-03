@@ -303,7 +303,7 @@ export function startAutopilotScheduler() {
     runAutopilotNow()
       .catch((error) =>
         console.warn(
-          '[triage] autopilot run failed',
+          '[dear-robot] autopilot run failed',
           error instanceof Error ? error.message : error
         )
       )

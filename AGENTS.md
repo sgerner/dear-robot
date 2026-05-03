@@ -4,7 +4,7 @@
 
 ## Product Direction
 
-Triage is an AI-first email client. Keep the mechanics simple and inspectable: SvelteKit, SQLite, Drizzle, server-side secrets, and boring relational data. The UX should feel fast and agentic without hiding irreversible work from the user.
+Dear Robot is an AI-first email client. Keep the mechanics simple and inspectable: SvelteKit, SQLite, Drizzle, server-side secrets, and boring relational data. The UX should feel fast and agentic without hiding irreversible work from the user.
 
 ## Engineering
 

@@ -1,5 +1,5 @@
 services:
-  triage:
+  dear-robot:
     build: .
     ports:
       - '3000:3000'
@@ -7,10 +7,10 @@ services:
       - .env
     environment:
       DATA_DIR: /data
-      DB_PATH: /data/triage.db
+      DB_PATH: /data/dear-robot.db
       PORT: 3000
     volumes:
-      - triage-data:/data
+      - dear-robot-data:/data
 
 volumes:
-  triage-data:
+  dear-robot-data:

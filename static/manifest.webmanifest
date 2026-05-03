@@ -1,7 +1,7 @@
 {
-  "name": "Triage AI Mail",
-  "short_name": "Triage",
-  "description": "AI-first self-hosted email client and triage workspace.",
+  "name": "Dear Robot AI Mail",
+  "short_name": "Dear Robot",
+  "description": "AI-first self-hosted email client and dear-robot workspace.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -11,7 +11,7 @@ export const actions = {
     if (password !== expected) {
       return fail(400, { message: 'Invalid password' });
     }
-    cookies.set('triage_session', sessionCookieValue(), {
+    cookies.set('dear-robot_session', sessionCookieValue(), {
       path: '/',
       httpOnly: true,
       sameSite: 'strict',

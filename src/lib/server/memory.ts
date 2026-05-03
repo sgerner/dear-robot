@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from './env';
 
-export const defaultAgentInstructions = `# Triage Agent Instructions
+export const defaultAgentInstructions = `# Dear Robot Agent Instructions
 
 - Write concise replies in a friendly but direct tone.
 - Never auto-send email. Every action requires explicit user approval.

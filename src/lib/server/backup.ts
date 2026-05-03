@@ -44,7 +44,7 @@ export async function createBackup() {
   const id = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = path.join(backupsDir(), id);
   fs.mkdirSync(dir, { recursive: true });
-  const dbFile = path.join(dir, 'triage.db');
+  const dbFile = path.join(dir, 'dear-robot.db');
   await sqlite.backup(dbFile);
   let memoryFile: string | null = null;
   const memoryPath = agentInstructionsPath();

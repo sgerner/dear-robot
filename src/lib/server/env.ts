@@ -62,7 +62,7 @@ const EnvSchema = z.object({
 const parsed = EnvSchema.parse(process.env);
 export const env = {
   ...parsed,
-  DB_PATH: isBuildProcess ? ':memory:' : parsed.DB_PATH || path.join(parsed.DATA_DIR, 'triage.db'),
+  DB_PATH: isBuildProcess ? ':memory:' : parsed.DB_PATH || path.join(parsed.DATA_DIR, 'dear-robot.db'),
   DEBUG_AI: parsed.DEBUG_AI ?? false,
   ATTACHMENT_SCAN_STRICT: parsed.ATTACHMENT_SCAN_STRICT ?? false,
   RUN_LIVE_PROVIDER_TESTS: parsed.RUN_LIVE_PROVIDER_TESTS ?? false
@@ -86,7 +86,7 @@ if (isProduction) {
 
 if (!env.ENCRYPTION_KEY && !isProduction) {
   console.warn(
-    '[triage] ENCRYPTION_KEY is missing. Using a temporary development-only key; saved account passwords will not be portable.'
+    '[dear-robot] ENCRYPTION_KEY is missing. Using a temporary development-only key; saved account passwords will not be portable.'
   );
 }
 

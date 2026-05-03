@@ -111,7 +111,7 @@ export async function syncAccount(accountId: number) {
         if (uid > maxSeenUid) maxSeenUid = uid;
         if (!existedBefore && saved && remote.folderPath.toLowerCase() === 'inbox') {
           void suggestForMessage(saved.id).catch((error) => {
-            console.error('[triage] AI evaluation failed for inserted message', saved.id, error);
+            console.error('[dear-robot] AI evaluation failed for inserted message', saved.id, error);
           });
         }
       }

@@ -465,7 +465,7 @@ INSERT INTO messages_fts(rowid, subject, sender, recipients, body_text)
 SELECT id, subject, "from", "to", body_text FROM messages;
 `);
   } catch (error) {
-    console.warn('[triage] FTS5 unavailable, falling back to LIKE search.', error);
+    console.warn('[dear-robot] FTS5 unavailable, falling back to LIKE search.', error);
   }
 
   fs.mkdirSync(env.DATA_DIR, { recursive: true });
@@ -516,7 +516,7 @@ function seedMockDataIfEmpty() {
         accountId: account.id,
         providerMessageId: `INBOX:${email.id}`,
         threadId: email.thread_id ?? null,
-        messageIdHeader: `<${email.id}@fixtures.triage.local>`,
+        messageIdHeader: `<${email.id}@fixtures.dear-robot.local>`,
         inReplyTo: null,
         references: null,
         folderPath: 'INBOX',
@@ -611,7 +611,7 @@ function seedAiDefaults() {
         apiKeyEncrypted: env.AI_API_KEY ? encryptSecret(env.AI_API_KEY) : null,
         preset: env.AI_PROVIDER || 'deepseek',
         isEnabled: true,
-        notes: 'Fast default triage model.',
+        notes: 'Fast default dear-robot model.',
         createdAt: now,
         updatedAt: now
       },

@@ -30,7 +30,7 @@ async function openAiCompatibleComplete(config: ProviderConfig, messages: ChatMe
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
     if (env.DEBUG_AI) {
-      console.log('[triage] ai request', {
+      console.log('[dear-robot] ai request', {
         provider: config.provider,
         model: config.model,
         messages
@@ -57,7 +57,7 @@ async function openAiCompatibleComplete(config: ProviderConfig, messages: ChatMe
     const content = parsed?.choices?.[0]?.message?.content;
     if (typeof content !== 'string')
       throw new ProviderError(`${config.provider} returned no message content`);
-    if (env.DEBUG_AI) console.log('[triage] ai response', { provider: config.provider, content });
+    if (env.DEBUG_AI) console.log('[dear-robot] ai response', { provider: config.provider, content });
     return content;
   } finally {
     clearTimeout(timer);
@@ -80,7 +80,7 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
     if (env.DEBUG_AI) {
-      console.log('[triage] ai request', {
+      console.log('[dear-robot] ai request', {
         provider: config.provider,
         model: config.model,
         transport: 'anthropic',
@@ -112,7 +112,7 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
       : '';
     if (typeof content !== 'string' || !content)
       throw new ProviderError(`${config.provider} returned no message content`);
-    if (env.DEBUG_AI) console.log('[triage] ai response', { provider: config.provider, content });
+    if (env.DEBUG_AI) console.log('[dear-robot] ai response', { provider: config.provider, content });
     return content;
   } finally {
     clearTimeout(timer);

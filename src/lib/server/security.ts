@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { env, isProduction } from './env';
 
-const devKey = 'development-only-temporary-triage-key';
+const devKey = 'development-only-temporary-dear-robot-key';
 
 function encryptionKey() {
   return crypto
@@ -36,7 +36,7 @@ export function decryptSecret(value: string | null | undefined) {
 
 export function sessionCookieValue() {
   const secret = env.APP_SESSION_SECRET || 'dev-session-secret';
-  return crypto.createHmac('sha256', secret).update('triage-authenticated').digest('base64url');
+  return crypto.createHmac('sha256', secret).update('dear-robot-authenticated').digest('base64url');
 }
 
 export function isValidSession(value: string | undefined) {

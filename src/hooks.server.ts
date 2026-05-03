@@ -23,7 +23,7 @@ function boot() {
 
 export const handle: Handle = async ({ event, resolve }) => {
   boot();
-  const session = event.cookies.get('triage_session');
+  const session = event.cookies.get('dear-robot_session');
   event.locals.user = { authenticated: isValidSession(session) };
   event.locals.csrfToken = csrfToken(session);
 

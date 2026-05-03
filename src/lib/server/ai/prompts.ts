@@ -1,6 +1,6 @@
 import type { EmailSuggestionInput } from './schema';
 
-export const TRIAGE_PROMPT_VERSION = 'triage-v1';
+export const DEAR_ROBOT_PROMPT_VERSION = 'dear-robot-v1';
 
 export function buildSuggestionMessages(input: EmailSuggestionInput) {
   const body =
@@ -10,7 +10,7 @@ export function buildSuggestionMessages(input: EmailSuggestionInput) {
   return [
     {
       role: 'system',
-      content: `You are Triage, a review-first AI email assistant. Return strict JSON only. Never execute actions.
+      content: `You are Dear Robot, a review-first AI email assistant. Return strict JSON only. Never execute actions.
 
 Required JSON fields:
 category string
@@ -31,7 +31,7 @@ Safety rules:
     },
     {
       role: 'user',
-      content: `Prompt version: ${TRIAGE_PROMPT_VERSION}
+      content: `Prompt version: ${DEAR_ROBOT_PROMPT_VERSION}
 
 AGENT_INSTRUCTIONS.md:
 ${input.agentInstructions}

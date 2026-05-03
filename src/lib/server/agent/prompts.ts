@@ -42,7 +42,7 @@ export function buildAgentPlanMessages(input: {
   return [
     {
       role: 'system',
-      content: `You are Triage Agent Planner. Output strict JSON only.
+      content: `You are Dear Robot Agent Planner. Output strict JSON only.
 
 Create a practical multi-step plan to handle the email as a task workflow.
 Never execute actions.

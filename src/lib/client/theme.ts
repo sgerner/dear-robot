@@ -20,7 +20,7 @@ function createThemeStore() {
     subscribe,
     init: () => {
       if (browser) {
-        const savedTheme = localStorage.getItem('triage.theme') as Theme;
+        const savedTheme = localStorage.getItem('dear-robot.theme') as Theme;
         if (savedTheme && isValidTheme(savedTheme)) {
           set(savedTheme);
           applyTheme(savedTheme);
@@ -31,7 +31,7 @@ function createThemeStore() {
     },
     setTheme: (theme: Theme) => {
       if (browser) {
-        localStorage.setItem('triage.theme', theme);
+        localStorage.setItem('dear-robot.theme', theme);
         applyTheme(theme);
       }
       set(theme);
