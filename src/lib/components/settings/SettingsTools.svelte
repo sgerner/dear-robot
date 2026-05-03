@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Copy } from 'lucide-svelte';
+  import Switch from '$lib/components/ui/Switch.svelte';
 
   let {
     data,
@@ -255,39 +256,12 @@
       placeholder="Env JSON map"
       bind:value={agentToolForm.envJson}
     />
-    <div class="flex flex-wrap items-center gap-4 text-xs text-zinc-300">
-      <label class="inline-flex cursor-pointer items-center gap-2 hover:text-zinc-200">
-        <span
-          class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors"
-          class:bg-accent={agentToolForm.readOnly}
-        >
-          <span
-            class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-            class:translate-x-5={agentToolForm.readOnly}
-            class:translate-x-1={!agentToolForm.readOnly}
-          ></span>
-          <input type="checkbox" class="sr-only" bind:checked={agentToolForm.readOnly} />
-        </span>
-        Read-only
-      </label>
-      <label class="inline-flex cursor-pointer items-center gap-2 hover:text-zinc-200">
-        <span
-          class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors"
-          class:bg-accent={agentToolForm.requireApprovalForWrite}
-        >
-          <span
-            class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-            class:translate-x-5={agentToolForm.requireApprovalForWrite}
-            class:translate-x-1={!agentToolForm.requireApprovalForWrite}
-          ></span>
-          <input
-            type="checkbox"
-            class="sr-only"
-            bind:checked={agentToolForm.requireApprovalForWrite}
-          />
-        </span>
-        Require approval for writes
-      </label>
+    <div class="flex flex-wrap items-center gap-4">
+      <Switch bind:checked={agentToolForm.readOnly} label="Read-only" />
+      <Switch
+        bind:checked={agentToolForm.requireApprovalForWrite}
+        label="Require approval for writes"
+      />
     </div>
     <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add tool</button>
   </form>

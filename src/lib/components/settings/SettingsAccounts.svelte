@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Plus } from 'lucide-svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
+  import Switch from '$lib/components/ui/Switch.svelte';
 
   let {
     data,
@@ -179,10 +180,7 @@
         />
       </div>
     </div>
-    <label class="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
-      <input type="checkbox" bind:checked={googleOauthSettings.isEnabled} />
-      Enabled
-    </label>
+    <Switch bind:checked={googleOauthSettings.isEnabled} label="Enabled" />
     <div class="flex flex-wrap gap-2">
       <button
         class="rounded-md border border-white/10 px-3 py-2 text-xs"

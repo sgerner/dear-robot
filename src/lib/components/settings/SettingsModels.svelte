@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Switch from '$lib/components/ui/Switch.svelte';
+
   let {
     data,
     coreAiProfileKeys,
@@ -74,26 +76,10 @@
                 Recommended: {aiProfileRecommendations[profileKey].join(' · ')}
               </p>
             </div>
-            <label
-              class="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-300 hover:text-zinc-200"
-            >
-              <span
-                class="relative inline-flex h-5 w-9 items-center rounded-full bg-zinc-700 transition-colors"
-                class:bg-accent={aiProfileForms[profileKey].isEnabled}
-              >
-                <span
-                  class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-                  class:translate-x-5={aiProfileForms[profileKey].isEnabled}
-                  class:translate-x-1={!aiProfileForms[profileKey].isEnabled}
-                ></span>
-                <input
-                  type="checkbox"
-                  class="sr-only"
-                  bind:checked={aiProfileForms[profileKey].isEnabled}
-                />
-              </span>
-              Enabled
-            </label>
+            <Switch
+              bind:checked={aiProfileForms[profileKey].isEnabled}
+              label="Enabled"
+            />
           </div>
           <div class="mt-3 flex items-center gap-2 text-xs">
             <button

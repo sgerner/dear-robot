@@ -21,10 +21,6 @@
   --color-muted: oklch(0.16 0.06 280);
   --color-muted-foreground: oklch(0.75 0.08 280);
 
-  /* Deep violet accent */
-  --color-accent: oklch(0.65 0.2 300);
-  --color-accent-foreground: oklch(0.94 0.02 100);
-
   /* Hot coral destructive */
   --color-destructive: oklch(0.65 0.24 25);
   --color-destructive-foreground: oklch(0.98 0.02 100);

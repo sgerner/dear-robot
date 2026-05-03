@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Switch from '$lib/components/ui/Switch.svelte';
+
   let {
     quickActionCatalog,
     quickActionIds,
@@ -50,17 +52,10 @@
           class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3"
         >
           <div class="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              class={`relative h-6 w-11 rounded-full transition-colors duration-200 ${quickActionIds.includes(action.id) ? 'bg-accent' : 'bg-zinc-700'}`}
-              aria-pressed={quickActionIds.includes(action.id)}
-              aria-label={`Toggle ${action.label}`}
-              onclick={() => setQuickActionEnabled(action.id, !quickActionIds.includes(action.id))}
-            >
-              <span
-                class={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${quickActionIds.includes(action.id) ? 'translate-x-5' : 'translate-x-1'}`}
-              ></span>
-            </button>
+            <Switch
+              checked={quickActionIds.includes(action.id)}
+              onchange={(checked) => setQuickActionEnabled(action.id, checked)}
+            />
             <div>
               <p class="text-sm font-medium text-zinc-200">{action.label}</p>
               <p class="text-xs text-zinc-500">

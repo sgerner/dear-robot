@@ -1,5 +1,6 @@
 <script lang="ts">
   import DictationButton from '$lib/components/DictationButton.svelte';
+  import Switch from '$lib/components/ui/Switch.svelte';
 
   let {
     data,
@@ -96,17 +97,11 @@
       class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
       onclick={saveCoreProfile}>Save Core Profile</button
     >
-    <label
-      class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-xs text-zinc-300"
-    >
-      <input
-        type="checkbox"
-        bind:checked={memoryAdvancedMode}
-        onchange={(event) =>
-          setAdvancedMemoryMode((event.currentTarget as HTMLInputElement).checked)}
-      />
-      Advanced mode
-    </label>
+    <Switch
+      bind:checked={memoryAdvancedMode}
+      label="Advanced mode"
+      onchange={(checked) => setAdvancedMemoryMode(checked)}
+    />
   </div>
   <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
     <div class="flex flex-wrap items-start justify-between gap-3">

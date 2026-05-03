@@ -197,7 +197,7 @@
                 class={`w-full p-3 text-left transition-all duration-150 ${
                   item.id === selected.message.id
                     ? 'bg-primary/[0.04] border-l-2 border-primary/30'
-                    : 'bg-background/50 border-l-2 border-transparent hover:bg-muted'
+                    : 'bg-muted/20 border-l-2 border-transparent hover:bg-muted/40'
                 }`}
                 onclick={() => selectMessage(item.id)}
               >

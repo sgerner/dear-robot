@@ -2420,7 +2420,7 @@
 
   <!-- Mobile Header -->
   <header
-    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/80 backdrop-cinematic px-3 md:hidden"
+    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background px-3 md:hidden"
   >
     <div class="flex items-center gap-1">
       <button
@@ -2455,7 +2455,7 @@
 
   <!-- Desktop Icon Rail -->
   <nav
-    class="z-10 hidden flex-col items-center gap-1 border-r border-border bg-background/70 backdrop-cinematic px-2 pt-4 md:flex"
+    class="z-10 hidden flex-col items-center gap-1 border-r border-border bg-background px-2 pt-4 md:flex"
   >
     <div
       class="mb-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"
@@ -2496,7 +2496,7 @@
   </nav>
 
   <section
-    class={`border-r border-border bg-background/70 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+    class={`border-r border-border bg-background pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
   >
     <div class="border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
@@ -2632,7 +2632,7 @@
   </section>
 
   <section
-    class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
+    class={`min-w-0 overflow-y-auto bg-background pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
   >
     <MessageDetail
       selected={data.selected}

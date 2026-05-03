@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { Bot, Loader2, Paperclip, Send, X, Sparkles, FileText, ChevronDown } from 'lucide-svelte';
+  import { Bot, Loader2, Paperclip, Send, X, Sparkles, ChevronDown } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Button from '$lib/components/ui/Button.svelte';
-  import Card from '$lib/components/ui/Card.svelte';
 
   let {
     data,
@@ -45,40 +44,47 @@
     onClose: () => void;
   }>();
 
+  let showCc = $state(false);
+  let showBcc = $state(false);
+
   function getModeLabel(mode: string) {
-    return mode.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return mode.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   }
+
+  // Auto-show Cc/Bcc if they have content
+  $effect(() => {
+    if (compose.cc && !showCc) showCc = true;
+    if (compose.bcc && !showBcc) showBcc = true;
+  });
 </script>
 
 <!-- Backdrop -->
 <button
-  class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+  class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
   aria-label="Close compose"
   transition:fade={{ duration: 150 }}
   onclick={onClose}
 ></button>
 
 <section
-  class="fixed bottom-0 right-0 z-50 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-popover shadow-2xl md:bottom-6 md:right-6 md:w-[min(700px,calc(100vw-3rem))] md:rounded-2xl"
-  transition:slide={{ duration: 250 }}
+  class="fixed bottom-0 right-0 z-50 flex max-h-[92vh] h-full w-full flex-col overflow-hidden border-t border-border bg-background shadow-2xl md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:w-[min(840px,calc(100vw-2rem))] md:border"
+  transition:slide={{ duration: 200 }}
 >
   <!-- Header -->
-  <header class="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
-    <div class="flex items-center gap-3">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Sparkles size={16} />
-      </div>
-      <div>
-        <p class="text-xs font-medium text-muted-foreground">AI Compose</p>
-        <h2 class="text-sm font-semibold capitalize text-foreground">{getModeLabel(composeMode)}</h2>
-      </div>
+  <header class="flex items-center justify-between border-b border-border px-4 py-2.5 shrink-0">
+    <div class="flex items-center gap-2.5">
+      <Sparkles size={15} class="text-primary" />
+      <h2 class="text-sm font-semibold text-foreground">{getModeLabel(composeMode)}</h2>
+      {#if compose.draftId}
+        <span class="text-[10px] text-muted-foreground">#{compose.draftId}</span>
+      {/if}
     </div>
-    <button 
-      class="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" 
-      title="Close" 
+    <button
+      class="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      title="Close"
       onclick={onClose}
     >
-      <X size={18} />
+      <X size={16} />
     </button>
   </header>
 
@@ -90,187 +96,220 @@
     }}
   >
     <!-- Recipients & Subject -->
-    <div class="space-y-2 border-b border-border/60 bg-muted/20 p-4">
-      <!-- Account Select -->
-      <select
-        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
-        bind:value={compose.accountId}
-      >
-        {#each data.accounts as account (account.id)}
-          <option value={account.id}>{account.email}</option>
-        {/each}
-      </select>
-
-      <!-- To -->
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">To</span>
-        <input
-          class="h-9 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-          list="contact-options"
-          placeholder="recipient@example.com"
-          bind:value={compose.to}
-        />
+    <div class="shrink-0 space-y-0 border-b border-border">
+      <!-- Account + To row -->
+      <div class="flex items-center gap-0 border-b border-border">
+        <select
+          class="h-8 shrink-0 border-r border-border bg-transparent px-3 text-xs text-muted-foreground outline-none hover:text-foreground cursor-pointer"
+          bind:value={compose.accountId}
+        >
+          {#each data.accounts as account (account.id)}
+            <option value={account.id}>{account.email}</option>
+          {/each}
+        </select>
+        <div class="relative flex-1 min-w-0">
+          <span
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+            >To</span
+          >
+          <input
+            class="h-8 w-full bg-transparent pl-8 pr-20 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            list="contact-options"
+            placeholder="recipient@..."
+            bind:value={compose.to}
+          />
+          <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <button
+              type="button"
+              class="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showCc
+                ? 'text-primary'
+                : ''}"
+              onclick={() => (showCc = !showCc)}
+            >
+              Cc
+            </button>
+            <button
+              type="button"
+              class="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showBcc
+                ? 'text-primary'
+                : ''}"
+              onclick={() => (showBcc = !showBcc)}
+            >
+              Bcc
+            </button>
+          </div>
+        </div>
       </div>
 
-      <!-- Cc/Bcc -->
-      <div class="grid grid-cols-2 gap-2">
-        <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">Cc</span>
+      <!-- Cc (expandable) -->
+      {#if showCc}
+        <div class="relative border-b border-border" transition:slide={{ duration: 150 }}>
+          <span
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+            >Cc</span
+          >
           <input
-            class="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
+            class="h-8 w-full bg-transparent pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
             list="contact-options"
+            placeholder="Add cc..."
             bind:value={compose.cc}
           />
         </div>
-        <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">Bcc</span>
+      {/if}
+
+      <!-- Bcc (expandable) -->
+      {#if showBcc}
+        <div class="relative border-b border-border" transition:slide={{ duration: 150 }}>
+          <span
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+            >Bcc</span
+          >
           <input
-            class="h-9 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
+            class="h-8 w-full bg-transparent pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            placeholder="Add bcc..."
             bind:value={compose.bcc}
           />
         </div>
-      </div>
+      {/if}
 
       <!-- Subject -->
       <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">Subject</span>
         <input
-          class="h-9 w-full rounded-md border border-input bg-background pl-14 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-          placeholder="Message subject..."
+          class="h-8 w-full bg-transparent px-3 text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/50 placeholder:font-normal"
+          placeholder="Subject"
           bind:value={compose.subject}
         />
       </div>
 
       <datalist id="contact-options">
         {#each data.contacts as contact (contact.id)}
-          <option value={contact.name ? `${contact.name} <${contact.email}>` : contact.email}></option>
+          <option value={contact.name ? `${contact.name} <${contact.email}>` : contact.email}
+          ></option>
         {/each}
       </datalist>
+    </div>
 
-      <!-- Toolbar -->
-      <div class="flex flex-wrap items-center gap-2 pt-1">
-        <div class="flex rounded-md border border-border p-0.5 bg-background">
-          <button
-            type="button"
-            class={`rounded-sm px-3 py-1 text-xs font-medium transition-all ${
-              composeEditorMode === 'plain' 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-            onclick={() => (composeEditorMode = 'plain')}
-          >
-            Plain
-          </button>
-          <button
-            type="button"
-            class={`rounded-sm px-3 py-1 text-xs font-medium transition-all ${
-              composeEditorMode === 'rich' 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-            onclick={() => (composeEditorMode = 'rich')}
-          >
-            Rich
-          </button>
-        </div>
-
-        <label
-          class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
+    <!-- Toolbar -->
+    <div class="flex items-center gap-2 px-3 py-1.5 border-b border-border shrink-0">
+      <div class="flex border border-border p-0.5">
+        <button
+          type="button"
+          class={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            composeEditorMode === 'plain'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onclick={() => (composeEditorMode = 'plain')}
         >
-          <Paperclip size={14} />
-          <span>Attach</span>
-          <input class="hidden" type="file" multiple onchange={onAttachFiles} />
-        </label>
-
-        {#if compose.draftId}
-          <span class="text-xs text-muted-foreground">Draft #{compose.draftId}</span>
-        {/if}
+          Plain
+        </button>
+        <button
+          type="button"
+          class={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            composeEditorMode === 'rich'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onclick={() => (composeEditorMode = 'rich')}
+        >
+          Rich
+        </button>
       </div>
 
-      <!-- Attachments -->
+      <label
+        class="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+      >
+        <Paperclip size={12} />
+        <span>Attach</span>
+        <input class="hidden" type="file" multiple onchange={onAttachFiles} />
+      </label>
+
       {#if compose.attachments.length}
-        <div class="rounded-lg border border-border/60 bg-background p-2.5" transition:slide={{ duration: 200 }}>
-          <p class="mb-2 text-xs font-medium text-muted-foreground">Attachments</p>
-          <div class="flex flex-wrap gap-2">
-            {#each compose.attachments as attachment, idx (`${attachment.filename}-${idx}`)}
-              <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-muted hover:border-destructive/30 group"
-                onclick={() => removeAttachment(idx)}
-              >
-                <Paperclip size={12} class="text-muted-foreground" />
-                <span class="max-w-[120px] truncate">{attachment.filename}</span>
-                <span class="text-destructive opacity-0 group-hover:opacity-100 transition-opacity">Remove</span>
-              </button>
-            {/each}
-          </div>
-        </div>
+        <span class="text-[10px] text-muted-foreground">{compose.attachments.length} attached</span>
       {/if}
     </div>
 
-    <!-- AI Helper -->
-    <div class="border-b border-border/60 bg-primary/[0.02] p-3">
-      <div class="flex flex-col gap-2">
-        <div class="flex items-center gap-2">
-          <Bot size={16} class="text-primary" />
-          <span class="text-xs font-medium text-muted-foreground">AI Helper</span>
-        </div>
-        <div class="flex gap-2">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <input
-              id="compose-ai-prompt"
-              class="min-w-0 flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-              placeholder="Describe the draft you want..."
-              bind:value={composeAiPrompt}
-              onkeydown={(event) =>
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                (event.preventDefault(), generateComposeBody())}
-            />
-            <DictationButton
-              targetId="compose-ai-prompt"
-              activeTargetId={dictationTargetId}
-              recording={dictationActive}
-              unavailable={dictationUnavailable}
-              level={dictationLevel}
-              onToggle={toggleDictation}
-            />
-          </div>
+    <!-- Attachments (if any) -->
+    {#if compose.attachments.length}
+      <div
+        class="shrink-0 flex flex-wrap gap-1.5 px-3 py-1.5 border-b border-border bg-muted/20"
+        transition:slide={{ duration: 150 }}
+      >
+        {#each compose.attachments as attachment, idx (`${attachment.filename}-${idx}`)}
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 shadow-sm"
-            onclick={generateComposeBody}
-            disabled={isGeneratingCompose || !composeAiPrompt.trim()}
+            class="inline-flex items-center gap-1.5 bg-background border border-border px-2 py-0.5 text-[11px] text-foreground hover:border-destructive/50 group transition-colors"
+            onclick={() => removeAttachment(idx)}
           >
-            {#if isGeneratingCompose}
-              <Loader2 size={14} class="animate-spin" />
-            {:else}
-              <Sparkles size={14} />
-            {/if}
-            Generate
+            <Paperclip size={10} class="text-muted-foreground" />
+            <span class="max-w-[100px] truncate">{attachment.filename}</span>
+            <X
+              size={10}
+              class="text-muted-foreground group-hover:text-destructive transition-colors"
+            />
           </button>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- AI Helper -->
+    <div class="shrink-0 border-b border-border bg-muted/10 px-3 py-2">
+      <div class="flex items-center gap-2">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <Bot size={13} class="text-primary shrink-0" />
+          <input
+            id="compose-ai-prompt"
+            class="min-w-0 flex-1 h-7 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            placeholder="Ask AI to write..."
+            bind:value={composeAiPrompt}
+            onkeydown={(event) =>
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              (event.preventDefault(), generateComposeBody())}
+          />
         </div>
+        <DictationButton
+          targetId="compose-ai-prompt"
+          activeTargetId={dictationTargetId}
+          recording={dictationActive}
+          unavailable={dictationUnavailable}
+          level={dictationLevel}
+          onToggle={toggleDictation}
+        />
+        <button
+          type="button"
+          class="flex items-center gap-1 bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+          onclick={generateComposeBody}
+          disabled={isGeneratingCompose || !composeAiPrompt.trim()}
+        >
+          {#if isGeneratingCompose}
+            <Loader2 size={12} class="animate-spin" />
+          {:else}
+            <Sparkles size={12} />
+          {/if}
+          Generate
+        </button>
       </div>
     </div>
 
     <!-- Body Editor -->
-    <div class="relative flex-1 min-h-0 bg-background">
+    <div class="relative flex-1 min-h-0">
       {#if composeEditorMode === 'rich'}
         <textarea
           id="compose-html-body"
-          class="h-full w-full resize-none bg-background p-4 pr-12 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+          class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
           placeholder="Write your message..."
           bind:value={composeHtml}
         ></textarea>
       {:else}
         <textarea
           id="compose-body"
-          class="h-full w-full resize-none bg-background p-4 pr-12 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+          class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
           placeholder="Write your message..."
           bind:value={compose.body}
         ></textarea>
       {/if}
-      <div class="absolute right-3 top-3">
+      <div class="absolute right-2 top-2">
         <DictationButton
           targetId={composeEditorMode === 'rich' ? 'compose-html-body' : 'compose-body'}
           activeTargetId={dictationTargetId}
@@ -283,17 +322,29 @@
     </div>
 
     <!-- Footer -->
-    <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/30 px-4 py-3">
-      <p class="text-xs text-muted-foreground">Autosaves while editing · Offline sends queued</p>
+    <footer
+      class="flex items-center justify-between gap-2 border-t border-border px-3 py-2 shrink-0"
+    >
+      <p class="text-[10px] text-muted-foreground">Autosaves · Offline queue</p>
       <div class="flex gap-2">
-        <Button variant="outline" size="sm" data-testid="save-draft" onclick={saveDraft}>
-          Save Draft
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-7 text-xs"
+          data-testid="save-draft"
+          onclick={saveDraft}
+        >
+          Save
         </Button>
-        <Button variant="outline" size="sm" onclick={onClose}>
-          Cancel
-        </Button>
-        <Button variant="default" size="sm" data-testid="send-compose" onclick={sendCompose}>
-          <Send size={14} class="mr-1.5" /> Send
+        <Button variant="outline" size="sm" class="h-7 text-xs" onclick={onClose}>Cancel</Button>
+        <Button
+          variant="default"
+          size="sm"
+          class="h-7 text-xs"
+          data-testid="send-compose"
+          onclick={sendCompose}
+        >
+          <Send size={12} class="mr-1" /> Send
         </Button>
       </div>
     </footer>
