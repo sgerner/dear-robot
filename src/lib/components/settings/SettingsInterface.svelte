@@ -1,4 +1,16 @@
 <script lang="ts">
+  import {
+    ArrowLeft,
+    ArrowRight,
+    ChevronUp,
+    ChevronDown,
+    Archive,
+    Trash2,
+    AlertCircle,
+    MailOpen,
+    Star,
+    MinusCircle
+  } from 'lucide-svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
   import { themeStore, type Theme } from '$lib/client/theme';
 
@@ -89,10 +101,10 @@
         onclick={resetInterfacePreferences}>Reset</button
       >
     </div>
-    <div class="mt-4 space-y-2">
+    <div class="mt-4 overflow-hidden rounded-md border border-white/10 bg-black/10 divide-y divide-white/5">
       {#each quickActionCatalog as action (action.id)}
         <div
-          class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 p-3"
+          class="flex flex-wrap items-center justify-between gap-3 p-3 hover:bg-white/[0.02] transition-colors"
         >
           <div class="flex min-w-0 items-center gap-3">
             <Switch
@@ -111,13 +123,21 @@
           {#if quickActionIds.includes(action.id)}
             <div class="flex gap-1">
               <button
-                class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]"
-                onclick={() => moveQuickAction(action.id, -1)}>Up</button
+                class="flex h-7 w-7 items-center justify-center rounded border border-white/10 text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-30"
+                onclick={() => moveQuickAction(action.id, -1)}
+                disabled={quickActionIds.indexOf(action.id) === 0}
+                title="Move Up"
               >
+                <ChevronUp size={14} />
+              </button>
               <button
-                class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06]"
-                onclick={() => moveQuickAction(action.id, 1)}>Down</button
+                class="flex h-7 w-7 items-center justify-center rounded border border-white/10 text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-30"
+                onclick={() => moveQuickAction(action.id, 1)}
+                disabled={quickActionIds.indexOf(action.id) === quickActionIds.length - 1}
+                title="Move Down"
               >
+                <ChevronDown size={14} />
+              </button>
             </div>
           {/if}
         </div>
@@ -126,26 +146,126 @@
   </section>
 
   <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-    <h3 class="font-medium">Mobile Swipe Gestures</h3>
+    <div class="flex items-center gap-2">
+      <h3 class="font-medium">Mobile Swipe Gestures</h3>
+      <div class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">Mobile Only</div>
+    </div>
     <p class="mt-1 text-sm text-zinc-400">
-      Short swipes trigger at about a thumb-width. Longer swipes use the second action.
+      Configure actions triggered by swiping messages. Previews show the background color and depth.
     </p>
-    <div class="mt-4 grid gap-3 md:grid-cols-2">
-      {#each [{ key: 'leftShort', label: 'Short swipe left' }, { key: 'leftLong', label: 'Long swipe left' }, { key: 'rightShort', label: 'Short swipe right' }, { key: 'rightLong', label: 'Long swipe right' }] as gesture (gesture.key)}
-        <label class="block rounded-md border border-white/10 bg-black/20 p-3">
-          <span class="text-xs text-zinc-500">{gesture.label}</span>
-          <select
-            class="mt-2 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
-            value={swipeSettings[gesture.key]}
-            onchange={(event) =>
-              updateSwipeSetting(gesture.key, (event.currentTarget as HTMLSelectElement).value)}
-          >
-            {#each swipeActionCatalog as action (action.id)}
-              <option value={action.id}>{action.label}</option>
-            {/each}
-          </select>
-        </label>
-      {/each}
+
+    <div class="mt-8 space-y-10">
+      <!-- Swipe Right Section -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 border-b border-white/5 pb-2">
+          <div class="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <ArrowRight size={14} />
+          </div>
+          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Swipe Right (Reveals Left Side)</span>
+        </div>
+
+        <div class="grid gap-6 md:grid-cols-2">
+          {#each [{ key: 'rightShort', label: 'Short Swipe', shift: 40 }, { key: 'rightLong', label: 'Long Swipe', shift: 120 }] as gesture}
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-medium text-zinc-400">{gesture.label}</span>
+                <select
+                  class="rounded border border-white/10 bg-black/40 px-2 py-1 text-zinc-200 outline-none focus:border-primary/50"
+                  value={swipeSettings[gesture.key]}
+                  onchange={(event) => updateSwipeSetting(gesture.key as any, (event.currentTarget as HTMLSelectElement).value)}
+                >
+                  {#each swipeActionCatalog as action (action.id)}
+                    <option value={action.id}>{action.label}</option>
+                  {/each}
+                </select>
+              </div>
+
+              <!-- Visual Preview -->
+              <div class="relative h-16 w-full overflow-hidden rounded-md border border-white/10 bg-black/20">
+                <!-- Background (Revealed) -->
+                <div class="absolute inset-y-0 left-0 flex w-full items-center gap-3 bg-primary/15 px-4 text-primary">
+                  {#if swipeSettings[gesture.key] === 'archive'}<Archive size={18} />
+                  {:else if swipeSettings[gesture.key] === 'delete'}<Trash2 size={18} />
+                  {:else if swipeSettings[gesture.key] === 'spam'}<AlertCircle size={18} />
+                  {:else if swipeSettings[gesture.key] === 'toggle_read'}<MailOpen size={18} />
+                  {:else if swipeSettings[gesture.key] === 'star'}<Star size={18} />
+                  {:else}<MinusCircle size={18} />
+                  {/if}
+                  <span class="text-xs font-bold uppercase tracking-tight">
+                    {swipeActionCatalog.find((a: any) => a.id === swipeSettings[gesture.key])?.label}
+                  </span>
+                </div>
+                <!-- Message Card (Shifted) -->
+                <div
+                  class="absolute inset-0 flex items-center border-l-2 border-primary bg-zinc-900 px-4 transition-transform duration-300 shadow-2xl"
+                  style="transform: translateX({gesture.shift}px)"
+                >
+                  <div class="space-y-1.5 opacity-40">
+                    <div class="h-2 w-24 rounded-full bg-white/20"></div>
+                    <div class="h-1.5 w-40 rounded-full bg-white/10"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Swipe Left Section -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 border-b border-white/5 pb-2">
+          <div class="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/20 text-destructive">
+            <ArrowLeft size={14} />
+          </div>
+          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Swipe Left (Reveals Right Side)</span>
+        </div>
+
+        <div class="grid gap-6 md:grid-cols-2">
+          {#each [{ key: 'leftShort', label: 'Short Swipe', shift: -40 }, { key: 'leftLong', label: 'Long Swipe', shift: -120 }] as gesture}
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-medium text-zinc-400">{gesture.label}</span>
+                <select
+                  class="rounded border border-white/10 bg-black/40 px-2 py-1 text-zinc-200 outline-none focus:border-destructive/50"
+                  value={swipeSettings[gesture.key]}
+                  onchange={(event) => updateSwipeSetting(gesture.key as any, (event.currentTarget as HTMLSelectElement).value)}
+                >
+                  {#each swipeActionCatalog as action (action.id)}
+                    <option value={action.id}>{action.label}</option>
+                  {/each}
+                </select>
+              </div>
+
+              <!-- Visual Preview -->
+              <div class="relative h-16 w-full overflow-hidden rounded-md border border-white/10 bg-black/20">
+                <!-- Background (Revealed) -->
+                <div class="absolute inset-y-0 right-0 flex w-full items-center justify-end gap-3 bg-destructive/15 px-4 text-destructive">
+                  <span class="text-xs font-bold uppercase tracking-tight">
+                    {swipeActionCatalog.find((a: any) => a.id === swipeSettings[gesture.key])?.label}
+                  </span>
+                  {#if swipeSettings[gesture.key] === 'archive'}<Archive size={18} />
+                  {:else if swipeSettings[gesture.key] === 'delete'}<Trash2 size={18} />
+                  {:else if swipeSettings[gesture.key] === 'spam'}<AlertCircle size={18} />
+                  {:else if swipeSettings[gesture.key] === 'toggle_read'}<MailOpen size={18} />
+                  {:else if swipeSettings[gesture.key] === 'star'}<Star size={18} />
+                  {:else}<MinusCircle size={18} />
+                  {/if}
+                </div>
+                <!-- Message Card (Shifted) -->
+                <div
+                  class="absolute inset-0 flex items-center border-r-2 border-destructive bg-zinc-900 px-4 transition-transform duration-300 shadow-2xl"
+                  style="transform: translateX({gesture.shift}px)"
+                >
+                  <div class="flex w-full flex-col items-end space-y-1.5 opacity-40">
+                    <div class="h-2 w-24 rounded-full bg-white/20"></div>
+                    <div class="h-1.5 w-40 rounded-full bg-white/10"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
     </div>
   </section>
 
@@ -155,19 +275,19 @@
       IMAP and Gmail special-use folders are discovered during sync. Override roles here when a
       provider uses unusual names.
     </p>
-    <div class="mt-4 space-y-3">
+    <div class="mt-4 space-y-6">
       {#each folderGroups as group (group.accountId)}
-        <div class="rounded-md border border-white/10 bg-black/20 p-3">
-          <div class="flex items-center justify-between gap-2">
+        <div class="space-y-3">
+          <div class="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
             <p class="truncate text-sm font-medium text-zinc-200">{group.accountEmail}</p>
             <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500"
               >{group.folders.length} folders</span
             >
           </div>
-          <div class="mt-3 grid gap-2 md:grid-cols-2">
+          <div class="grid gap-3 md:grid-cols-2">
             {#each group.folders as folder (folder.id)}
-              <label
-                class="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2"
+              <div
+                class="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-black/10 px-3 py-2"
               >
                 <span class="min-w-0">
                   <span class="block truncate text-xs text-zinc-300">{folder.path}</span>
@@ -183,7 +303,7 @@
                     <option value={option.value}>{option.label}</option>
                   {/each}
                 </select>
-              </label>
+              </div>
             {/each}
           </div>
         </div>
