@@ -1,10 +1,12 @@
 <script lang="ts">
   import { browser, dev } from '$app/environment';
   import { onMount } from 'svelte';
+  import { themeStore } from '$lib/client/theme';
   import '../lib/styles.css';
   let { children } = $props();
 
   onMount(() => {
+    themeStore.init();
     if (!browser || !dev) return;
     void (async () => {
       try {

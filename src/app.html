@@ -1,11 +1,22 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#9cff6e" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/pwa-icon.svg" />
+    <script>
+      (function () {
+        const theme = localStorage.getItem('triage.theme') || 'cinematic-dark';
+        document.documentElement.setAttribute('data-theme', theme);
+        if (theme === 'solarized-light') {
+          document.documentElement.style.colorScheme = 'light';
+        } else {
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
