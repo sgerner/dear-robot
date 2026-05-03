@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { listAiProfiles, upsertAiProfile, AiProfileSchema } from '$lib/server/ai/settings';
 
 const AiProfileSaveSchema = AiProfileSchema.extend({
-  apiKey: z.string().min(1).nullable().optional()
+  apiKey: z.union([z.string(), z.record(z.string())]).nullable().optional()
 });
 
 export function GET() {

@@ -154,6 +154,7 @@
       model: saved?.model || chosen?.defaultModel || '',
       baseUrl: saved?.baseUrl || chosen?.baseUrl || '',
       apiKey: '',
+      hasApiKey: saved?.hasApiKey ?? false,
       preset: saved?.preset || chosen?.id || 'manual',
       isEnabled: saved?.isEnabled ?? true,
       notes: saved?.notes || chosen?.notes || ''
@@ -170,6 +171,7 @@
         model: string;
         baseUrl: string;
         apiKey: string;
+        hasApiKey: boolean;
         preset: string;
         isEnabled: boolean;
         notes: string;
@@ -678,7 +680,15 @@
           ...(options.headers || {})
         }
       });
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const json = JSON.parse(text);
+          throw new Error(json.message || text);
+        } catch {
+          throw new Error(text);
+        }
+      }
       return response.json();
     } finally {
       isLoading = false;
@@ -911,6 +921,33 @@
     await invalidateAll();
   }
 
+  async function testNewAccount() {
+    status = 'Testing account credentials...';
+    const result = await api('/api/accounts/test', {
+      method: 'POST',
+      body: JSON.stringify(accountForm)
+    });
+    status = result.ok ? 'Connection successful!' : `Connection failed: ${result.message}`;
+  }
+
+  async function discoverAccountSettings() {
+    if (!accountForm.email || !accountForm.email.includes('@')) return;
+    status = 'Discovering settings...';
+    const result = await api('/api/accounts/discover', {
+      method: 'POST',
+      body: JSON.stringify({ email: accountForm.email })
+    });
+    if (result.ok && result.settings) {
+      accountForm = {
+        ...accountForm,
+        ...result.settings
+      };
+      status = 'Settings discovered';
+    } else {
+      status = 'Could not discover settings';
+    }
+  }
+
   async function saveGoogleOauthSettings() {
     const scopes = googleOauthSettings.scopes
       .split('\n')
@@ -933,11 +970,47 @@
 
   async function testAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     status = `Testing ${profile} profile...`;
-    const result = await api('/api/ai-profiles/test', {
-      method: 'POST',
-      body: JSON.stringify({ profile })
-    });
-    status = result.message || `${profile} profile test passed`;
+    const form = aiProfileForms[profile];
+    let configOverrides: any = {};
+
+    if (profile === 'audio') {
+      configOverrides = {
+        provider: audioProviderId,
+        model: audioModelId,
+        apiKey: audioApiKey.trim() ? audioApiKey : undefined
+      };
+    } else if (profileMode[profile] === 'catalog') {
+      const envKeys = requiredEnvVars(profile as 'primary' | 'fallback' | 'advanced');
+      const envPayload: Record<string, string> = {};
+      for (const envKey of envKeys) {
+        const value = profileEnvValues[profile]?.[envKey] || '';
+        if (value.trim()) envPayload[envKey] = value.trim();
+      }
+      configOverrides = {
+        provider: form.provider,
+        model: form.model,
+        baseUrl: form.baseUrl,
+        apiKey: envPayload
+      };
+    } else {
+      configOverrides = {
+        provider: form.provider,
+        model: form.model,
+        baseUrl: form.baseUrl,
+        apiKey: form.apiKey?.trim() ? form.apiKey : undefined
+      };
+    }
+
+    try {
+      const result = await api('/api/ai-profiles/test', {
+        method: 'POST',
+        body: JSON.stringify({ profile, config: configOverrides })
+      });
+      status = result.message || `${profile} profile test passed`;
+    } catch (e: any) {
+      status = e.message || 'Test failed';
+      throw e;
+    }
   }
 
   async function loadModelsDevCatalog() {
@@ -1825,39 +1898,44 @@
       provider.defaultModel;
     syncAudioProviderIntoProfile();
     status = `Saving dictation provider (${provider.label})...`;
-    await api('/api/ai-profiles', {
-      method: 'POST',
-      body: JSON.stringify({
-        profile: 'audio',
-        label: `Dictation: ${provider.label}`,
-        provider: provider.id,
-        transport: 'openai_compatible',
-        model,
-        baseUrl:
-          provider.id === 'deepgram'
-            ? 'https://api.deepgram.com'
-            : provider.id === 'groq'
-              ? 'https://api.groq.com/openai/v1'
-              : provider.id === 'openai'
-                ? 'https://api.openai.com/v1'
-                : provider.id === 'assemblyai'
-                  ? 'https://api.assemblyai.com'
-                  : provider.id === 'elevenlabs'
-                    ? 'https://api.elevenlabs.io'
-                    : provider.id === 'soniox'
-                      ? 'https://stt-rt.soniox.com'
-                      : provider.id === 'google_cloud_stt'
-                        ? 'https://speech.googleapis.com'
-                        : 'browser://speech-recognition',
-        apiKey: provider.authType === 'none' ? null : audioApiKey.trim() ? audioApiKey : undefined,
-        preset: provider.id,
-        isEnabled: true,
-        notes: 'Speech-to-text dictation provider'
-      })
-    });
-    status = 'Dictation provider saved';
-    if (provider.authType !== 'none') audioApiKey = '';
-    await invalidateAll();
+    try {
+      await api('/api/ai-profiles', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile: 'audio',
+          label: `Dictation: ${provider.label}`,
+          provider: provider.id,
+          transport: 'openai_compatible',
+          model,
+          baseUrl:
+            provider.id === 'deepgram'
+              ? 'https://api.deepgram.com'
+              : provider.id === 'groq'
+                ? 'https://api.groq.com/openai/v1'
+                : provider.id === 'openai'
+                  ? 'https://api.openai.com/v1'
+                  : provider.id === 'assemblyai'
+                    ? 'https://api.assemblyai.com'
+                    : provider.id === 'elevenlabs'
+                      ? 'https://api.elevenlabs.io'
+                      : provider.id === 'soniox'
+                        ? 'https://stt-rt.soniox.com'
+                        : provider.id === 'google_cloud_stt'
+                          ? 'https://speech.googleapis.com'
+                          : 'browser://speech-recognition',
+          apiKey: provider.authType === 'none' ? null : audioApiKey.trim() ? audioApiKey : undefined,
+          preset: provider.id,
+          isEnabled: true,
+          notes: 'Speech-to-text dictation provider'
+        })
+      });
+      status = 'Dictation provider saved';
+      if (provider.authType !== 'none') audioApiKey = '';
+      await invalidateAll();
+    } catch (e: any) {
+      status = e.message || 'Save failed';
+      throw e;
+    }
   }
 
   async function saveAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
@@ -1868,13 +1946,38 @@
       aiProfileForms = { ...aiProfileForms, [profile]: { ...form } };
     }
     const isCoreProfile = coreAiProfileKeys.includes(profile as (typeof coreAiProfileKeys)[number]);
-    if (isCoreProfile && profileMode[profile] === 'catalog') {
-      const envKeys = requiredEnvVars(profile as 'primary' | 'fallback' | 'advanced');
-      const envPayload: Record<string, string> = {};
-      for (const envKey of envKeys) {
-        const value = profileEnvValues[profile]?.[envKey] || '';
-        if (value.trim()) envPayload[envKey] = value.trim();
+    
+    try {
+      if (isCoreProfile && profileMode[profile] === 'catalog') {
+        const envKeys = requiredEnvVars(profile as 'primary' | 'fallback' | 'advanced');
+        const envPayload: Record<string, string> = {};
+        for (const envKey of envKeys) {
+          const value = profileEnvValues[profile]?.[envKey] || '';
+          if (value.trim()) envPayload[envKey] = value.trim();
+        }
+        await api('/api/ai-profiles', {
+          method: 'POST',
+          body: JSON.stringify({
+            profile: form.profile,
+            label: form.label,
+            provider: form.provider,
+            transport: form.transport,
+            model: form.model,
+            baseUrl: form.baseUrl,
+            apiKey: envPayload,
+            preset: 'modeldev',
+            isEnabled: form.isEnabled,
+            notes: JSON.stringify({
+              source: 'modelsdev',
+              env: envPayload
+            })
+          })
+        });
+        status = `${form.label} saved`;
+        await invalidateAll();
+        return;
       }
+      status = `Saving ${form.label}...`;
       await api('/api/ai-profiles', {
         method: 'POST',
         body: JSON.stringify({
@@ -1884,37 +1987,18 @@
           transport: form.transport,
           model: form.model,
           baseUrl: form.baseUrl,
-          apiKey: envKeys.length ? envPayload[envKeys[0]] || undefined : undefined,
-          preset: 'modeldev',
+          apiKey: form.apiKey.trim() ? form.apiKey : undefined,
+          preset: form.preset || null,
           isEnabled: form.isEnabled,
-          notes: JSON.stringify({
-            source: 'modelsdev',
-            env: envPayload
-          })
+          notes: form.notes || null
         })
       });
       status = `${form.label} saved`;
       await invalidateAll();
-      return;
+    } catch (e: any) {
+      status = e.message || 'Save failed';
+      throw e;
     }
-    status = `Saving ${form.label}...`;
-    await api('/api/ai-profiles', {
-      method: 'POST',
-      body: JSON.stringify({
-        profile: form.profile,
-        label: form.label,
-        provider: form.provider,
-        transport: form.transport,
-        model: form.model,
-        baseUrl: form.baseUrl,
-        apiKey: form.apiKey.trim() ? form.apiKey : undefined,
-        preset: form.preset || null,
-        isEnabled: form.isEnabled,
-        notes: form.notes || null
-      })
-    });
-    status = `${form.label} saved`;
-    await invalidateAll();
   }
 
   function openCompose(mode: 'compose' | 'reply' | 'reply_all' | 'forward') {
@@ -2896,9 +2980,11 @@
               {toggleDictation}
               {accountAction}
               {addAccount}
+              {testNewAccount}
+              {discoverAccountSettings}
               {saveGoogleOauthSettings}
               {startGoogleConnect}
-            />
+              />
           {/if}
           {#if settingsCategory === 'memory'}
             <SettingsMemory

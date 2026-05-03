@@ -15,7 +15,7 @@ export const AiProfileSchema = z.object({
   transport: z.enum(['openai_compatible', 'anthropic']).default('openai_compatible'),
   model: z.string().min(1).max(200),
   baseUrl: z.string().url(),
-  apiKey: z.string().nullable().optional(),
+  apiKey: z.union([z.string(), z.record(z.string())]).nullable().optional(),
   preset: z.string().nullable().optional(),
   isEnabled: z.boolean().default(true),
   notes: z.string().nullable().optional()
@@ -34,12 +34,23 @@ export function getAiProfile(profile: AiProfileInput['profile']) {
 export function upsertAiProfile(input: AiProfileInput) {
   const now = nowIso();
   const existing = getAiProfile(input.profile);
+  
+  let apiKeyToEncrypt: string | null = null;
+  if (input.apiKey !== undefined) {
+    if (typeof input.apiKey === 'string') {
+      apiKeyToEncrypt = input.apiKey;
+    } else if (input.apiKey) {
+      apiKeyToEncrypt = JSON.stringify(input.apiKey);
+    }
+  }
+  
   const apiKeyEncrypted =
     input.apiKey === undefined
       ? (existing?.apiKeyEncrypted ?? null)
-      : input.apiKey
-        ? encryptSecret(input.apiKey)
+      : apiKeyToEncrypt
+        ? encryptSecret(apiKeyToEncrypt)
         : null;
+        
   const saved = db
     .insert(aiProfiles)
     .values({
@@ -77,6 +88,21 @@ export function upsertAiProfile(input: AiProfileInput) {
 }
 
 export function publicAiProfile(profile: typeof aiProfiles.$inferSelect) {
+  const decryptedRaw = profile.apiKeyEncrypted ? decryptSecret(profile.apiKeyEncrypted) : null;
+  let envValues: Record<string, string> = {};
+  
+  if (decryptedRaw) {
+    if (decryptedRaw.startsWith('{')) {
+      try {
+        envValues = JSON.parse(decryptedRaw);
+      } catch {
+        envValues = { apiKey: decryptedRaw };
+      }
+    } else {
+      envValues = { apiKey: decryptedRaw };
+    }
+  }
+
   return {
     id: profile.id,
     profile: profile.profile,
@@ -89,6 +115,7 @@ export function publicAiProfile(profile: typeof aiProfiles.$inferSelect) {
     isEnabled: profile.isEnabled,
     notes: profile.notes,
     hasApiKey: Boolean(profile.apiKeyEncrypted),
+    envValues,
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt
   };
@@ -97,9 +124,24 @@ export function publicAiProfile(profile: typeof aiProfiles.$inferSelect) {
 export function getAiConfigForRuntime(
   profile: AiProfileInput['profile'],
   defaults: AiProfileInput
-): Omit<AiProfileInput, 'apiKey'> & { apiKey: string | undefined } {
+): Omit<AiProfileInput, 'apiKey'> & { apiKey: string | undefined; envValues?: Record<string, string> } {
   const saved = getAiProfile(profile);
-  if (!saved || !saved.isEnabled) return { ...defaults, apiKey: defaults.apiKey ?? undefined };
+  if (!saved || !saved.isEnabled) return { ...defaults, apiKey: (defaults.apiKey as string) ?? undefined };
+  
+  const decryptedRaw = saved.apiKeyEncrypted ? decryptSecret(saved.apiKeyEncrypted) : undefined;
+  let envValues: Record<string, string> = {};
+  let apiKey = decryptedRaw;
+
+  if (decryptedRaw && decryptedRaw.startsWith('{')) {
+    try {
+      envValues = JSON.parse(decryptedRaw);
+      // Fallback for primary key
+      apiKey = envValues.apiKey || Object.values(envValues)[0];
+    } catch {
+      // Not JSON
+    }
+  }
+
   return {
     profile: saved.profile,
     label: saved.label,
@@ -107,7 +149,8 @@ export function getAiConfigForRuntime(
     transport: saved.transport,
     model: saved.model,
     baseUrl: saved.baseUrl,
-    apiKey: saved.apiKeyEncrypted ? decryptSecret(saved.apiKeyEncrypted) : undefined,
+    apiKey,
+    envValues,
     preset: saved.preset,
     isEnabled: saved.isEnabled,
     notes: saved.notes

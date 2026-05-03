@@ -12,6 +12,7 @@ type ProviderConfig = {
   model: string;
   baseUrl: string;
   apiKey: string | undefined;
+  envValues?: Record<string, string>;
   transport: 'openai_compatible' | 'anthropic';
 };
 

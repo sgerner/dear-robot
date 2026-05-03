@@ -5,14 +5,27 @@ import { getAiConfigForRuntime } from '$lib/server/ai/settings';
 import { getSpeechProvider } from '$lib/speech/providers';
 
 const TestSchema = z.object({
-  profile: z.enum(['primary', 'fallback', 'advanced', 'audio'])
+  profile: z.enum(['primary', 'fallback', 'advanced', 'audio']),
+  config: z
+    .object({
+      provider: z.string().optional(),
+      transport: z.enum(['openai_compatible', 'anthropic']).optional(),
+      model: z.string().optional(),
+      baseUrl: z.string().optional(),
+      apiKey: z.string().or(z.record(z.string())).optional()
+    })
+    .optional()
 });
 
 type RuntimeProfile = ReturnType<typeof getAiConfigForRuntime>;
 
-function profileConfig(profile: z.infer<typeof TestSchema>['profile']): RuntimeProfile {
+function profileConfig(
+  profile: z.infer<typeof TestSchema>['profile'],
+  overrides?: z.infer<typeof TestSchema>['config']
+): RuntimeProfile {
+  let base: any;
   if (profile === 'primary') {
-    return getAiConfigForRuntime('primary', {
+    base = {
       profile: 'primary',
       label: 'Primary',
       provider: env.AI_PROVIDER || 'deepseek',
@@ -23,10 +36,9 @@ function profileConfig(profile: z.infer<typeof TestSchema>['profile']): RuntimeP
       preset: env.AI_PROVIDER || 'deepseek',
       isEnabled: true,
       notes: null
-    });
-  }
-  if (profile === 'fallback') {
-    return getAiConfigForRuntime('fallback', {
+    };
+  } else if (profile === 'fallback') {
+    base = {
       profile: 'fallback',
       label: 'Fallback',
       provider: env.AI_FALLBACK_PROVIDER || 'gemini',
@@ -38,10 +50,9 @@ function profileConfig(profile: z.infer<typeof TestSchema>['profile']): RuntimeP
       preset: env.AI_FALLBACK_PROVIDER || 'gemini',
       isEnabled: true,
       notes: null
-    });
-  }
-  if (profile === 'advanced') {
-    return getAiConfigForRuntime('advanced', {
+    };
+  } else if (profile === 'advanced') {
+    base = {
       profile: 'advanced',
       label: 'Advanced Planner',
       provider: env.AI_ADVANCED_PROVIDER || env.AI_PROVIDER || 'deepseek',
@@ -52,20 +63,41 @@ function profileConfig(profile: z.infer<typeof TestSchema>['profile']): RuntimeP
       preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
       isEnabled: true,
       notes: null
-    });
+    };
+  } else {
+    base = {
+      profile: 'audio',
+      label: 'Dictation (Speech-to-Text)',
+      provider: 'deepgram',
+      transport: 'openai_compatible',
+      model: 'nova-3',
+      baseUrl: 'https://api.deepgram.com',
+      apiKey: undefined,
+      preset: 'deepgram',
+      isEnabled: true,
+      notes: null
+    };
   }
-  return getAiConfigForRuntime('audio', {
-    profile: 'audio',
-    label: 'Dictation (Speech-to-Text)',
-    provider: 'deepgram',
-    transport: 'openai_compatible',
-    model: 'nova-3',
-    baseUrl: 'https://api.deepgram.com',
-    apiKey: undefined,
-    preset: 'deepgram',
-    isEnabled: true,
-    notes: null
-  });
+
+  const config = getAiConfigForRuntime(profile, base);
+
+  if (overrides) {
+    if (overrides.provider) config.provider = overrides.provider;
+    if (overrides.transport) config.transport = overrides.transport;
+    if (overrides.model) config.model = overrides.model;
+    if (overrides.baseUrl) config.baseUrl = overrides.baseUrl;
+    if (overrides.apiKey) {
+      if (typeof overrides.apiKey === 'string') {
+        config.apiKey = overrides.apiKey;
+      } else {
+        const record = overrides.apiKey as Record<string, string>;
+        config.envValues = { ...(config.envValues || {}), ...record };
+        config.apiKey = record.apiKey || record.API_KEY || Object.values(record)[0] || config.apiKey;
+      }
+    }
+  }
+
+  return config;
 }
 
 async function testOpenAiCompatible(profile: RuntimeProfile) {
@@ -92,8 +124,14 @@ async function testAnthropic(profile: RuntimeProfile) {
 }
 
 export async function POST({ request }) {
-  const { profile } = TestSchema.parse(await request.json());
-  const config = profileConfig(profile);
+  const payload = await request.json();
+  console.log('[test endpoint] Received payload:', JSON.stringify(payload, null, 2));
+
+  const { profile, config: overrides } = TestSchema.parse(payload);
+  const config = profileConfig(profile, overrides);
+  
+  console.log('[test endpoint] Resolved config:', JSON.stringify({ ...config, apiKey: config.apiKey ? '***' : undefined }, null, 2));
+
   if (!config.isEnabled) throw error(400, 'Profile is disabled');
   if (profile === 'audio' && config.provider === 'browser_web_speech') {
     return json({ ok: true, message: 'Browser fallback requires no API key.' });

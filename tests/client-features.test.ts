@@ -209,4 +209,34 @@ describe('Phase 1 email client services', () => {
     expect(listAccounts().some((account) => account.host === 'mock')).toBe(false);
     expect(listAccounts().some((account) => account.email === 'real@example.com')).toBe(true);
   });
+
+  it('tests account credentials without saving to the database', async () => {
+    const { testAccountInput, listAccounts } = await import('../src/lib/server/services/accounts');
+    const initialCount = listAccounts().length;
+    const result = await testAccountInput({
+      email: 'test@example.com',
+      host: 'mock',
+      port: 993,
+      username: 'test@example.com',
+      password: 'password',
+      smtpHost: 'mock',
+      smtpPort: 465,
+      smtpUsername: 'test@example.com',
+      smtpPassword: 'password'
+    });
+    expect(result.ok).toBe(true);
+    expect(listAccounts().length).toBe(initialCount);
+  });
+
+  it('discovers account settings for common domains', async () => {
+    const { discoverAccountSettings } = await import('../src/lib/server/email/discovery');
+    const gmail = await discoverAccountSettings('test@gmail.com');
+    expect(gmail).toBeTruthy();
+    expect(gmail?.host).toBe('imap.gmail.com');
+    expect(gmail?.smtpHost).toBe('smtp.gmail.com');
+
+    const unknown = await discoverAccountSettings('test@nonexistent-domain-12345.com');
+    expect(unknown).toBeTruthy(); // Should return guessed settings
+    expect(unknown?.host).toBe('imap.nonexistent-domain-12345.com');
+  });
 });

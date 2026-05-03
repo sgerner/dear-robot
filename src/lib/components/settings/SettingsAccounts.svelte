@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, ChevronDown, ChevronRight, Folder } from 'lucide-svelte';
+  import { Plus, ChevronDown, ChevronRight, Folder, Sparkles } from 'lucide-svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
@@ -18,6 +18,8 @@
     toggleDictation,
     accountAction,
     addAccount,
+    testNewAccount,
+    discoverAccountSettings,
     saveGoogleOauthSettings,
     startGoogleConnect
   } = $props<{
@@ -54,6 +56,8 @@
       _action: 'test' | 'enable' | 'disable' | 'delete'
     ) => void | Promise<void>;
     addAccount: () => void | Promise<void>;
+    testNewAccount: () => void | Promise<void>;
+    discoverAccountSettings: () => void | Promise<void>;
     saveGoogleOauthSettings: () => void | Promise<void>;
     startGoogleConnect: () => void;
   }>();
@@ -147,54 +151,125 @@
       </article>
       {/each}
   <form
-    class="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3"
+    class="space-y-4 rounded-lg border border-white/10 bg-white/[0.03] p-4"
     onsubmit={(event) => {
       event.preventDefault();
       addAccount();
     }}
   >
-    <h3 class="text-sm font-medium">Add IMAP/SMTP</h3>
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="Email"
-      bind:value={accountForm.email}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="IMAP host"
-      bind:value={accountForm.host}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="IMAP username"
-      bind:value={accountForm.username}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="IMAP password"
-      type="password"
-      bind:value={accountForm.password}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="SMTP host"
-      bind:value={accountForm.smtpHost}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="SMTP username"
-      bind:value={accountForm.smtpUsername}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="SMTP password"
-      type="password"
-      bind:value={accountForm.smtpPassword}
-    />
-    <button
-      class="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
-      ><Plus size={16} /> Add account</button
-    >
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-medium">Add IMAP/SMTP Account</h3>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5"
+          onclick={testNewAccount}
+        >
+          Test Connection
+        </button>
+        <button
+          type="submit"
+          class="btn-cinematic flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+        >
+          <Plus size={14} />
+          Add Account
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <div>
+        <label class="mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-500" for="account-email">
+          Account Email
+        </label>
+        <div class="flex gap-2">
+          <input
+            id="account-email"
+            class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-accent/50"
+            placeholder="e.g. user@example.com"
+            bind:value={accountForm.email}
+          />
+          <button
+            type="button"
+            class="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 disabled:opacity-50"
+            onclick={discoverAccountSettings}
+            disabled={!accountForm.email || !accountForm.email.includes('@')}
+            title="Autodiscover settings"
+          >
+            <Sparkles size={14} class="text-primary" />
+            <span>Discover</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <!-- IMAP Section -->
+        <div class="space-y-2 rounded-md border border-white/5 bg-black/20 p-3">
+          <h4 class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">IMAP (Incoming)</h4>
+          <div class="space-y-2">
+            <div class="grid grid-cols-4 gap-2">
+              <div class="col-span-3">
+                <input
+                  class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                  placeholder="IMAP Host"
+                  bind:value={accountForm.host}
+                />
+              </div>
+              <input
+                type="number"
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                placeholder="Port"
+                bind:value={accountForm.port}
+              />
+            </div>
+            <input
+              class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+              placeholder="IMAP Username"
+              bind:value={accountForm.username}
+            />
+            <input
+              class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+              placeholder="IMAP Password"
+              type="password"
+              bind:value={accountForm.password}
+            />
+          </div>
+        </div>
+
+        <!-- SMTP Section -->
+        <div class="space-y-2 rounded-md border border-white/5 bg-black/20 p-3">
+          <h4 class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">SMTP (Outgoing)</h4>
+          <div class="space-y-2">
+            <div class="grid grid-cols-4 gap-2">
+              <div class="col-span-3">
+                <input
+                  class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                  placeholder="SMTP Host"
+                  bind:value={accountForm.smtpHost}
+                />
+              </div>
+              <input
+                type="number"
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                placeholder="Port"
+                bind:value={accountForm.smtpPort}
+              />
+            </div>
+            <input
+              class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+              placeholder="SMTP Username"
+              bind:value={accountForm.smtpUsername}
+            />
+            <input
+              class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+              placeholder="SMTP Password"
+              type="password"
+              bind:value={accountForm.smtpPassword}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   </form>
   <section class="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
     <h3 class="text-sm font-medium">Connect Gmail (Google OAuth)</h3>
@@ -237,16 +312,18 @@
     <Switch bind:checked={googleOauthSettings.isEnabled} label="Enabled" />
     <div class="flex flex-wrap gap-2">
       <button
-        class="rounded-md border border-white/10 px-3 py-2 text-xs"
+        type="button"
+        class="rounded-md border border-white/10 px-3 py-2 text-xs transition-colors hover:bg-white/5"
         onclick={saveGoogleOauthSettings}>Save OAuth Settings</button
       >
       <button
-        class="rounded-md bg-accent px-3 py-2 text-xs font-medium text-black"
+        type="button"
+        class="btn-cinematic rounded-md px-3 py-2 text-xs font-semibold text-primary-foreground"
         onclick={startGoogleConnect}>Connect Gmail Account</button
       >
     </div>
     {#if googleOauthConnectedEmail}
-      <p class="text-xs text-accent">Connected: {googleOauthConnectedEmail}</p>
+      <p class="text-xs text-primary">Connected: {googleOauthConnectedEmail}</p>
     {/if}
   </section>
 </div>

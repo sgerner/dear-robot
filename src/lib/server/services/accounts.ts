@@ -100,6 +100,22 @@ export async function testAccount(id: number) {
   return providerForAccount(account).test(account);
 }
 
+export async function testAccountInput(input: z.infer<typeof AccountInputSchema>) {
+  const mockAccount: any = {
+    email: input.email,
+    host: input.host,
+    port: input.port,
+    username: input.username,
+    passwordEncrypted: encryptSecret(input.password),
+    smtpHost: input.smtpHost,
+    smtpPort: input.smtpPort,
+    smtpUsername: input.smtpUsername,
+    smtpPasswordEncrypted: encryptSecret(input.smtpPassword),
+    authType: 'password'
+  };
+  return providerForAccount(mockAccount).test(mockAccount);
+}
+
 export function enableAccount(id: number) {
   const updated = db
     .update(accounts)
