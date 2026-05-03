@@ -2641,7 +2641,7 @@
   </section>
 
   <section
-    class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
+    class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${(data.query.messageId && data.selected) || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
   >
     <MessageDetail
       selected={data.selected}
@@ -2891,6 +2891,8 @@
               {dictationActive}
               {dictationUnavailable}
               {dictationLevel}
+              {folderRoleOptions}
+              {saveFolderRole}
               {toggleDictation}
               {accountAction}
               {addAccount}

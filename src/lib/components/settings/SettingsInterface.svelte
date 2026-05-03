@@ -269,45 +269,4 @@
     </div>
   </section>
 
-  <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
-    <h3 class="font-medium">Folder Role Mapping</h3>
-    <p class="mt-1 text-sm text-zinc-400">
-      IMAP and Gmail special-use folders are discovered during sync. Override roles here when a
-      provider uses unusual names.
-    </p>
-    <div class="mt-4 space-y-6">
-      {#each folderGroups as group (group.accountId)}
-        <div class="space-y-3">
-          <div class="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
-            <p class="truncate text-sm font-medium text-zinc-200">{group.accountEmail}</p>
-            <span class="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-zinc-500"
-              >{group.folders.length} folders</span
-            >
-          </div>
-          <div class="grid gap-3 md:grid-cols-2">
-            {#each group.folders as folder (folder.id)}
-              <div
-                class="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-black/10 px-3 py-2"
-              >
-                <span class="min-w-0">
-                  <span class="block truncate text-xs text-zinc-300">{folder.path}</span>
-                  <span class="text-[11px] text-zinc-500">{folder.total} messages</span>
-                </span>
-                <select
-                  class="w-32 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
-                  value={folder.role || ''}
-                  onchange={(event) =>
-                    saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value)}
-                >
-                  {#each folderRoleOptions as option (option.value)}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/each}
-    </div>
-  </section>
 </div>

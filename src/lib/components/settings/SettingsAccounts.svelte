@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus } from 'lucide-svelte';
+  import { Plus, ChevronDown, ChevronRight, Folder } from 'lucide-svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
@@ -13,6 +13,8 @@
     dictationActive,
     dictationUnavailable,
     dictationLevel,
+    folderRoleOptions,
+    saveFolderRole,
     toggleDictation,
     accountAction,
     addAccount,
@@ -44,6 +46,8 @@
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
+    folderRoleOptions: Array<{ value: string; label: string }>;
+    saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
     toggleDictation: (_targetId: string) => void | Promise<void>;
     accountAction: (
       _id: number,
@@ -53,6 +57,12 @@
     saveGoogleOauthSettings: () => void | Promise<void>;
     startGoogleConnect: () => void;
   }>();
+
+  let expandedAccounts = $state<Record<number, boolean>>({});
+
+  function toggleAccountFolders(accountId: number) {
+    expandedAccounts[accountId] = !expandedAccounts[accountId];
+  }
 </script>
 
 <div class="mt-6 space-y-4">
@@ -75,23 +85,67 @@
           >{account.isEnabled ? 'enabled' : 'disabled'}</span
         >
       </div>
-      <div class="mt-3 flex flex-wrap gap-2">
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
+            onclick={() => accountAction(account.id, 'test')}>Test</button
+          >
+          <button
+            class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
+            onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}
+            >{account.isEnabled ? 'Disable' : 'Enable'}</button
+          >
+          <button
+            class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200 transition-colors hover:bg-red-400/10"
+            onclick={() => accountAction(account.id, 'delete')}>Remove</button
+          >
+        </div>
+
         <button
-          class="rounded-md border border-white/10 px-2 py-1 text-xs"
-          onclick={() => accountAction(account.id, 'test')}>Test</button
+          class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+          onclick={() => toggleAccountFolders(account.id)}
         >
-        <button
-          class="rounded-md border border-white/10 px-2 py-1 text-xs"
-          onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}
-          >{account.isEnabled ? 'Disable' : 'Enable'}</button
-        >
-        <button
-          class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200"
-          onclick={() => accountAction(account.id, 'delete')}>Remove</button
-        >
+          <Folder size={14} />
+          <span>{data.folders.filter((f: any) => f.accountId === account.id).length} Folders</span>
+          {#if expandedAccounts[account.id]}
+            <ChevronDown size={14} />
+          {:else}
+            <ChevronRight size={14} />
+          {/if}
+        </button>
       </div>
-    </article>
-  {/each}
+
+      {#if expandedAccounts[account.id]}
+        <div class="mt-3 space-y-2 border-t border-white/5 pt-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Folder Role Mapping</h4>
+            <p class="text-[10px] text-zinc-600 italic">Overrides IMAP discovery</p>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2">
+            {#each data.folders.filter((f: any) => f.accountId === account.id) as folder (folder.id)}
+              <div class="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-black/10 px-2 py-1.5">
+                <div class="min-w-0">
+                  <span class="block truncate text-[11px] font-medium text-zinc-300">{folder.path}</span>
+                  <span class="text-[10px] text-zinc-500">{folder.total} messages</span>
+                </div>
+                <select
+                  class="w-28 rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
+                  value={folder.role || ''}
+                  onchange={(event) =>
+                    saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value)}
+                >
+                  {#each folderRoleOptions as option (option.value)}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+      </article>
+      {/each}
   <form
     class="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3"
     onsubmit={(event) => {
