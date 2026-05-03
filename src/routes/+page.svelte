@@ -12,7 +12,7 @@
   } from 'lucide-svelte';
   import { goto, invalidateAll } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
-  import { fade, fly } from 'svelte/transition';
+  import { fade, fly, slide } from 'svelte/transition';
   import {
     cacheEncryptionEnabled,
     deleteOutbox,
@@ -1752,7 +1752,10 @@
     }
   }
 
-  function _applyAiPreset(profile: 'primary' | 'fallback' | 'advanced' | 'audio', presetId: string) {
+  function _applyAiPreset(
+    profile: 'primary' | 'fallback' | 'advanced' | 'audio',
+    presetId: string
+  ) {
     const preset = (((data as any).aiPresets || []) as Array<Record<string, any>>).find(
       (item) => item.id === presetId
     );
@@ -2365,7 +2368,9 @@
     >
       <div class="flex items-center justify-between border-b border-border/60 px-4 py-3">
         <div class="flex items-center gap-2">
-          <div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <div
+            class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground"
+          >
             <Mail size={14} />
           </div>
           <p class="text-sm font-semibold text-foreground">Triage</p>
@@ -2450,9 +2455,11 @@
 
   <!-- Desktop Icon Rail -->
   <nav
-    class="z-10 hidden flex-col items-center gap-1 border-r border-border/60 bg-background/80 backdrop-cinematic px-2 pt-4 md:flex"
+    class="z-10 hidden flex-col items-center gap-1 border-r border-border bg-background/70 backdrop-cinematic px-2 pt-4 md:flex"
   >
-    <div class="mb-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+    <div
+      class="mb-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+    >
       <Mail size={18} />
     </div>
     <div class="flex flex-col gap-1">
@@ -2489,22 +2496,31 @@
   </nav>
 
   <section
-    class={`border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+    class={`border-r border-border bg-background/70 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
   >
-    <div class="border-b border-border/60 p-4">
+    <div class="border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
-        <div class="mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4" transition:slide={{ duration: 200 }}>
+        <div
+          class="mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4"
+          transition:slide={{ duration: 200 }}
+        >
           <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <div
+              class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10"
+            >
               <Sparkles size={14} class="text-primary" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="font-semibold text-sm text-foreground">{onboardingTitle}</p>
               <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{onboardingBody}</p>
               <div class="mt-3 flex flex-wrap gap-2">
-                <Button variant="default" size="sm" onclick={() => openSettings()}>Open config</Button>
+                <Button variant="default" size="sm" onclick={() => openSettings()}
+                  >Open config</Button
+                >
                 {#if data.onboarding?.needsEmailSetup}
-                  <Button variant="outline" size="sm" onclick={() => openSettings()}>Add mailbox</Button>
+                  <Button variant="outline" size="sm" onclick={() => openSettings()}
+                    >Add mailbox</Button
+                  >
                 {/if}
               </div>
             </div>
@@ -2534,15 +2550,19 @@
           <div class="flex rounded-lg border border-border/60 bg-muted/30 p-1">
             <button
               class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              onclick={() => openOperations('autopilot')}>Autopilot</button>
+              onclick={() => openOperations('autopilot')}>Autopilot</button
+            >
             <button
               class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              onclick={() => openOperations('executed')}>Executed</button>
+              onclick={() => openOperations('executed')}>Executed</button
+            >
           </div>
           <Card class="p-4" hover>
             <div class="flex items-center gap-2 mb-2">
               <Bot size={16} class="text-primary" />
-              <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI Operations</p>
+              <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                AI Operations
+              </p>
             </div>
             <h2 class="text-sm font-semibold text-foreground">
               {operationsCategory === 'autopilot' ? 'Autopilot' : 'Executed actions'}
@@ -2553,30 +2573,39 @@
                 : `Review the log. ${data.executed?.length || 0} actions recorded.`}
             </p>
             <div class="mt-4 flex gap-2">
-              <Button variant="outline" size="sm" onclick={() => openOperations(operationsCategory)}>Refresh</Button>
+              <Button variant="outline" size="sm" onclick={() => openOperations(operationsCategory)}
+                >Refresh</Button
+              >
               {#if operationsCategory === 'autopilot'}
                 <Button variant="default" size="sm" onclick={runAutopilot}>Run</Button>
               {/if}
             </div>
           </Card>
         </div>
-{:else if view === 'settings'}
-         <div class="space-y-1" in:fade={{ duration: 150 }}>
-           <h2 class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3">Settings</h2>
-           {#each settingsCategories as category (category.key)}
-             <button
-               class={`w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${settingsCategory === category.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
-               onclick={() => openSettingsCategory(category.key)}
-             >
-               <p class="text-sm font-medium">{category.label}</p>
-               <p class="mt-0.5 text-xs text-muted-foreground/80">{category.detail}</p>
-             </button>
-           {/each}
-         </div>
-       {/if}
+      {:else if view === 'settings'}
+        <div class="space-y-1" in:fade={{ duration: 150 }}>
+          <h2
+            class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3"
+          >
+            Settings
+          </h2>
+          {#each settingsCategories as category (category.key)}
+            <button
+              class={`w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${settingsCategory === category.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              onclick={() => openSettingsCategory(category.key)}
+            >
+              <p class="text-sm font-medium">{category.label}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground/80">{category.detail}</p>
+            </button>
+          {/each}
+        </div>
+      {/if}
 
       {#if status}
-        <div class="mt-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2" transition:slide={{ duration: 200 }}>
+        <div
+          class="mt-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
+          transition:slide={{ duration: 200 }}
+        >
           <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
           <p class="text-xs font-medium text-primary">{status}</p>
         </div>
@@ -2588,7 +2617,7 @@
         messages={data.messages}
         selectedId={data.selected?.message?.id ?? null}
         {swiping}
-        swipeSettings={swipeSettings}
+        {swipeSettings}
         {view}
         {swipeLabel}
         {swipeActionForDelta}
@@ -2605,10 +2634,10 @@
   <section
     class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
   >
-<MessageDetail
+    <MessageDetail
       selected={data.selected}
       {view}
-      quickActionIds={quickActionIds}
+      {quickActionIds}
       {quickActionMeta}
       {runQuickAction}
       {moveSelected}
@@ -2640,10 +2669,12 @@
         <div class="mb-6 flex rounded-lg border border-border/60 bg-muted/30 p-1">
           <button
             class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            onclick={() => openOperations('autopilot')}>Autopilot</button>
+            onclick={() => openOperations('autopilot')}>Autopilot</button
+          >
           <button
             class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            onclick={() => openOperations('executed')}>Executed</button>
+            onclick={() => openOperations('executed')}>Executed</button
+          >
         </div>
         {#if operationsCategory === 'autopilot'}
           <div class="flex flex-wrap items-start justify-between gap-4">
@@ -2659,7 +2690,7 @@
           </div>
 
           <section class="mt-6 grid gap-3 md:grid-cols-4">
-            {#each [{value: data.autopilot?.stats?.proposed || 0, label: 'Awaiting review'}, {value: data.autopilot?.stats?.approved || 0, label: 'Approved'}, {value: data.autopilot?.stats?.openFollowUps || 0, label: 'Open follow-ups'}, {value: `${data.autopilot?.stats?.avgLatencyMs || 0}ms`, label: 'AI latency'}] as stat, i (i)}
+            {#each [{ value: data.autopilot?.stats?.proposed || 0, label: 'Awaiting review' }, { value: data.autopilot?.stats?.approved || 0, label: 'Approved' }, { value: data.autopilot?.stats?.openFollowUps || 0, label: 'Open follow-ups' }, { value: `${data.autopilot?.stats?.avgLatencyMs || 0}ms`, label: 'AI latency' }] as stat, i (i)}
               <Card class="p-4">
                 <p class="text-2xl font-semibold text-foreground">{stat.value}</p>
                 <p class="mt-1 text-xs text-muted-foreground">{stat.label}</p>
@@ -2672,28 +2703,68 @@
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 class="font-medium text-foreground">Policy</h3>
-                  <p class="mt-1 text-sm text-muted-foreground">Keep this boring: simulation first, explicit sends always.</p>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    Keep this boring: simulation first, explicit sends always.
+                  </p>
                 </div>
-                <Button variant="default" size="sm" onclick={saveAutopilotPolicy}>Save Policy</Button>
+                <Button variant="default" size="sm" onclick={saveAutopilotPolicy}
+                  >Save Policy</Button
+                >
               </div>
               <div class="mt-4 grid gap-3 md:grid-cols-2">
-                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
-                  <span>Autopilot enabled</span><input type="checkbox" bind:checked={autopilotPolicy.autopilotEnabled} />
+                <label
+                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
+                >
+                  <span>Autopilot enabled</span><input
+                    type="checkbox"
+                    bind:checked={autopilotPolicy.autopilotEnabled}
+                  />
                 </label>
-                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
-                  <span>Dry-run only</span><input type="checkbox" bind:checked={autopilotPolicy.dryRunOnly} />
+                <label
+                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
+                >
+                  <span>Dry-run only</span><input
+                    type="checkbox"
+                    bind:checked={autopilotPolicy.dryRunOnly}
+                  />
                 </label>
-                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
-                  <span>Auto-file low-risk mail</span><input type="checkbox" bind:checked={autopilotPolicy.allowAutoFileLowRisk} />
+                <label
+                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
+                >
+                  <span>Auto-file low-risk mail</span><input
+                    type="checkbox"
+                    bind:checked={autopilotPolicy.allowAutoFileLowRisk}
+                  />
                 </label>
-                <label class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
-                  <span>Auto-handle low-risk no-action</span><input type="checkbox" bind:checked={autopilotPolicy.allowAutoNoActionLowRisk} />
+                <label
+                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
+                >
+                  <span>Auto-handle low-risk no-action</span><input
+                    type="checkbox"
+                    bind:checked={autopilotPolicy.allowAutoNoActionLowRisk}
+                  />
                 </label>
-                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
-                  <span>Messages per run</span><input class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring" type="number" min="1" max="200" bind:value={autopilotPolicy.maxMessagesPerRun} />
+                <label
+                  class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
+                >
+                  <span>Messages per run</span><input
+                    class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring"
+                    type="number"
+                    min="1"
+                    max="200"
+                    bind:value={autopilotPolicy.maxMessagesPerRun}
+                  />
                 </label>
-                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
-                  <span>Max auto actions per run</span><input class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring" type="number" min="0" max="100" bind:value={autopilotPolicy.maxAutoActionsPerRun} />
+                <label
+                  class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
+                >
+                  <span>Max auto actions per run</span><input
+                    class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring"
+                    type="number"
+                    min="0"
+                    max="100"
+                    bind:value={autopilotPolicy.maxAutoActionsPerRun}
+                  />
                 </label>
               </div>
             </Card>
@@ -2706,8 +2777,12 @@
                 {#each data.autopilot?.runs || [] as run (run.id)}
                   <div class="rounded-md border border-border bg-background/50 p-3">
                     <p class="text-sm text-foreground">{run.status} · {run.mode}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}</p>
-                    {#if run.errorMessage}<p class="mt-1 text-xs text-destructive">{run.errorMessage}</p>{/if}
+                    <p class="mt-1 text-xs text-muted-foreground">
+                      Scanned {run.scannedCount}, queued {run.queuedCount}, executed {run.executedCount}
+                    </p>
+                    {#if run.errorMessage}<p class="mt-1 text-xs text-destructive">
+                        {run.errorMessage}
+                      </p>{/if}
                   </div>
                 {:else}
                   <p class="text-sm text-muted-foreground">No runs yet.</p>
@@ -2720,11 +2795,15 @@
                 {#each data.autopilot?.summaries || [] as summary (summary.id)}
                   <Card class="p-3">
                     <p class="truncate text-sm font-medium text-foreground">{summary.subject}</p>
-                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{summary.summary}</p>
+                    <p class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                      {summary.summary}
+                    </p>
                     <p class="mt-2 text-xs text-primary">{summary.nextAction}</p>
                   </Card>
                 {:else}
-                  <p class="text-sm text-muted-foreground">Run autopilot to build thread summaries.</p>
+                  <p class="text-sm text-muted-foreground">
+                    Run autopilot to build thread summaries.
+                  </p>
                 {/each}
               </div>
             </Card>
@@ -2736,11 +2815,20 @@
               <div class="mt-4 overflow-x-auto">
                 <table class="w-full text-left text-xs">
                   <thead class="text-muted-foreground">
-                    <tr><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th><th>Prompt</th></tr>
+                    <tr
+                      ><th class="py-2">Operation</th><th>Model</th><th>Status</th><th>Latency</th
+                      ><th>Prompt</th></tr
+                    >
                   </thead>
                   <tbody>
                     {#each data.autopilot?.observability || [] as item (item.id)}
-                      <tr class="border-t border-border"><td class="py-2 text-foreground">{item.operation}</td><td class="text-foreground">{item.provider}/{item.model}</td><td class="text-foreground">{item.status}</td><td class="text-foreground">{item.latencyMs}ms</td><td class="text-muted-foreground">{item.promptHash}</td></tr>
+                      <tr class="border-t border-border"
+                        ><td class="py-2 text-foreground">{item.operation}</td><td
+                          class="text-foreground">{item.provider}/{item.model}</td
+                        ><td class="text-foreground">{item.status}</td><td class="text-foreground"
+                          >{item.latencyMs}ms</td
+                        ><td class="text-muted-foreground">{item.promptHash}</td></tr
+                      >
                     {/each}
                   </tbody>
                 </table>
@@ -2753,11 +2841,16 @@
             {#each data.executed as action (action.id)}
               <Card class="p-4">
                 <p class="font-medium text-foreground">{action.actionType}</p>
-                <p class="text-sm text-muted-foreground">{action.status} · {new Date(action.createdAt).toLocaleString()}</p>
-                <pre class="mt-3 overflow-auto rounded-md bg-background p-3 text-xs text-muted-foreground">{action.detailsJson}</pre>
+                <p class="text-sm text-muted-foreground">
+                  {action.status} · {new Date(action.createdAt).toLocaleString()}
+                </p>
+                <pre
+                  class="mt-3 overflow-auto rounded-md bg-background p-3 text-xs text-muted-foreground">{action.detailsJson}</pre>
               </Card>
             {:else}
-              <p class="rounded-md border border-border bg-card p-3 text-xs text-muted-foreground">No executed actions yet.</p>
+              <p class="rounded-md border border-border bg-card p-3 text-xs text-muted-foreground">
+                No executed actions yet.
+              </p>
             {/each}
           </div>
         {/if}
@@ -2768,36 +2861,136 @@
           <h2 class="text-2xl font-semibold text-foreground">Settings</h2>
           <p class="mt-2 text-muted-foreground">Choose what you want to configure.</p>
           <SettingsCategoryList
-            categories={settingsCategories as unknown as Array<{key: string; label: string; detail: string}>}
+            categories={settingsCategories as unknown as Array<{
+              key: string;
+              label: string;
+              detail: string;
+            }>}
             selected={settingsCategory}
             onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
           />
         {:else}
           <h2 class="text-2xl font-semibold text-foreground">Configuration</h2>
           {#if settingsCategory === 'accounts'}
-            <SettingsAccounts {data} bind:accountForm bind:googleOauthSettings {googleOauthHasSecret} {googleOauthConnectedEmail} dictationTargetId={dictationTarget?.id || null} {dictationActive} {dictationUnavailable} {dictationLevel} {toggleDictation} {accountAction} {addAccount} {saveGoogleOauthSettings} {startGoogleConnect} />
+            <SettingsAccounts
+              {data}
+              bind:accountForm
+              bind:googleOauthSettings
+              {googleOauthHasSecret}
+              {googleOauthConnectedEmail}
+              dictationTargetId={dictationTarget?.id || null}
+              {dictationActive}
+              {dictationUnavailable}
+              {dictationLevel}
+              {toggleDictation}
+              {accountAction}
+              {addAccount}
+              {saveGoogleOauthSettings}
+              {startGoogleConnect}
+            />
           {/if}
           {#if settingsCategory === 'memory'}
-            <SettingsMemory {data} bind:memoryAssistantPrompt bind:coreProfileText bind:memoryAdvancedMode bind:memoryText bind:skillsText dictationTargetId={dictationTarget?.id || null} {dictationActive} {dictationUnavailable} {dictationLevel} {toggleDictation} {applyMemoryAssistant} {saveCoreProfile} {saveSkills} {resetSkills} {setAdvancedMemoryMode} {saveMemory} {resetMemory} {removeMemoryRule} />
+            <SettingsMemory
+              {data}
+              bind:memoryAssistantPrompt
+              bind:coreProfileText
+              bind:memoryAdvancedMode
+              bind:memoryText
+              bind:skillsText
+              dictationTargetId={dictationTarget?.id || null}
+              {dictationActive}
+              {dictationUnavailable}
+              {dictationLevel}
+              {toggleDictation}
+              {applyMemoryAssistant}
+              {saveCoreProfile}
+              {saveSkills}
+              {resetSkills}
+              {setAdvancedMemoryMode}
+              {saveMemory}
+              {resetMemory}
+              {removeMemoryRule}
+            />
           {/if}
           {#if settingsCategory === 'models'}
-            <SettingsModels {data} {coreAiProfileKeys} bind:aiProfileForms bind:profileMode bind:profileEnvValues {aiProfileRecommendations} {modelsDevProviders} {loadModelsDevCatalog} {selectCatalogProviderForProfile} {selectedCatalogModels} {selectedCatalogProvider} {requiredEnvVars} {setProfileMode} {testAiProfile} {saveAiProfile} {modelsDevLoading} bind:audioProviderId bind:audioModelId bind:audioApiKey {audioProvider} {audioModels} {selectAudioProvider} {saveAudioDictationProfile} />
+            <SettingsModels
+              {data}
+              {coreAiProfileKeys}
+              bind:aiProfileForms
+              bind:profileMode
+              bind:profileEnvValues
+              {aiProfileRecommendations}
+              {modelsDevProviders}
+              {loadModelsDevCatalog}
+              {selectCatalogProviderForProfile}
+              {selectedCatalogModels}
+              {selectedCatalogProvider}
+              {requiredEnvVars}
+              {setProfileMode}
+              {testAiProfile}
+              {saveAiProfile}
+              {modelsDevLoading}
+              bind:audioProviderId
+              bind:audioModelId
+              bind:audioApiKey
+              {audioProvider}
+              {audioModels}
+              {selectAudioProvider}
+              {saveAudioDictationProfile}
+            />
           {/if}
           {#if settingsCategory === 'tools'}
             <SettingsTools
-              {data} {copyToClipboard} {testAgentTool} {toggleAgentTool}
-              {removeAgentTool} {addAgentTool} {saveToolSkills} {saveToolConfig}
-              {installCliPackage} {addWebhook}
+              {data}
+              {copyToClipboard}
+              {testAgentTool}
+              {toggleAgentTool}
+              {removeAgentTool}
+              {addAgentTool}
+              {saveToolSkills}
+              {saveToolConfig}
+              {installCliPackage}
+              {addWebhook}
               bind:agentToolForm
               bind:cliInstallForm
               bind:webhookTarget
             />
           {/if}
           {#if settingsCategory === 'interface'}
-            <SettingsInterface {quickActionCatalog} {quickActionIds} {resetInterfacePreferences} {setQuickActionEnabled} {moveQuickAction} {swipeSettings} {swipeActionCatalog} {updateSwipeSetting} folderGroups={folderGroups()} {saveFolderRole} {folderRoleOptions} />
+            <SettingsInterface
+              {quickActionCatalog}
+              {quickActionIds}
+              {resetInterfacePreferences}
+              {setQuickActionEnabled}
+              {moveQuickAction}
+              {swipeSettings}
+              {swipeActionCatalog}
+              {updateSwipeSetting}
+              folderGroups={folderGroups()}
+              {saveFolderRole}
+              {folderRoleOptions}
+            />
           {/if}
           {#if settingsCategory === 'advanced'}
-            <SettingsAdvanced bind:cachePassphrase {cacheEncrypted} {saveCacheEncryption} {backups} {createBackupNow} {refreshBackups} {restoreBackupNow} {auditSnapshot} {loadAuditSnapshot} bind:contactsImportCsv {exportContacts} {importContacts} dictationTargetId={dictationTarget?.id || null} {dictationActive} {dictationUnavailable} {dictationLevel} {toggleDictation} />
+            <SettingsAdvanced
+              bind:cachePassphrase
+              {cacheEncrypted}
+              {saveCacheEncryption}
+              {backups}
+              {createBackupNow}
+              {refreshBackups}
+              {restoreBackupNow}
+              {auditSnapshot}
+              {loadAuditSnapshot}
+              bind:contactsImportCsv
+              {exportContacts}
+              {importContacts}
+              dictationTargetId={dictationTarget?.id || null}
+              {dictationActive}
+              {dictationUnavailable}
+              {dictationLevel}
+              {toggleDictation}
+            />
           {/if}
         {/if}
       </div>

@@ -15,10 +15,10 @@
 </script>
 
 <div class={cn(
-	"rounded-xl text-card-foreground overflow-hidden transition-all duration-300",
-	glass && "glass-card",
-	!glass && "bg-card border border-border/60 shadow-lg",
-	hover && "card-hover cursor-pointer",
+	"rounded-md text-card-foreground overflow-hidden transition-all duration-200",
+	glass && "bg-card border border-border shadow-sm",
+	!glass && "bg-card border border-border shadow-sm",
+	hover && "hover:shadow-md cursor-pointer",
 	className
 )}>
 	{#if children}

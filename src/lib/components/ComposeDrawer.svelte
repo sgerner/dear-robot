@@ -60,7 +60,7 @@
 
 <section
   class="fixed bottom-0 right-0 z-50 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-popover shadow-2xl md:bottom-6 md:right-6 md:w-[min(700px,calc(100vw-3rem))] md:rounded-2xl"
-  transition:slide={{ y: 20, duration: 250 }}
+  transition:slide={{ duration: 250 }}
 >
   <!-- Header -->
   <header class="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">

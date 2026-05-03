@@ -1,7 +1,16 @@
 <script lang="ts">
   import {
-    Archive, Eye, EyeOff, Forward, MoreHorizontal,
-    Reply, ReplyAll, ShieldAlert, Star, Trash2, X
+    Archive,
+    Eye,
+    EyeOff,
+    Forward,
+    MoreHorizontal,
+    Reply,
+    ReplyAll,
+    ShieldAlert,
+    Star,
+    Trash2,
+    X
   } from 'lucide-svelte';
   import { fade, fly } from 'svelte/transition';
 
@@ -9,7 +18,6 @@
     selectedMessage,
     visibleActionIds,
     overflowActionIds,
-    quickActionButtonClass,
     quickActionMeta,
     runQuickAction,
     quickActionOverflowOpen = $bindable()
@@ -50,7 +58,7 @@
   class="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background/95 backdrop-blur-md md:hidden safe-area-pb"
   style="padding-bottom: env(safe-area-inset-bottom, 0px);"
 >
-  <div 
+  <div
     class="flex items-center gap-1 px-2 py-2"
     style={`display: grid; grid-template-columns: repeat(${visibleActionIds.length + (overflowActionIds.length ? 1 : 0)}, minmax(0, 1fr));`}
   >
@@ -61,11 +69,12 @@
         class={`
           group relative flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1
           transition-all duration-200 active:scale-95
-          ${meta?.tone === 'danger' 
-            ? 'text-destructive hover:bg-destructive/10' 
-            : meta?.tone === 'accent'
-              ? 'text-primary hover:bg-primary/10'
-              : 'text-foreground hover:bg-muted'
+          ${
+            meta?.tone === 'danger'
+              ? 'text-destructive hover:bg-destructive/10'
+              : meta?.tone === 'accent'
+                ? 'text-primary hover:bg-primary/10'
+                : 'text-foreground hover:bg-muted'
           }
         `}
         aria-label={meta?.label}
@@ -84,7 +93,7 @@
         <span class="text-[10px] font-medium truncate max-w-full">{meta?.label}</span>
       </button>
     {/each}
-    
+
     {#if overflowActionIds.length}
       <div class="relative">
         <button
@@ -104,7 +113,7 @@
           {/if}
           <span class="text-[10px] font-medium">More</span>
         </button>
-        
+
         <!-- Overflow Menu -->
         {#if quickActionOverflowOpen}
           <div
@@ -119,9 +128,10 @@
                   class={`
                     flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm
                     transition-colors duration-150
-                    ${meta?.tone === 'danger'
-                      ? 'text-destructive hover:bg-destructive/10'
-                      : 'text-foreground hover:bg-muted'
+                    ${
+                      meta?.tone === 'danger'
+                        ? 'text-destructive/50 hover:bg-destructive/10'
+                        : 'text-foreground hover:bg-muted'
                     }
                   `}
                   onclick={() => {

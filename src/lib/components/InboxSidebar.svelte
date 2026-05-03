@@ -1,5 +1,15 @@
 <script lang="ts">
-  import { Search, FolderOpen, Keyboard, ChevronDown, X, Inbox, Mail, Star, Clock } from 'lucide-svelte';
+  import {
+    Search,
+    FolderOpen,
+    Keyboard,
+    ChevronDown,
+    X,
+    Inbox,
+    Mail,
+    Star,
+    Clock
+  } from 'lucide-svelte';
   import { slide } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
@@ -51,7 +61,11 @@
     >();
     for (const folder of folders) {
       if (!groups.has(folder.accountId)) {
-        groups.set(folder.accountId, { accountId: folder.accountId, accountEmail: folder.accountEmail, folders: [] });
+        groups.set(folder.accountId, {
+          accountId: folder.accountId,
+          accountEmail: folder.accountEmail,
+          folders: []
+        });
       }
       groups.get(folder.accountId)?.folders.push(folder);
     }
@@ -66,16 +80,21 @@
 
 <div class="flex h-full flex-col">
   <!-- Header Section -->
-  <div class="space-y-3 p-4 pb-3">
+  <div class="space-y-1 p-2">
     <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-foreground tracking-tight">Triage</h1>
+      <h1 class="text-lg font-semibold text-foreground tracking-tight">
+        T<span class="uppercase text-base">riage</span>
+      </h1>
     </div>
 
     {#if isInboxView(view)}
       <!-- Search -->
       <div class="flex items-center gap-2">
         <div class="relative flex-1">
-          <Search size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            size={15}
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
           <input
             bind:this={searchInput}
             class="h-9 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
@@ -87,7 +106,10 @@
           {#if search}
             <button
               class="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-              onclick={() => { search = ''; applySearch({ clearMessage: true }); }}
+              onclick={() => {
+                search = '';
+                applySearch({ clearMessage: true });
+              }}
             >
               <X size={14} />
             </button>
@@ -124,9 +146,10 @@
             class={`
               flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 px-2 text-xs font-medium
               transition-all duration-200
-              ${view === v.id 
-                ? 'bg-background text-foreground shadow-sm' 
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              ${
+                view === v.id
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
               }
             `}
             onclick={() => setQuickView(v.id)}
@@ -141,7 +164,7 @@
 
   <!-- Shortcuts Help -->
   {#if isInboxView(view) && showShortcutHelp}
-    <div 
+    <div
       class="mx-4 mb-3 rounded-lg border border-border/60 bg-muted/30 p-3"
       transition:slide={{ duration: 200 }}
     >
@@ -151,35 +174,59 @@
       </div>
       <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">/</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >/</kbd
+          >
           <span class="text-muted-foreground">Search</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">c</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >c</kbd
+          >
           <span class="text-muted-foreground">Compose</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">j</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >j</kbd
+          >
           <span class="text-muted-foreground">Next message</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">k</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >k</kbd
+          >
           <span class="text-muted-foreground">Previous</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">r</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >r</kbd
+          >
           <span class="text-muted-foreground">Reply</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">s</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >s</kbd
+          >
           <span class="text-muted-foreground">Star</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">e</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >e</kbd
+          >
           <span class="text-muted-foreground">Archive</span>
         </div>
         <div class="flex items-center gap-2">
-          <kbd class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]">#</kbd>
+          <kbd
+            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >#</kbd
+          >
           <span class="text-muted-foreground">Trash</span>
         </div>
       </div>
@@ -201,17 +248,22 @@
           {#if !foldersExpanded}
             <Badge variant="outline" class="text-[10px] h-5">{folders.length}</Badge>
           {/if}
-          <ChevronDown size={14} class="transition-transform duration-200 {foldersExpanded ? 'rotate-180' : ''}" />
+          <ChevronDown
+            size={14}
+            class="transition-transform duration-200 {foldersExpanded ? 'rotate-180' : ''}"
+          />
         </span>
       </button>
     </div>
-    
+
     {#if foldersExpanded}
       <ScrollArea class="flex-1 px-4 pt-2 scrollbar-thin">
         <div class="space-y-2 pb-4">
           {#each folderGroups() as group (group.accountId)}
             <div class="rounded-lg border border-border/60 bg-muted/20 p-2">
-              <p class="truncate px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <p
+                class="truncate px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider"
+              >
                 {group.accountEmail}
               </p>
               <div class="mt-1 space-y-0.5">
@@ -220,9 +272,11 @@
                     class={`
                       flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs
                       transition-colors duration-150
-                      ${query?.folder === folder.path && String(query?.accountId || '') === String(folder.accountId) 
-                        ? 'bg-primary/10 text-primary font-medium' 
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      ${
+                        query?.folder === folder.path &&
+                        String(query?.accountId || '') === String(folder.accountId)
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       }
                     `}
                     onclick={() => selectFolder(folder.accountId, folder.path)}
@@ -250,5 +304,3 @@
     <div class="flex-1"></div>
   {/if}
 </div>
-
-
