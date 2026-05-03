@@ -8,9 +8,11 @@
     Inbox,
     Mail,
     Star,
-    Clock
+    Clock,
+    UserCircle,
+    Check
   } from 'lucide-svelte';
-  import { slide } from 'svelte/transition';
+  import { slide, fade, scale } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import Badge from '$lib/components/ui/Badge.svelte';
@@ -47,12 +49,26 @@
     selectFolder: (accountId: number, path: string) => void;
   } = $props();
 
+  let showAccountPicker = $state(false);
+
   const views = [
     { id: 'inbox', label: 'All', icon: Inbox },
     { id: 'unread', label: 'Unread', icon: Mail },
     { id: 'starred', label: 'Starred', icon: Star },
     { id: 'pending', label: 'Pending', icon: Clock }
   ];
+
+  const currentAccountLabel = $derived(
+    accountFilter 
+      ? (accounts.find((a: any) => String(a.id) === accountFilter)?.email.split('@')[0] || 'Unknown') 
+      : 'All'
+  );
+
+  function selectAccount(id: string) {
+    accountFilter = id;
+    showAccountPicker = false;
+    applySearch({ clearMessage: true });
+  }
 
   function folderGroups() {
     const groups = new Map<
@@ -78,26 +94,90 @@
   }
 </script>
 
-<div class="flex flex-col">
-  <!-- Header Section -->
-  <div class="space-y-1 p-2">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-foreground tracking-tight">
-        T<span class="uppercase text-base">riage</span>
-      </h1>
+<div class="flex flex-col h-full relative">
+  <!-- Account Picker Modal -->
+  {#if showAccountPicker}
+    <div 
+      class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
+      transition:fade={{ duration: 150 }}
+      onclick={() => (showAccountPicker = false)}
+    >
+      <div 
+        class="w-full max-w-[280px] rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
+        transition:scale={{ duration: 200, start: 0.95 }}
+        onclick={(e) => e.stopPropagation()}
+      >
+        <div class="flex items-center justify-between border-b border-border/60 px-4 py-3 bg-muted/30">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Switch Account</h2>
+          <button 
+            class="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            onclick={() => (showAccountPicker = false)}
+          >
+            <X size={14} />
+          </button>
+        </div>
+        
+        <div class="p-2 space-y-1 max-h-[400px] overflow-y-auto scrollbar-thin">
+          <button
+            class={`
+              flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all
+              ${!accountFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}
+            `}
+            onclick={() => selectAccount('')}
+          >
+            <span class="flex items-center gap-2">
+              <Inbox size={14} />
+              All Accounts
+            </span>
+            {#if !accountFilter}
+              <Check size={14} />
+            {/if}
+          </button>
+          
+          {#each accounts as account (account.id)}
+            <button
+              class={`
+                flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all
+                ${accountFilter === String(account.id) ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}
+              `}
+              onclick={() => selectAccount(String(account.id))}
+            >
+              <span class="flex items-center gap-2 truncate">
+                <UserCircle size={14} />
+                <span class="truncate">{account.email}</span>
+              </span>
+              {#if accountFilter === String(account.id)}
+                <Check size={14} />
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </div>
     </div>
+  {/if}
 
+  <!-- Compact Header Section -->
+  <div class="space-y-1.5 p-2 bg-background/50 backdrop-blur-sm">
     {#if isInboxView(view)}
-      <!-- Search -->
-      <div class="flex items-center gap-2">
+      <!-- Row 1: Account Filter & Search & Help -->
+      <div class="flex items-center gap-1.5">
+        <button
+          class="flex h-8 min-w-[70px] max-w-[100px] items-center justify-between gap-1.5 rounded-md border border-input bg-muted/30 px-2 text-[11px] font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground active:scale-95"
+          onclick={() => (showAccountPicker = true)}
+          title="Switch Account"
+        >
+          <span class="truncate">{currentAccountLabel}</span>
+          <ChevronDown size={10} class="shrink-0 text-muted-foreground/60" />
+        </button>
+
         <div class="relative flex-1">
           <Search
-            size={15}
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            size={13}
+            class="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
           <input
             bind:this={searchInput}
-            class="h-9 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
+            class="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
             placeholder="Search mail..."
             bind:value={search}
             oninput={scheduleSearch}
@@ -111,12 +191,13 @@
                 applySearch({ clearMessage: true });
               }}
             >
-              <X size={14} />
+              <X size={12} />
             </button>
           {/if}
         </div>
+        
         <button
-          class="rounded-md border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           class:bg-muted={showShortcutHelp}
           class:text-foreground={showShortcutHelp}
           title={showShortcutHelp ? 'Hide shortcuts' : 'Show shortcuts (?)'}
@@ -126,38 +207,46 @@
         </button>
       </div>
 
-      <!-- Account Filter -->
-      <select
-        class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-all"
-        bind:value={accountFilter}
-        onchange={() => applySearch({ clearMessage: true })}
-      >
-        <option value="">All accounts</option>
-        {#each accounts as account (account.id)}
-          <option value={String(account.id)}>{account.email}</option>
-        {/each}
-      </select>
+      <!-- Row 2: View Tabs & Folders Toggle -->
+      <div class="flex items-center gap-1.5">
+        <div class="flex flex-1 items-center gap-0.5 rounded-lg border border-border/40 bg-muted/20 p-0.5">
+          {#each views as v (v.id)}
+            {@const Icon = v.icon}
+            <button
+              class={`
+                flex flex-1 items-center justify-center gap-1.5 rounded-md py-1 px-1.5 text-[10px] font-medium
+                transition-all duration-200
+                ${
+                  view === v.id
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                }
+              `}
+              onclick={() => setQuickView(v.id)}
+            >
+              <Icon size={12} />
+              <span class="hidden sm:inline">{v.label}</span>
+            </button>
+          {/each}
+        </div>
 
-      <!-- View Tabs -->
-      <div class="flex items-center gap-1 rounded-lg border border-border/60 bg-muted/30 p-1">
-        {#each views as v (v.id)}
-          {@const Icon = v.icon}
-          <button
-            class={`
-              flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 px-2 text-xs font-medium
-              transition-all duration-200
-              ${
-                view === v.id
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }
-            `}
-            onclick={() => setQuickView(v.id)}
-          >
-            <Icon size={14} />
-            <span>{v.label}</span>
-          </button>
-        {/each}
+        <button
+          class={`
+            flex h-7 items-center gap-1.5 rounded-md border border-border/60 px-2 text-[10px] font-medium transition-all
+            ${foldersExpanded ? 'bg-primary/10 text-primary border-primary/20' : 'bg-muted/10 text-muted-foreground hover:bg-muted/30'}
+          `}
+          onclick={() => (foldersExpanded = !foldersExpanded)}
+        >
+          <FolderOpen size={12} />
+          <span class="hidden sm:inline">Folders</span>
+          {#if !foldersExpanded}
+            <Badge variant="outline" class="text-[9px] h-3.5 px-1 min-w-0 border-current/20">{folders.length}</Badge>
+          {/if}
+          <ChevronDown
+            size={12}
+            class="transition-transform duration-200 {foldersExpanded ? 'rotate-180' : ''}"
+          />
+        </button>
       </div>
     {/if}
   </div>
@@ -165,112 +254,57 @@
   <!-- Shortcuts Help -->
   {#if isInboxView(view) && showShortcutHelp}
     <div
-      class="mx-4 mb-3 rounded-lg border border-border/60 bg-muted/30 p-3"
+      class="mx-2 mt-2 rounded-lg border border-border/60 bg-muted/30 p-2"
       transition:slide={{ duration: 200 }}
     >
-      <div class="flex items-center gap-2 text-foreground mb-2">
-        <Keyboard size={14} class="text-primary" />
-        <span class="font-semibold text-sm">Keyboard Shortcuts</span>
+      <div class="flex items-center gap-2 text-foreground mb-1.5">
+        <Keyboard size={13} class="text-primary" />
+        <span class="font-semibold text-[11px]">Keyboard Shortcuts</span>
       </div>
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >/</kbd
-          >
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+        <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">/</kbd>
           <span class="text-muted-foreground">Search</span>
         </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >c</kbd
-          >
+        <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">c</kbd>
           <span class="text-muted-foreground">Compose</span>
         </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >j</kbd
-          >
-          <span class="text-muted-foreground">Next message</span>
+        <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">j</kbd>
+          <span class="text-muted-foreground">Next</span>
         </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >k</kbd
-          >
-          <span class="text-muted-foreground">Previous</span>
+        <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">k</kbd>
+          <span class="text-muted-foreground">Prev</span>
         </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >r</kbd
-          >
+        <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">r</kbd>
           <span class="text-muted-foreground">Reply</span>
         </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >s</kbd
-          >
+        <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">s</kbd>
           <span class="text-muted-foreground">Star</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >e</kbd
-          >
-          <span class="text-muted-foreground">Archive</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <kbd
-            class="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >#</kbd
-          >
-          <span class="text-muted-foreground">Trash</span>
         </div>
       </div>
     </div>
   {/if}
 
   <!-- Folders Section -->
-  {#if isInboxView(view)}
-    <div class="px-4 pb-2">
-      <button
-        class="flex w-full items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
-        onclick={() => (foldersExpanded = !foldersExpanded)}
-      >
-        <span class="flex items-center gap-2">
-          <FolderOpen size={14} />
-          <span class="font-medium">Folders</span>
-        </span>
-        <span class="flex items-center gap-1.5">
-          {#if !foldersExpanded}
-            <Badge variant="outline" class="text-[10px] h-5">{folders.length}</Badge>
-          {/if}
-          <ChevronDown
-            size={14}
-            class="transition-transform duration-200 {foldersExpanded ? 'rotate-180' : ''}"
-          />
-        </span>
-      </button>
-    </div>
-
-    {#if foldersExpanded}
-      <ScrollArea class="max-h-[300px] px-4 pt-2 scrollbar-thin">
-        <div class="space-y-2 pb-4">
+  {#if isInboxView(view) && foldersExpanded}
+    <div class="border-b border-border/40" transition:slide={{ duration: 200 }}>
+      <ScrollArea class="max-h-[300px] px-2 py-2 scrollbar-thin">
+        <div class="space-y-1.5">
           {#each folderGroups() as group (group.accountId)}
-            <div class="rounded-lg border border-border/60 bg-muted/20 p-2">
-              <p
-                class="truncate px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider"
-              >
+            <div class="rounded-lg border border-border/60 bg-muted/10 p-1.5">
+              <p class="truncate px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
                 {group.accountEmail}
               </p>
               <div class="mt-1 space-y-0.5">
                 {#each group.folders as folder (folder.id)}
                   <button
                     class={`
-                      flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs
+                      flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[11px]
                       transition-colors duration-150
                       ${
                         query?.folder === folder.path &&
@@ -285,9 +319,9 @@
                     <span class="shrink-0 text-[10px] tabular-nums">
                       {#if folder.unread}
                         <span class="text-primary font-medium">{folder.unread}</span>
-                        <span class="text-muted-foreground/60">/{folder.total}</span>
+                        <span class="text-muted-foreground/40">/{folder.total}</span>
                       {:else}
-                        <span class="text-muted-foreground/60">{folder.total}</span>
+                        <span class="text-muted-foreground/40">{folder.total}</span>
                       {/if}
                     </span>
                   </button>
@@ -297,6 +331,6 @@
           {/each}
         </div>
       </ScrollArea>
-    {/if}
+    </div>
   {/if}
 </div>

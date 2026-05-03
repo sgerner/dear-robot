@@ -2506,7 +2506,7 @@
     <div class="flex-none border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
         <div
-          class="mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4 mx-2"
+          class="mb-2 rounded-xl border border-primary/20 bg-primary/[0.04] p-3 mx-2"
           transition:slide={{ duration: 200 }}
         >
           <div class="flex items-start gap-3">
@@ -2554,11 +2554,11 @@
 
       {#if status}
         <div
-          class="m-3 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
+          class="m-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5"
           transition:slide={{ duration: 200 }}
         >
           <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
-          <p class="text-xs font-medium text-primary">{status}</p>
+          <p class="text-[11px] font-medium text-primary">{status}</p>
         </div>
       {/if}
     </div>
