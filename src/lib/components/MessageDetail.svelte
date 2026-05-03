@@ -321,7 +321,7 @@
 
           <!-- Draft Reply -->
           {#if selected.suggestion.draftReply || ['reply', 'forward'].includes(selected.suggestion.recommendedAction)}
-            <div class="px-4 md:px-5 mt-4">
+            <div class="px-4 md:px-5">
               <div class="relative">
                 <textarea
                   id="draft-reply"
