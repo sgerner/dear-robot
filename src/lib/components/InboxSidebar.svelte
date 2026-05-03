@@ -28,7 +28,7 @@
     setQuickView,
     applySearch,
     scheduleSearch,
-    searchInput,
+    searchInput = $bindable(),
     selectFolder
   }: {
     view: string;

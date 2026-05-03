@@ -207,7 +207,7 @@
       0 0 20px oklch(0.75 0.22 195 / 0.4);
   }
 
-  /* Cinematic button styles - no glow */
+  /* Cinematic button styles */
   .btn-cinematic {
     background: linear-gradient(
       135deg,
@@ -215,10 +215,16 @@
       oklch(0.65 0.2 200 / 0.9) 100%
     );
     border: 1px solid oklch(0.8 0.15 195 / 0.5);
-    transition: all 0.2s ease;
+    box-shadow: 
+      0 0 15px oklch(0.75 0.22 195 / 0.3),
+      inset 0 1px 0 oklch(1 0 0 / 0.2);
+    transition: all 0.3s ease;
   }
   .btn-cinematic:hover {
-    opacity: 0.9;
+    box-shadow: 
+      0 0 25px oklch(0.75 0.22 195 / 0.5),
+      0 0 50px oklch(0.75 0.22 195 / 0.2),
+      inset 0 1px 0 oklch(1 0 0 / 0.2);
     transform: translateY(-1px);
   }
 
@@ -328,8 +334,8 @@
 
   /* Backdrop blur utilities */
   .backdrop-cinematic {
-    backdrop-filter: blur(40px) saturate(250%);
-    -webkit-backdrop-filter: blur(40px) saturate(250%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
 }
 

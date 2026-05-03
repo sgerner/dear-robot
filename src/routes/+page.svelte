@@ -31,6 +31,7 @@
   import MessageDetail from '$lib/components/MessageDetail.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/Card.svelte';
+  import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import SettingsAccounts from '$lib/components/settings/SettingsAccounts.svelte';
   import SettingsAdvanced from '$lib/components/settings/SettingsAdvanced.svelte';
   import SettingsCategoryList from '$lib/components/settings/SettingsCategoryList.svelte';
@@ -352,7 +353,14 @@
       : 'accounts';
     const nextOps = data.query?.ops;
     operationsCategory = nextOps === 'executed' ? 'executed' : 'autopilot';
-    search = data.query?.q || '';
+    
+    // Only update search from URL if we aren't actively typing (debounce null)
+    // or if the URL value is actually different from our current local state.
+    const urlSearch = data.query?.q || '';
+    if (!searchDebounce && search !== urlSearch) {
+      search = urlSearch;
+    }
+
     accountFilter = data.query?.accountId ? String(data.query.accountId) : '';
     draftText = data.selected?.suggestion?.draftReply || '';
     memoryText = data.memory;
@@ -806,8 +814,6 @@
     try {
       const active =
         typeof document !== 'undefined' ? document.activeElement === searchInput : false;
-      const selectionStart = active ? (searchInput?.selectionStart ?? null) : null;
-      const selectionEnd = active ? (searchInput?.selectionEnd ?? null) : null;
       const params = new URLSearchParams();
       if (search) params.set('q', search);
       if (view !== 'inbox') params.set('view', view);
@@ -817,9 +823,8 @@
       await goto(`/?${params.toString()}`);
       if (active) {
         await tick();
-        searchInput?.focus({ preventScroll: true });
-        if (selectionStart !== null && selectionEnd !== null) {
-          searchInput?.setSelectionRange(selectionStart, selectionEnd);
+        if (typeof document !== 'undefined' && document.activeElement !== searchInput) {
+          searchInput?.focus({ preventScroll: true });
         }
       }
     } finally {
@@ -2420,7 +2425,7 @@
 
   <!-- Mobile Header -->
   <header
-    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background px-3 md:hidden"
+    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/80 backdrop-cinematic px-3 md:hidden"
   >
     <div class="flex items-center gap-1">
       <button
@@ -2455,7 +2460,7 @@
 
   <!-- Desktop Icon Rail -->
   <nav
-    class="z-10 hidden h-full flex-col items-center gap-1 overflow-y-auto border-r border-border bg-background px-2 pt-4 scrollbar-none md:flex"
+    class="z-10 hidden h-full flex-col items-center gap-1 overflow-y-auto border-r border-border/60 bg-background/80 backdrop-cinematic px-2 pt-4 scrollbar-none md:flex"
   >
     <div
       class="mb-6 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"
@@ -2496,7 +2501,7 @@
   </nav>
 
   <section
-    class={`h-full overflow-hidden border-r border-border bg-background pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+    class={`h-full overflow-hidden border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
   >
     <div class="flex-none border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
@@ -2542,7 +2547,7 @@
           {setQuickView}
           {applySearch}
           {scheduleSearch}
-          {searchInput}
+          bind:searchInput
           {selectFolder}
         />
       {/if}
@@ -2636,7 +2641,7 @@
   </section>
 
   <section
-    class={`min-w-0 overflow-y-auto bg-background pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
+    class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${data.selected || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
   >
     <MessageDetail
       selected={data.selected}
