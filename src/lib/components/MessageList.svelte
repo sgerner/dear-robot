@@ -49,7 +49,7 @@
   }
 </script>
 
-<ScrollArea class="h-[calc(100vh-2rem)] md:h-full scrollbar-thin">
+<ScrollArea class="flex-1 min-h-0 scrollbar-thin">
   {#each messages as message (message.id)}
     <div
       class="relative overflow-hidden border-b border-border/30 last:border-b-0"

@@ -78,7 +78,7 @@
   }
 </script>
 
-<div class="flex h-full flex-col">
+<div class="flex flex-col">
   <!-- Header Section -->
   <div class="space-y-1 p-2">
     <div class="flex items-center justify-between">
@@ -235,7 +235,7 @@
 
   <!-- Folders Section -->
   {#if isInboxView(view)}
-    <div class="px-4">
+    <div class="px-4 pb-2">
       <button
         class="flex w-full items-center justify-between rounded-lg border border-border/60 px-3 py-2 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
         onclick={() => (foldersExpanded = !foldersExpanded)}
@@ -257,7 +257,7 @@
     </div>
 
     {#if foldersExpanded}
-      <ScrollArea class="flex-1 px-4 pt-2 scrollbar-thin">
+      <ScrollArea class="max-h-[300px] px-4 pt-2 scrollbar-thin">
         <div class="space-y-2 pb-4">
           {#each folderGroups() as group (group.accountId)}
             <div class="rounded-lg border border-border/60 bg-muted/20 p-2">
@@ -297,10 +297,6 @@
           {/each}
         </div>
       </ScrollArea>
-    {:else}
-      <div class="flex-1"></div>
     {/if}
-  {:else}
-    <div class="flex-1"></div>
   {/if}
 </div>

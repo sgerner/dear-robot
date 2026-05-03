@@ -2455,10 +2455,10 @@
 
   <!-- Desktop Icon Rail -->
   <nav
-    class="z-10 hidden flex-col items-center gap-1 border-r border-border bg-background px-2 pt-4 md:flex"
+    class="z-10 hidden h-full flex-col items-center gap-1 overflow-y-auto border-r border-border bg-background px-2 pt-4 scrollbar-none md:flex"
   >
     <div
-      class="mb-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+      class="mb-6 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"
     >
       <Mail size={18} />
     </div>
@@ -2487,7 +2487,7 @@
     </div>
     <div class="flex-1"></div>
     <button
-      class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/30 hover:scale-105 active:scale-95"
+      class="mb-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/30 hover:scale-105 active:scale-95"
       title="Compose (c)"
       onclick={() => openCompose('compose')}
     >
@@ -2496,12 +2496,12 @@
   </nav>
 
   <section
-    class={`border-r border-border bg-background pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+    class={`h-full overflow-hidden border-r border-border bg-background pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
   >
-    <div class="border-b border-border/60 pt-2">
+    <div class="flex-none border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
         <div
-          class="mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4"
+          class="mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4 mx-2"
           transition:slide={{ duration: 200 }}
         >
           <div class="flex items-start gap-3">
@@ -2545,8 +2545,38 @@
           {searchInput}
           {selectFolder}
         />
-      {:else if view === 'operations'}
-        <div class="space-y-4" in:fade={{ duration: 150 }}>
+      {/if}
+
+      {#if status}
+        <div
+          class="m-3 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
+          transition:slide={{ duration: 200 }}
+        >
+          <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
+          <p class="text-xs font-medium text-primary">{status}</p>
+        </div>
+      {/if}
+    </div>
+
+    {#if isInboxView(view)}
+      <MessageList
+        messages={data.messages}
+        selectedId={data.selected?.message?.id ?? null}
+        {swiping}
+        {swipeSettings}
+        {view}
+        {swipeLabel}
+        {swipeActionForDelta}
+        {startSwipe}
+        {updateSwipe}
+        {finishSwipe}
+        {cancelSwipe}
+        {selectMessage}
+        {riskClass}
+      />
+    {:else if view === 'operations'}
+      <ScrollArea class="flex-1 min-h-0">
+        <div class="space-y-4 p-3" in:fade={{ duration: 150 }}>
           <div class="flex rounded-lg border border-border/60 bg-muted/30 p-1">
             <button
               class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
@@ -2582,8 +2612,10 @@
             </div>
           </Card>
         </div>
-      {:else if view === 'settings'}
-        <div class="space-y-1" in:fade={{ duration: 150 }}>
+      </ScrollArea>
+    {:else if view === 'settings'}
+      <ScrollArea class="flex-1 min-h-0">
+        <div class="space-y-1 p-3" in:fade={{ duration: 150 }}>
           <h2
             class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3"
           >
@@ -2599,35 +2631,7 @@
             </button>
           {/each}
         </div>
-      {/if}
-
-      {#if status}
-        <div
-          class="mt-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
-          transition:slide={{ duration: 200 }}
-        >
-          <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
-          <p class="text-xs font-medium text-primary">{status}</p>
-        </div>
-      {/if}
-    </div>
-
-    {#if isInboxView(view)}
-      <MessageList
-        messages={data.messages}
-        selectedId={data.selected?.message?.id ?? null}
-        {swiping}
-        {swipeSettings}
-        {view}
-        {swipeLabel}
-        {swipeActionForDelta}
-        {startSwipe}
-        {updateSwipe}
-        {finishSwipe}
-        {cancelSwipe}
-        {selectMessage}
-        {riskClass}
-      />
+      </ScrollArea>
     {/if}
   </section>
 
