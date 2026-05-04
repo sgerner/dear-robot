@@ -250,4 +250,14 @@ describe('Phase 1 email client services', () => {
     const folderResult = load({ url: new URL('http://localhost/?folder=Archive') } as any);
     expect(folderResult.query.folder).toBe('Archive');
   });
+
+  it('preserves safe inline styles in html email sanitization', async () => {
+    const { sanitizeEmailHtml } = await import('../src/lib/server/html');
+    const html = sanitizeEmailHtml(
+      '<table style="width:100%"><tr><td style="padding:16px;color:#ff5500">Hello<script>alert(1)</script></td></tr></table>'
+    );
+    expect(html).toContain('style="width:100%"');
+    expect(html).toContain('style="padding:16px;color:#ff5500"');
+    expect(html).not.toContain('<script>');
+  });
 });

@@ -14,18 +14,13 @@
     Bot,
     Paperclip,
     ChevronDown,
-    CheckCircle2,
-    XCircle,
     MessageSquare,
     Sparkles,
     FileText,
-    ThumbsUp,
-    ThumbsDown,
-    HelpCircle
+    ThumbsUp
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
-  import Badge from '$lib/components/ui/Badge.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
 
@@ -54,9 +49,7 @@
     recordMessageOutcome,
     createTaskPlan,
     selectMessage,
-    riskClass,
     approveTask,
-    rejectTask,
     executeTask
   }: {
     selected: any;
@@ -102,10 +95,6 @@
     star: Star
   };
 
-  function formatActionLabel(id: string) {
-    return quickActionMeta(id)?.label || id;
-  }
-
   function formatDate(date: string) {
     return new Date(date).toLocaleString(undefined, {
       month: 'short',
@@ -140,8 +129,6 @@
         </h2>
 
         <div class="mt-3 flex items-center gap-2 text-sm">
-          <span class="font-medium text-foreground">{selected.message.from}</span>
-          <span class="text-muted-foreground">·</span>
           <time class="text-muted-foreground">{formatDate(selected.message.date)}</time>
         </div>
       </header>
@@ -228,7 +215,7 @@
         transition:slide={{ duration: 200 }}
       >
         {#if selected.message.safeBodyHtml}
-          <div class="mb-4 flex items-center justify-between pb-3 px-4 md:px-5">
+          <div class="flex items-center justify-between pb-3 px-4 md:px-5">
             <div class="flex items-center gap-2">
               <FileText size={14} class="text-muted-foreground" />
               <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
@@ -260,18 +247,16 @@
           </div>
         {/if}
 
-        <div class="px-4 md:px-5">
-          {#if bodyMode === 'html' && selected.message.safeBodyHtml}
-            <article
-              class="email-html text-sm leading-7 text-foreground prose prose-invert max-w-none"
-            >
+        {#if bodyMode === 'html' && selected.message.safeBodyHtml}
+          <div class="overflow-x-auto w-full">
+            <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
               {@html selected.message.safeBodyHtml}
             </article>
-          {:else}
-            <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground">{selected
-                .message.bodyText}</pre>
-          {/if}
-        </div>
+          </div>
+        {:else}
+          <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground">{selected
+              .message.bodyText}</pre>
+        {/if}
       </section>
 
       <!-- AI Panel -->

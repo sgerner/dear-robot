@@ -283,6 +283,10 @@
           <span class="text-muted-foreground">Reply</span>
         </div>
         <div class="flex items-center gap-1.5">
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">a</kbd>
+          <span class="text-muted-foreground">Archive</span>
+        </div>
+        <div class="flex items-center gap-1.5">
           <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">s</kbd>
           <span class="text-muted-foreground">Star</span>
         </div>

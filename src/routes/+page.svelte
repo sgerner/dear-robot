@@ -642,7 +642,7 @@
         openCompose('reply');
       } else if (event.key === 'a' && current) {
         event.preventDefault();
-        openCompose('reply_all');
+        void archiveSelected();
       } else if (event.key === 'f' && current) {
         event.preventDefault();
         openCompose('forward');

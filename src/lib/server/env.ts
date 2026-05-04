@@ -5,7 +5,8 @@ import { z } from 'zod';
 
 const isBuildProcess =
   process.env.npm_lifecycle_event === 'build' ||
-  process.argv.some((arg) => arg.includes('vite') || arg.includes('@sveltejs/kit'));
+  (process.argv.some((arg) => arg.includes('vite') || arg.includes('@sveltejs/kit')) &&
+    process.argv.includes('build'));
 
 const EnvSchema = z.object({
   NODE_ENV: z.string().default('development'),

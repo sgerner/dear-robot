@@ -599,22 +599,77 @@
 }
 
 /* Email HTML content styles */
+.email-html {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  color: var(--color-foreground);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.email-html > *:first-child {
+  margin-top: 0;
+}
+
+.email-html > div:first-child,
+.email-html > table:first-child {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.email-html > *:last-child {
+  margin-bottom: 0;
+}
+
+.email-html h1,
+.email-html h2,
+.email-html h3,
+.email-html h4,
+.email-html h5,
+.email-html h6 {
+  margin: 1rem 0 0.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.email-html p,
+.email-html div,
+.email-html ul,
+.email-html ol,
+.email-html blockquote,
+.email-html pre,
+.email-html table,
+.email-html img,
+.email-html hr {
+  margin: 0.75rem 0;
+}
+
 .email-html img {
+  display: block;
   max-width: 100%;
   height: auto;
+  margin-inline: auto;
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 20px oklch(0 0 0 / 0.3);
+  box-shadow: none;
 }
 
 .email-html table {
+  display: table;
+  max-width: 100%;
   width: 100%;
   border-collapse: collapse;
+  border-spacing: 0;
 }
 
 .email-html th,
 .email-html td {
-  border: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.65rem;
+  vertical-align: top;
+  border: 0;
 }
 
 .email-html a {
@@ -622,22 +677,24 @@
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, opacity 0.2s ease;
 }
 
 .email-html a:hover {
   color: var(--primary);
-  opacity: 0.8;
-  text-shadow: 0 0 10px oklch(from var(--primary) l c h / 0.5);
+  opacity: 0.85;
 }
 
 .email-html blockquote {
-  border-left: 3px solid oklch(from var(--primary) l c h / 0.5);
-  padding-left: 1rem;
   margin-left: 0;
-  color: var(--color-muted-foreground);
-  background: oklch(from var(--card) l c h / 0.5);
-  padding: 1rem;
+  padding: 0.875rem 1rem;
+  border-left: 3px solid oklch(from var(--primary) l c h / 0.55);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: oklch(from var(--card) l c h / 0.45);
+  color: var(--color-muted-foreground);
 }
 
+.email-html pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
