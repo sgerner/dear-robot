@@ -11,7 +11,7 @@
     X
   } from 'lucide-svelte';
   import { goto, invalidateAll } from '$app/navigation';
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { fade, fly, slide } from 'svelte/transition';
   import type { ModelsDevModel, ModelsDevProvider } from '$lib/server/ai/modelsdev';
   import {
@@ -353,13 +353,6 @@
       : 'accounts';
     const nextOps = data.query?.ops;
     operationsCategory = nextOps === 'executed' ? 'executed' : 'autopilot';
-    
-    // Only update search from URL if we aren't actively typing (debounce null)
-    // or if the URL value is actually different from our current local state.
-    const urlSearch = data.query?.q || '';
-    if (!searchDebounce && search !== urlSearch) {
-      search = urlSearch;
-    }
 
     accountFilter = data.query?.accountId ? String(data.query.accountId) : '';
     draftText = data.selected?.suggestion?.draftReply || '';
@@ -368,49 +361,68 @@
     coreProfileText = data.memoryOverview?.profile?.coreProfile || '';
     memoryAdvancedMode = data.memoryOverview?.profile?.advancedMode || false;
     bodyMode = data.selected?.message?.safeBodyHtml ? 'html' : 'text';
+    googleOauthHasSecret = Boolean(data.googleOauthSettings?.hasClientSecret);
+    googleOauthConnectedEmail = data.query?.oauth === 'connected' ? data.query?.email || '' : '';
+  });
+
+  $effect(() => {
+    const urlSearch = data.query?.q || '';
+    if (!searchDebounce && untrack(() => search) !== urlSearch) {
+      search = urlSearch;
+    }
+  });
+
+  $effect(() => {
     const currentSelectedMessageId = data.selected?.message?.id ?? null;
-    if (selectedMessageId !== currentSelectedMessageId) {
+    if (untrack(() => selectedMessageId) !== currentSelectedMessageId) {
       selectedMessageId = currentSelectedMessageId;
     }
-    if (!compose.accountId)
-      compose.accountId = data.selected?.message?.accountId || data.accounts[0]?.id || 0;
+  });
+
+  $effect(() => {
+    const defaultAccountId = data.selected?.message?.accountId || data.accounts[0]?.id || 0;
+    if (!untrack(() => compose.accountId)) {
+      compose.accountId = defaultAccountId;
+    }
+  });
+
+  $effect(() => {
     void replaceCache('messages', data.messages);
     void replaceCache('folders', data.folders);
     void replaceCache('contacts', data.contacts);
     void setCacheMeta('lastPageCacheAt', new Date().toISOString());
     cacheEncrypted = cacheEncryptionEnabled();
-    googleOauthSettings = {
-      clientId: data.googleOauthSettings?.clientId || '',
-      clientSecret: '',
-      redirectUri:
-        data.googleOauthSettings?.redirectUri ||
-        (typeof window !== 'undefined'
-          ? `${window.location.origin}/api/accounts/google/callback`
-          : ''),
-      scopes: (
-        data.googleOauthSettings?.scopes || [
-          'openid',
-          'email',
-          'profile',
-          'https://mail.google.com/'
-        ]
-      ).join('\n'),
-      isEnabled: data.googleOauthSettings?.isEnabled ?? true
-    };
-    googleOauthHasSecret = Boolean(data.googleOauthSettings?.hasClientSecret);
-    googleOauthConnectedEmail = data.query?.oauth === 'connected' ? data.query?.email || '' : '';
-    if (data.autopilot?.policy) {
-      autopilotPolicy = {
-        autopilotEnabled: Boolean(data.autopilot.policy.autopilotEnabled),
-        dryRunOnly: Boolean(data.autopilot.policy.dryRunOnly),
-        allowAutoFileLowRisk: Boolean(data.autopilot.policy.allowAutoFileLowRisk),
-        allowAutoNoActionLowRisk: Boolean(data.autopilot.policy.allowAutoNoActionLowRisk),
-        requireApprovalForSend: Boolean(data.autopilot.policy.requireApprovalForSend),
-        maxMessagesPerRun: data.autopilot.policy.maxMessagesPerRun || 25,
-        maxAutoActionsPerRun: data.autopilot.policy.maxAutoActionsPerRun || 5,
-        followUpDays: data.autopilot.policy.followUpDays || 2,
-        autoApproveReadOnlyToolCalls: Boolean(data.autopilot.policy.autoApproveReadOnlyToolCalls)
-      };
+  });
+
+  $effect(() => {
+    const serverOauth = data.googleOauthSettings;
+    const nextClientId = serverOauth?.clientId || '';
+    const nextRedirectUri = serverOauth?.redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/api/accounts/google/callback` : '');
+    const nextScopes = (serverOauth?.scopes || ['openid', 'email', 'profile', 'https://mail.google.com/']).join('\n');
+    const nextIsEnabled = serverOauth?.isEnabled ?? true;
+    
+    untrack(() => {
+      if (googleOauthSettings.clientId !== nextClientId) googleOauthSettings.clientId = nextClientId;
+      if (googleOauthSettings.redirectUri !== nextRedirectUri) googleOauthSettings.redirectUri = nextRedirectUri;
+      if (googleOauthSettings.scopes !== nextScopes) googleOauthSettings.scopes = nextScopes;
+      if (googleOauthSettings.isEnabled !== nextIsEnabled) googleOauthSettings.isEnabled = nextIsEnabled;
+    });
+  });
+
+  $effect(() => {
+    const p = data.autopilot?.policy;
+    if (p) {
+      untrack(() => {
+        if (autopilotPolicy.autopilotEnabled !== Boolean(p.autopilotEnabled)) autopilotPolicy.autopilotEnabled = Boolean(p.autopilotEnabled);
+        if (autopilotPolicy.dryRunOnly !== Boolean(p.dryRunOnly)) autopilotPolicy.dryRunOnly = Boolean(p.dryRunOnly);
+        if (autopilotPolicy.allowAutoFileLowRisk !== Boolean(p.allowAutoFileLowRisk)) autopilotPolicy.allowAutoFileLowRisk = Boolean(p.allowAutoFileLowRisk);
+        if (autopilotPolicy.allowAutoNoActionLowRisk !== Boolean(p.allowAutoNoActionLowRisk)) autopilotPolicy.allowAutoNoActionLowRisk = Boolean(p.allowAutoNoActionLowRisk);
+        if (autopilotPolicy.requireApprovalForSend !== Boolean(p.requireApprovalForSend)) autopilotPolicy.requireApprovalForSend = Boolean(p.requireApprovalForSend);
+        if (autopilotPolicy.maxMessagesPerRun !== (p.maxMessagesPerRun || 25)) autopilotPolicy.maxMessagesPerRun = p.maxMessagesPerRun || 25;
+        if (autopilotPolicy.maxAutoActionsPerRun !== (p.maxAutoActionsPerRun || 5)) autopilotPolicy.maxAutoActionsPerRun = p.maxAutoActionsPerRun || 5;
+        if (autopilotPolicy.followUpDays !== (p.followUpDays || 2)) autopilotPolicy.followUpDays = p.followUpDays || 2;
+        if (autopilotPolicy.autoApproveReadOnlyToolCalls !== Boolean(p.autoApproveReadOnlyToolCalls)) autopilotPolicy.autoApproveReadOnlyToolCalls = Boolean(p.autoApproveReadOnlyToolCalls);
+      });
     }
   });
 
@@ -449,13 +461,21 @@
       const nextMode: 'catalog' | 'manual' =
         form?.preset === 'modeldev' ? 'catalog' : currentMode || 'catalog';
       if (currentMode !== nextMode) {
-        profileMode = { ...profileMode, [profile]: nextMode };
+        untrack(() => {
+          profileMode = { ...profileMode, [profile]: nextMode };
+        });
       }
       if (form?.notes && form.notes.trim().startsWith('{')) {
         try {
           const parsed = JSON.parse(form.notes) as { env?: Record<string, string> };
           if (parsed.env && typeof parsed.env === 'object') {
-            profileEnvValues = { ...profileEnvValues, [profile]: parsed.env };
+            untrack(() => {
+              const currentEnvStr = JSON.stringify(profileEnvValues[profile] || {});
+              const nextEnvStr = JSON.stringify(parsed.env);
+              if (currentEnvStr !== nextEnvStr) {
+                profileEnvValues = { ...profileEnvValues, [profile]: parsed.env };
+              }
+            });
           }
         } catch {
           // keep existing
