@@ -17,7 +17,9 @@
     MessageSquare,
     Sparkles,
     FileText,
-    ThumbsUp
+    ThumbsUp,
+    Sun,
+    Moon
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
@@ -83,6 +85,8 @@
     rejectTask: (id: number) => void | Promise<void>;
     executeTask: (id: number) => void | Promise<void>;
   } = $props();
+
+  let emailTheme = $state<'light' | 'dark'>('dark');
 
   const actionIcons: Record<string, any> = {
     reply: Reply,
@@ -222,33 +226,62 @@
                 Message
               </p>
             </div>
-            <div class="flex border border-border/40 p-0.5 text-xs bg-background">
-              <button
-                class={`px-3 py-1 transition-all duration-150 ${
-                  bodyMode === 'html'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onclick={() => (bodyMode = 'html')}
-              >
-                HTML
-              </button>
-              <button
-                class={`px-3 py-1 transition-all duration-150 ${
-                  bodyMode === 'text'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onclick={() => (bodyMode = 'text')}
-              >
-                Plain Text
-              </button>
+            <div class="flex items-center gap-3">
+              <!-- Email Theme Toggle -->
+              <div class="flex border border-border/40 p-0.5 text-xs bg-background">
+                <button
+                  class={`px-2 py-1 transition-all duration-150 ${
+                    emailTheme === 'dark'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (emailTheme = 'dark')}
+                  title="Dark Mode"
+                >
+                  <Moon size={12} />
+                </button>
+                <button
+                  class={`px-2 py-1 transition-all duration-150 ${
+                    emailTheme === 'light'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (emailTheme = 'light')}
+                  title="Light Mode"
+                >
+                  <Sun size={12} />
+                </button>
+              </div>
+
+              <!-- HTML/Plain Toggle -->
+              <div class="flex border border-border/40 p-0.5 text-xs bg-background">
+                <button
+                  class={`px-3 py-1 transition-all duration-150 ${
+                    bodyMode === 'html'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (bodyMode = 'html')}
+                >
+                  HTML
+                </button>
+                <button
+                  class={`px-3 py-1 transition-all duration-150 ${
+                    bodyMode === 'text'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (bodyMode = 'text')}
+                >
+                  Plain
+                </button>
+              </div>
             </div>
           </div>
         {/if}
 
         {#if bodyMode === 'html' && selected.message.safeBodyHtml}
-          <div class="overflow-x-auto w-full">
+          <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
             <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
               {@html selected.message.safeBodyHtml}
             </article>

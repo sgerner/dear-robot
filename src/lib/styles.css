@@ -698,3 +698,24 @@
   overflow-x: auto;
   white-space: pre-wrap;
 }
+
+/* Dark mode email rendering */
+.email-dark {
+  background-color: #ffffff; /* Base background for inversion */
+  filter: invert(1) hue-rotate(180deg);
+  border-radius: var(--radius-sm);
+  transition: filter 0.3s ease;
+}
+
+.email-dark img,
+.email-dark video,
+.email-dark iframe,
+.email-dark [style*="background-image"] {
+  /* Re-invert images and media to preserve original colors */
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Ensure links remain readable and styled consistently */
+.email-dark .email-html a {
+  filter: none; /* Already inverted once by parent, might need adjustment */
+}
