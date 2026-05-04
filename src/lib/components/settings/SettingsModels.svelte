@@ -12,17 +12,17 @@
     aiProfileForms = $bindable(),
     profileMode = $bindable(),
     profileEnvValues = $bindable(),
-    _aiProfileRecommendations,
+    aiProfileRecommendations: _aiProfileRecommendations,
     modelsDevProviders,
     loadModelsDevCatalog,
     selectCatalogProviderForProfile,
-    _selectedCatalogModels,
+    selectedCatalogModels: _selectedCatalogModels,
     selectedCatalogProvider,
     requiredEnvVars,
     setProfileMode,
     testAiProfile,
     saveAiProfile,
-    _modelsDevLoading,
+    modelsDevLoading: _modelsDevLoading,
     audioProviderId = $bindable(),
     audioModelId = $bindable(),
     audioApiKey = $bindable(),
@@ -36,17 +36,17 @@
     aiProfileForms: Record<string, any>;
     profileMode: Record<string, 'catalog' | 'manual'>;
     profileEnvValues: Record<string, Record<string, string>>;
-    _aiProfileRecommendations: Record<string, string[]>;
+    aiProfileRecommendations: Record<string, string[]>;
     modelsDevProviders: Array<ModelsDevProvider>;
     loadModelsDevCatalog: () => void | Promise<void>;
     selectCatalogProviderForProfile: (_profile: any, _input: string) => void;
-    _selectedCatalogModels: (_profile: any) => Array<ModelsDevModel>;
+    selectedCatalogModels: (_profile: any) => Array<ModelsDevModel>;
     selectedCatalogProvider: (_profile: any) => ModelsDevProvider | null | undefined;
     requiredEnvVars: (_profile: any) => string[];
     setProfileMode: (_profile: any, _mode: 'catalog' | 'manual') => void;
     testAiProfile: (_profile: any) => void | Promise<void>;
     saveAiProfile: (_profile: any) => void | Promise<void>;
-    _modelsDevLoading: boolean;
+    modelsDevLoading: boolean;
     audioProviderId: string;
     audioModelId: string;
     audioApiKey: string;

@@ -23,9 +23,9 @@
     swipeSettings,
     swipeActionCatalog,
     updateSwipeSetting,
-    _folderGroups,
-    _saveFolderRole,
-    _folderRoleOptions
+    folderGroups: _folderGroups,
+    saveFolderRole: _saveFolderRole,
+    folderRoleOptions: _folderRoleOptions
   } = $props<{
     quickActionCatalog: Array<{ id: string; label: string; tone?: 'danger' | 'accent' }>;
     quickActionIds: string[];
@@ -38,9 +38,9 @@
       _key: 'leftShort' | 'leftLong' | 'rightShort' | 'rightLong',
       _action: any
     ) => void;
-    _folderGroups: Array<{ accountId: number; accountEmail: string; folders: Array<any> }>;
-    _saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
-    _folderRoleOptions: Array<{ value: string; label: string }>;
+    folderGroups: Array<{ accountId: number; accountEmail: string; folders: Array<any> }>;
+    saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
+    folderRoleOptions: Array<{ value: string; label: string }>;
   }>();
 
   const themes: Array<{ id: Theme; label: string; colors: string[] }> = [

@@ -8,7 +8,7 @@
     selectedId = null,
     swiping = null,
     swipeSettings,
-    _view = 'inbox',
+    view: _view = 'inbox',
     swipeLabel,
     swipeActionForDelta,
     startSwipe,
@@ -16,7 +16,7 @@
     finishSwipe,
     cancelSwipe,
     selectMessage,
-    _riskClass
+    riskClass: _riskClass
   }: {
     messages: any[];
     selectedId: number | null;
