@@ -23,9 +23,9 @@
     swipeSettings,
     swipeActionCatalog,
     updateSwipeSetting,
-    folderGroups,
-    saveFolderRole,
-    folderRoleOptions
+    _folderGroups,
+    _saveFolderRole,
+    _folderRoleOptions
   } = $props<{
     quickActionCatalog: Array<{ id: string; label: string; tone?: 'danger' | 'accent' }>;
     quickActionIds: string[];
@@ -38,9 +38,9 @@
       _key: 'leftShort' | 'leftLong' | 'rightShort' | 'rightLong',
       _action: any
     ) => void;
-    folderGroups: Array<{ accountId: number; accountEmail: string; folders: Array<any> }>;
-    saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
-    folderRoleOptions: Array<{ value: string; label: string }>;
+    _folderGroups: Array<{ accountId: number; accountEmail: string; folders: Array<any> }>;
+    _saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
+    _folderRoleOptions: Array<{ value: string; label: string }>;
   }>();
 
   const themes: Array<{ id: Theme; label: string; colors: string[] }> = [
@@ -165,7 +165,7 @@
         </div>
 
         <div class="grid gap-6 md:grid-cols-2">
-          {#each [{ key: 'rightShort', label: 'Short Swipe', shift: 40 }, { key: 'rightLong', label: 'Long Swipe', shift: 120 }] as gesture}
+          {#each [{ key: 'rightShort', label: 'Short Swipe', shift: 40 }, { key: 'rightLong', label: 'Long Swipe', shift: 120 }] as gesture (gesture.key)}
             <div class="space-y-3">
               <div class="flex items-center justify-between text-xs">
                 <span class="font-medium text-zinc-400">{gesture.label}</span>
@@ -221,7 +221,7 @@
         </div>
 
         <div class="grid gap-6 md:grid-cols-2">
-          {#each [{ key: 'leftShort', label: 'Short Swipe', shift: -40 }, { key: 'leftLong', label: 'Long Swipe', shift: -120 }] as gesture}
+          {#each [{ key: 'leftShort', label: 'Short Swipe', shift: -40 }, { key: 'leftLong', label: 'Long Swipe', shift: -120 }] as gesture (gesture.key)}
             <div class="space-y-3">
               <div class="flex items-center justify-between text-xs">
                 <span class="font-medium text-zinc-400">{gesture.label}</span>

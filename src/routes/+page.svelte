@@ -13,7 +13,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { fade, fly, slide } from 'svelte/transition';
-  import type { ModelsDevModel, ModelsDevProvider } from '$lib/server/ai/modelsdev';
+  import type { ModelsDevProvider } from '$lib/server/ai/modelsdev';
   import {
     cacheEncryptionEnabled,
     deleteOutbox,
@@ -473,7 +473,7 @@
               const currentEnvStr = JSON.stringify(profileEnvValues[profile] || {});
               const nextEnvStr = JSON.stringify(parsed.env);
               if (currentEnvStr !== nextEnvStr) {
-                profileEnvValues = { ...profileEnvValues, [profile]: parsed.env };
+                profileEnvValues = { ...profileEnvValues, [profile]: parsed.env as Record<string, string> };
               }
             });
           }
@@ -1042,7 +1042,7 @@
   async function testAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
     status = `Testing ${profile} profile...`;
     const form = aiProfileForms[profile];
-    let configOverrides: any = {};
+    let configOverrides: any;
 
     if (profile === 'audio') {
       configOverrides = {

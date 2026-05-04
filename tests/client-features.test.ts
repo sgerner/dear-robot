@@ -242,12 +242,15 @@ describe('Phase 1 email client services', () => {
 
   it('defaults the root inbox view to inbox messages only', async () => {
     const { load } = await import('../src/routes/+page.server');
-    const result = load({ url: new URL('http://localhost/') } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = (await load({ url: new URL('http://localhost/') } as any)) as any;
     expect(result.query.folder).toBe('INBOX');
     expect(result.messages.length).toBeGreaterThan(0);
-    expect(result.messages.every((message) => message.folderPath === 'INBOX')).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(result.messages.every((message: any) => message.folderPath === 'INBOX')).toBe(true);
 
-    const folderResult = load({ url: new URL('http://localhost/?folder=Archive') } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const folderResult = (await load({ url: new URL('http://localhost/?folder=Archive') } as any)) as any;
     expect(folderResult.query.folder).toBe('Archive');
   });
 

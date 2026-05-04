@@ -15,7 +15,7 @@ export const AiProfileSchema = z.object({
   transport: z.enum(['openai_compatible', 'anthropic']).default('openai_compatible'),
   model: z.string().min(1).max(200),
   baseUrl: z.string().url(),
-  apiKey: z.union([z.string(), z.record(z.string())]).nullable().optional(),
+  apiKey: z.union([z.string(), z.record(z.string(), z.string())]).nullable().optional(),
   preset: z.string().nullable().optional(),
   isEnabled: z.boolean().default(true),
   notes: z.string().nullable().optional()

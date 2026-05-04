@@ -8,7 +8,7 @@
     selectedId = null,
     swiping = null,
     swipeSettings,
-    view = 'inbox',
+    _view = 'inbox',
     swipeLabel,
     swipeActionForDelta,
     startSwipe,
@@ -16,21 +16,21 @@
     finishSwipe,
     cancelSwipe,
     selectMessage,
-    riskClass
+    _riskClass
   }: {
     messages: any[];
     selectedId: number | null;
     swiping: any;
     swipeSettings: any;
     view: string;
-    swipeLabel: (id: any) => string;
-    swipeActionForDelta: (delta: number) => any;
-    startSwipe: (e: PointerEvent, id: number) => void;
-    updateSwipe: (e: PointerEvent) => void;
-    finishSwipe: (e: PointerEvent, id: number) => Promise<void>;
+    swipeLabel: (_id: any) => string;
+    swipeActionForDelta: (_delta: number) => any;
+    startSwipe: (_e: PointerEvent, _id: number) => void;
+    updateSwipe: (_e: PointerEvent) => void;
+    finishSwipe: (_e: PointerEvent, _id: number) => Promise<void>;
     cancelSwipe: () => void;
-    selectMessage: (id: number) => Promise<void>;
-    riskClass: (risk: string | null | undefined) => string;
+    selectMessage: (_id: number) => Promise<void>;
+    riskClass: (_risk: string | null | undefined) => string;
   } = $props();
 
   function formatDate(date: string) {

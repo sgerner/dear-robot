@@ -12,7 +12,7 @@ const TestSchema = z.object({
       transport: z.enum(['openai_compatible', 'anthropic']).optional(),
       model: z.string().optional(),
       baseUrl: z.string().optional(),
-      apiKey: z.string().or(z.record(z.string())).optional()
+      apiKey: z.string().or(z.record(z.string(), z.string())).optional()
     })
     .optional()
 });
@@ -23,7 +23,7 @@ function profileConfig(
   profile: z.infer<typeof TestSchema>['profile'],
   overrides?: z.infer<typeof TestSchema>['config']
 ): RuntimeProfile {
-  let base: any;
+  let base: RuntimeProfile;
   if (profile === 'primary') {
     base = {
       profile: 'primary',

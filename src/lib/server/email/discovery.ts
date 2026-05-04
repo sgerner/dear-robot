@@ -48,7 +48,7 @@ async function tryMozillaAutoconfig(domain: string, email: string): Promise<Disc
         smtpUsername: email
       };
     }
-  } catch (error) {
+  } catch (_error) {
     // Ignore errors and try next method
   }
   return null;
@@ -71,7 +71,7 @@ async function tryDnsSrv(domain: string, email: string): Promise<DiscoveredSetti
         smtpUsername: email
       };
     }
-  } catch (error) {
+  } catch (_error) {
     // Ignore
   }
   return null;

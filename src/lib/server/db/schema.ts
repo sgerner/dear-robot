@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 
 export const accounts = sqliteTable('accounts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -100,7 +100,13 @@ export const messages = sqliteTable(
     providerUnique: uniqueIndex('messages_account_provider_unique').on(
       table.accountId,
       table.providerMessageId
-    )
+    ),
+    accountFolderDateIdx: index('messages_account_folder_date_idx').on(
+      table.accountId,
+      table.folderPath,
+      table.date
+    ),
+    accountThreadIdx: index('messages_account_thread_idx').on(table.accountId, table.threadId)
   })
 );
 

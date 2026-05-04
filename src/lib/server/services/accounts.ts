@@ -7,7 +7,8 @@ import {
   executedActions,
   feedbackLog,
   folders,
-  messages
+  messages,
+  type Account
 } from '../db/schema';
 import { encryptSecret } from '../security';
 import { providerForAccount } from '../email/provider';
@@ -110,7 +111,7 @@ export async function testAccount(id: number) {
 }
 
 export async function testAccountInput(input: z.infer<typeof AccountInputSchema>) {
-  const mockAccount: any = {
+  const mockAccount: Record<string, unknown> = {
     email: input.email,
     host: input.host,
     port: input.port,
@@ -122,7 +123,7 @@ export async function testAccountInput(input: z.infer<typeof AccountInputSchema>
     smtpPasswordEncrypted: encryptSecret(input.smtpPassword),
     authType: 'password'
   };
-  return providerForAccount(mockAccount).test(mockAccount);
+  return providerForAccount(mockAccount as unknown as Account).test(mockAccount as unknown as Account);
 }
 
 export function enableAccount(id: number) {

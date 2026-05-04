@@ -57,9 +57,9 @@
     selected: any;
     view: string;
     quickActionIds: string[];
-    quickActionMeta: (id: any) => any;
-    runQuickAction: (id: any, msgId?: number) => void | Promise<void>;
-    moveSelected: (path: string) => void | Promise<void>;
+    quickActionMeta: (_id: any) => any;
+    runQuickAction: (_id: any, _msgId?: number) => void | Promise<void>;
+    moveSelected: (_path: string) => void | Promise<void>;
     folders: any[];
     bodyMode: string;
     draftText: string;
@@ -69,21 +69,21 @@
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
-    toggleDictation: (id: string) => void | Promise<void>;
+    toggleDictation: (_id: string) => void | Promise<void>;
     executeSuggestion: () => void | Promise<void>;
     saveEdit: () => void | Promise<void>;
     rejectSuggestion: () => void | Promise<void>;
     regenerate: () => void | Promise<void>;
-    generateSuggestion: (id: number) => void | Promise<void>;
+    generateSuggestion: (_id: number) => void | Promise<void>;
     recordMessageOutcome: (
-      type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action'
+      _type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action'
     ) => void | Promise<void>;
     createTaskPlan: () => void | Promise<void>;
-    selectMessage: (id: number) => void | Promise<void>;
-    riskClass: (risk: string | null | undefined) => string;
-    approveTask: (id: number, stepId?: number | null) => void | Promise<void>;
-    rejectTask: (id: number) => void | Promise<void>;
-    executeTask: (id: number) => void | Promise<void>;
+    selectMessage: (_id: number) => void | Promise<void>;
+    riskClass: (_risk: string | null | undefined) => string;
+    approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
+    rejectTask: (_id: number) => void | Promise<void>;
+    executeTask: (_id: number) => void | Promise<void>;
   } = $props();
 
   let emailTheme = $state<'light' | 'dark'>('dark');
@@ -283,6 +283,7 @@
         {#if bodyMode === 'html' && selected.message.safeBodyHtml}
           <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
             <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               {@html selected.message.safeBodyHtml}
             </article>
           </div>

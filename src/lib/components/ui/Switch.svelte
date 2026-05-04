@@ -9,7 +9,7 @@
     checked?: boolean;
     label?: string;
     disabled?: boolean;
-    onchange?: (checked: boolean) => void;
+    onchange?: (_checked: boolean) => void;
     class?: string;
   }>();
 
@@ -29,6 +29,7 @@
     type="button"
     role="switch"
     aria-checked={checked}
+    aria-label={label}
     {disabled}
     onclick={toggle}
     class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background {checked

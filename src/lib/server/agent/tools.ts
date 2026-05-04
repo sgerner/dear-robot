@@ -150,17 +150,15 @@ export async function executeTool(
 ) {
   const started = Date.now();
   let status: 'completed' | 'failed' = 'completed';
-  let responseJson = '';
+  let resultOutput: unknown;
   try {
-    const output =
+    resultOutput =
       tool.kind === 'mcp_http' ? await runHttpTool(tool, input) : await runCliTool(tool, input);
-    responseJson = JSON.stringify(output);
-    return { ok: true, output, durationMs: Date.now() - started };
+    return { ok: true, output: resultOutput, durationMs: Date.now() - started };
   } catch (error) {
     status = 'failed';
-    const payload = { error: error instanceof Error ? error.message : String(error) };
-    responseJson = JSON.stringify(payload);
-    return { ok: false, output: payload, durationMs: Date.now() - started };
+    resultOutput = { error: error instanceof Error ? error.message : String(error) };
+    return { ok: false, output: resultOutput, durationMs: Date.now() - started };
   } finally {
     if (!options.dryRun) {
       db.insert(toolCalls)
@@ -170,7 +168,7 @@ export async function executeTool(
           toolId: tool.id ?? null,
           toolName: tool.name,
           requestJson: JSON.stringify(input),
-          responseJson,
+          responseJson: JSON.stringify(resultOutput),
           status,
           durationMs: Date.now() - started,
           createdAt: nowIso()

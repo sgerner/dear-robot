@@ -12,17 +12,17 @@
     aiProfileForms = $bindable(),
     profileMode = $bindable(),
     profileEnvValues = $bindable(),
-    aiProfileRecommendations,
+    _aiProfileRecommendations,
     modelsDevProviders,
     loadModelsDevCatalog,
     selectCatalogProviderForProfile,
-    selectedCatalogModels,
+    _selectedCatalogModels,
     selectedCatalogProvider,
     requiredEnvVars,
     setProfileMode,
     testAiProfile,
     saveAiProfile,
-    modelsDevLoading,
+    _modelsDevLoading,
     audioProviderId = $bindable(),
     audioModelId = $bindable(),
     audioApiKey = $bindable(),
@@ -36,17 +36,17 @@
     aiProfileForms: Record<string, any>;
     profileMode: Record<string, 'catalog' | 'manual'>;
     profileEnvValues: Record<string, Record<string, string>>;
-    aiProfileRecommendations: Record<string, string[]>;
+    _aiProfileRecommendations: Record<string, string[]>;
     modelsDevProviders: Array<ModelsDevProvider>;
     loadModelsDevCatalog: () => void | Promise<void>;
     selectCatalogProviderForProfile: (_profile: any, _input: string) => void;
-    selectedCatalogModels: (_profile: any) => Array<ModelsDevModel>;
+    _selectedCatalogModels: (_profile: any) => Array<ModelsDevModel>;
     selectedCatalogProvider: (_profile: any) => ModelsDevProvider | null | undefined;
     requiredEnvVars: (_profile: any) => string[];
     setProfileMode: (_profile: any, _mode: 'catalog' | 'manual') => void;
     testAiProfile: (_profile: any) => void | Promise<void>;
     saveAiProfile: (_profile: any) => void | Promise<void>;
-    modelsDevLoading: boolean;
+    _modelsDevLoading: boolean;
     audioProviderId: string;
     audioModelId: string;
     audioApiKey: string;
@@ -309,7 +309,7 @@
                     class="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-2xl backdrop-blur-xl scrollbar-thin"
                     in:fade={{ duration: 150 }}
                   >
-                    {#each getFilteredModels(profileKey) as m}
+                    {#each getFilteredModels(profileKey) as m (`${m.provider.id}-${m.id}`)}
                       <button
                         class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all hover:bg-muted active:scale-[0.98]"
                         onclick={() => selectModel(profileKey, m)}

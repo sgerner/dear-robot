@@ -8,6 +8,7 @@ import {
   aiSuggestions,
   automationPolicies,
   autopilotRuns,
+  folders,
   followUpReminders,
   messages,
   outcomeEvents,
@@ -233,9 +234,13 @@ export async function runAutopilotNow() {
       ensureFollowUpForMessage(suggestion.messageId, suggestion.id, policy);
     }
     const candidates = db
-      .select()
+      .select({ id: messages.id })
       .from(messages)
-      .where(sql`${latestSuggestionIdSql()} IS NULL`)
+      .innerJoin(
+        folders,
+        and(eq(folders.accountId, messages.accountId), eq(folders.path, messages.folderPath))
+      )
+      .where(and(eq(folders.role, 'inbox'), sql`${latestSuggestionIdSql()} IS NULL`))
       .orderBy(desc(messages.date))
       .limit(Math.max(0, policy.maxMessagesPerRun - scannedCount))
       .all();

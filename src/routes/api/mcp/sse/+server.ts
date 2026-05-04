@@ -29,7 +29,7 @@ const ToolCallSchema = z.object({
     'regenerate_suggestion',
     'execute_suggestion'
   ]),
-  args: z.record(z.unknown()).default({})
+  args: z.record(z.string(), z.unknown()).default({})
 });
 
 const MessageIdArgsSchema = z.object({

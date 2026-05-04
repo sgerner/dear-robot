@@ -6,7 +6,7 @@ export const AgentStepSchema = z
     kind: z.enum(['draft_reply', 'move_to_folder', 'tool_call', 'delegate', 'mark_done']),
     details: z.string().min(1).max(1500),
     tool_name: z.string().min(1).max(120).nullable().optional(),
-    tool_input: z.record(z.unknown()).nullable().optional(),
+    tool_input: z.record(z.string(), z.unknown()).nullable().optional(),
     requires_approval: z.boolean().default(true),
     risk_level: z.enum(['low', 'medium', 'high']).default('low')
   })
@@ -31,8 +31,8 @@ const ToolBaseSchema = z.object({
   endpoint: z.string().url().nullable().optional(),
   command: z.string().min(1).max(240).nullable().optional(),
   args: z.array(z.string()).default([]),
-  authHeaders: z.record(z.string()).default({}),
-  env: z.record(z.string()).default({}),
+  authHeaders: z.record(z.string(), z.string()).default({}),
+  env: z.record(z.string(), z.string()).default({}),
   skillsMarkdown: z.string().max(20000).nullable().optional(),
   readOnly: z.boolean().default(false),
   requireApprovalForWrite: z.boolean().default(true),

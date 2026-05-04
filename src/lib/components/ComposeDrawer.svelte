@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Bot, Loader2, Paperclip, Send, X, Sparkles, ChevronDown } from 'lucide-svelte';
+  import { Bot, Loader2, Paperclip, Send, X, Sparkles } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Button from '$lib/components/ui/Button.svelte';

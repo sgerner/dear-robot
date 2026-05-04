@@ -741,7 +741,7 @@ export async function executeSuggestion(id: number) {
   if (!account) throw new Error('Account not found');
   const provider = providerForAccount(account);
   const now = nowIso();
-  let details: Record<string, unknown> = {};
+  let details: any;
   const action = suggestion.recommendedAction;
   if (action === 'reply') {
     if (!suggestion.draftReply) throw new Error('Reply action requires draft_reply');
