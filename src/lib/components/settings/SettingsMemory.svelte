@@ -1,6 +1,7 @@
 <script lang="ts">
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
+  import { formatPlainText } from '$lib/utils/format';
 
   let {
     data,
@@ -176,7 +177,10 @@
       <div class="mt-3 space-y-2">
         {#each data.memoryOverview?.rules || [] as rule (rule.id)}
           <article class="rounded-md border border-white/10 bg-black/20 p-2">
-            <p class="text-xs text-zinc-300">{rule.ruleText}</p>
+            <div class="text-xs text-zinc-300">
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              {@html formatPlainText(rule.ruleText)}
+            </div>
             <p class="mt-1 text-[11px] text-zinc-500">
               {rule.scope} · conf {Number(rule.confidence).toFixed(2)} · used {rule.usageCount}x
             </p>
@@ -210,8 +214,14 @@
           <p class="text-[11px] text-zinc-500">
             {example.scope} · score {Number(example.score).toFixed(2)}
           </p>
-          <p class="mt-1 text-xs text-zinc-400 line-clamp-2">Before: {example.beforeText}</p>
-          <p class="mt-1 text-xs text-zinc-300 line-clamp-2">After: {example.afterText}</p>
+          <div class="mt-1 text-xs text-zinc-400 line-clamp-2">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            Before: {@html formatPlainText(example.beforeText)}
+          </div>
+          <div class="mt-1 text-xs text-zinc-300 line-clamp-2">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            After: {@html formatPlainText(example.afterText)}
+          </div>
         </article>
       {/each}
     </div>

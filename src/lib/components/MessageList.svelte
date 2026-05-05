@@ -2,6 +2,7 @@
   import { Star, Archive, Trash2 } from 'lucide-svelte';
   import { flip } from 'svelte/animate';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
+  import { formatPlainText } from '$lib/utils/format';
 
   let {
     messages = [],
@@ -147,9 +148,10 @@
           </p>
 
           <!-- Line 3: Snippet -->
-          <p class="truncate text-xs leading-tight text-muted-foreground/70 mt-0.5">
-            {message.snippet}
-          </p>
+          <div class="truncate text-xs leading-tight text-muted-foreground/70 mt-0.5">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            {@html formatPlainText(message.snippet)}
+          </div>
         </div>
       </button>
     </div>

@@ -25,6 +25,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
+  import { formatPlainText } from '$lib/utils/format';
 
   let {
     selected,
@@ -204,9 +205,10 @@
                   </time>
                 </div>
                 <p class="truncate text-xs text-muted-foreground">{item.subject}</p>
-                <p class="mt-1.5 line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed">
-                  {item.bodyText}
-                </p>
+                <div class="mt-1.5 line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed">
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                  {@html formatPlainText(item.bodyText)}
+                </div>
               </button>
             {/each}
           </div>
@@ -288,8 +290,10 @@
             </article>
           </div>
         {:else}
-          <pre class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground">{selected
-              .message.bodyText}</pre>
+          <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground px-4 md:px-5">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            {@html formatPlainText(selected.message.bodyText)}
+          </div>
         {/if}
       </section>
 
@@ -322,9 +326,10 @@
                 </span>
               </div>
             </div>
-            <p class="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-              {selected.suggestion.reasoningSummary}
-            </p>
+            <div class="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              {@html formatPlainText(selected.suggestion.reasoningSummary)}
+            </div>
 
             {#if selected.suggestion.targetFolder || selected.suggestion.delegateInstructions}
               <div class="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -479,7 +484,10 @@
                           <div
                             class="bg-background/60 px-2.5 py-1.5 flex items-center justify-between gap-2"
                           >
-                            <p class="text-xs text-foreground">{step.title}</p>
+                            <div class="text-xs text-foreground">
+                              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                              {@html formatPlainText(step.title)}
+                            </div>
                             <span
                               class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 {step.riskLevel ===
                               'high'
