@@ -7,6 +7,7 @@
     cacheEncrypted,
     saveCacheEncryption,
     backups,
+    backupPolicy,
     createBackupNow,
     refreshBackups,
     restoreBackupNow,
@@ -25,6 +26,7 @@
     cacheEncrypted: boolean;
     saveCacheEncryption: () => void;
     backups: Array<{ id: string; createdAt: string }>;
+    backupPolicy: { retentionDays: number; maxBackups: number } | null;
     createBackupNow: () => void | Promise<void>;
     refreshBackups: () => void | Promise<void>;
     restoreBackupNow: (_id: string) => void | Promise<void>;
@@ -66,6 +68,12 @@
   <p class="mt-2 text-sm text-zinc-400">
     Create and restore `/data` snapshots for disaster recovery. Restore rewrites current DB state.
   </p>
+  {#if backupPolicy}
+    <p class="mt-1 text-xs text-zinc-500">
+      Automatic lifecycle: keep backups for {backupPolicy.retentionDays} days, up to
+      {backupPolicy.maxBackups} snapshots. Older backups are pruned automatically.
+    </p>
+  {/if}
   <div class="mt-3 flex flex-wrap gap-2">
     <button
       class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"

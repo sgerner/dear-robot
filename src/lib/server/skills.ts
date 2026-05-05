@@ -8,6 +8,7 @@ export const defaultGlobalSkillsMarkdown = `# skills.md
 - Keep entries short and specific. Prefer bullets and examples over long prose.
 - Put tool-specific instructions in the matching tool playbook files.
 - Only include instructions that should be reused often.
+- MCP note: use \`POST /api/mcp/sse\` for all tool execution. \`GET /api/mcp/sse\` is discovery-only.
 `;
 
 function globalSkillsPath() {

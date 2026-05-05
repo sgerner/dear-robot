@@ -12,6 +12,9 @@ type BackupManifest = {
   memoryFile: string | null;
 };
 
+const BACKUP_RETENTION_DAYS = Math.max(1, Number.parseInt(process.env.BACKUP_RETENTION_DAYS || '30', 10));
+const BACKUP_MAX_COUNT = Math.max(1, Number.parseInt(process.env.BACKUP_MAX_COUNT || '30', 10));
+
 function backupsDir() {
   return path.join(env.DATA_DIR, 'backups');
 }
@@ -35,8 +38,56 @@ function saveManifest(rows: BackupManifest[]) {
   fs.writeFileSync(manifestPath(), JSON.stringify(rows, null, 2), 'utf8');
 }
 
+function removeBackupFiles(row: BackupManifest) {
+  const backupFolder = path.dirname(row.dbFile);
+  if (backupFolder.startsWith(backupsDir())) {
+    fs.rmSync(backupFolder, { recursive: true, force: true });
+  }
+}
+
+function isManifestEntryPresent(row: BackupManifest) {
+  if (!fs.existsSync(row.dbFile)) return false;
+  if (row.memoryFile && !fs.existsSync(row.memoryFile)) return false;
+  return true;
+}
+
+function pruneManifest() {
+  const now = Date.now();
+  const retentionMs = BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const sorted = loadManifest().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const survivors: BackupManifest[] = [];
+  const toDelete: BackupManifest[] = [];
+  for (const row of sorted) {
+    if (!isManifestEntryPresent(row)) {
+      toDelete.push(row);
+      continue;
+    }
+    const createdAtMs = Date.parse(row.createdAt);
+    const olderThanRetention = Number.isFinite(createdAtMs) ? now - createdAtMs > retentionMs : true;
+    if (olderThanRetention) {
+      toDelete.push(row);
+      continue;
+    }
+    if (survivors.length >= BACKUP_MAX_COUNT) {
+      toDelete.push(row);
+      continue;
+    }
+    survivors.push(row);
+  }
+  for (const row of toDelete) removeBackupFiles(row);
+  saveManifest(survivors);
+  return survivors;
+}
+
+export function backupLifecyclePolicy() {
+  return {
+    retentionDays: BACKUP_RETENTION_DAYS,
+    maxBackups: BACKUP_MAX_COUNT
+  };
+}
+
 export function listBackups() {
-  return loadManifest().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return pruneManifest();
 }
 
 export async function createBackup() {
@@ -61,6 +112,7 @@ export async function createBackup() {
   const manifest = loadManifest();
   manifest.push(row);
   saveManifest(manifest);
+  pruneManifest();
   return row;
 }
 

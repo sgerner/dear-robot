@@ -41,40 +41,47 @@ const SuggestionIdArgsSchema = z.object({
 });
 
 export async function GET({ url }) {
-  const tool = url.searchParams.get('tool');
-  const payload = tool
-    ? {
-        tool,
-        args: Object.fromEntries(url.searchParams.entries())
-      }
-    : null;
-  if (!payload) {
-    return new Response(
-      `event: ready\ndata: ${JSON.stringify({
-        tools: [
-          { name: 'search_emails', args: { query: 'string' } },
-          { name: 'get_email_context', args: { message_id: 'number' } },
-          { name: 'list_folders', args: { account_id: 'number (optional)' } },
-          { name: 'move_message', args: { message_id: 'number', folder_path: 'string' } },
-          { name: 'set_read', args: { message_id: 'number', read: 'boolean' } },
-          { name: 'set_flagged', args: { message_id: 'number', flagged: 'boolean' } },
-          { name: 'generate_suggestion', args: { message_id: 'number' } },
-          {
-            name: 'regenerate_suggestion',
-            args: { message_id: 'number', note: 'string (optional)' }
-          },
-          { name: 'execute_suggestion', args: { suggestion_id: 'number' } }
-        ]
-      })}\n\n`,
+  if (url.searchParams.has('tool')) {
+    return json(
       {
-        headers: {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache'
-        }
+        error: 'tool_invocation_requires_post',
+        message: 'Use POST /api/mcp/sse with JSON body { tool, args }.'
+      },
+      {
+        status: 405,
+        headers: { allow: 'GET, POST' }
       }
     );
   }
-  return toolResponse(payload);
+  return new Response(
+    `event: ready\ndata: ${JSON.stringify({
+      tools: [
+        { name: 'search_emails', args: { query: 'string' } },
+        { name: 'get_email_context', args: { message_id: 'number' } },
+        { name: 'list_folders', args: { account_id: 'number (optional)' } },
+        { name: 'move_message', args: { message_id: 'number', folder_path: 'string' } },
+        { name: 'set_read', args: { message_id: 'number', read: 'boolean' } },
+        { name: 'set_flagged', args: { message_id: 'number', flagged: 'boolean' } },
+        { name: 'generate_suggestion', args: { message_id: 'number' } },
+        {
+          name: 'regenerate_suggestion',
+          args: { message_id: 'number', note: 'string (optional)' }
+        },
+        { name: 'execute_suggestion', args: { suggestion_id: 'number' } }
+      ],
+      invocation: {
+        method: 'POST',
+        contentType: 'application/json',
+        body: { tool: 'search_emails', args: { query: 'invoice' } }
+      }
+    })}\n\n`,
+    {
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache'
+      }
+    }
+  );
 }
 
 export async function POST({ request }) {

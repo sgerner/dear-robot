@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
-import { createBackup, listBackups } from '$lib/server/backup';
+import { backupLifecyclePolicy, createBackup, listBackups } from '$lib/server/backup';
 
 export function GET() {
-  return json({ backups: listBackups() });
+  return json({ backups: listBackups(), policy: backupLifecyclePolicy() });
 }
 
 export async function POST() {

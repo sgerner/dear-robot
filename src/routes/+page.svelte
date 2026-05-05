@@ -247,6 +247,7 @@
   let cachePassphrase = $state('');
   let cacheEncrypted = $state(false);
   let backups = $state<Array<{ id: string; createdAt: string }>>([]);
+  let backupPolicy = $state<{ retentionDays: number; maxBackups: number } | null>(null);
   let auditSnapshot = $state<{ actions: number; toolCalls: number; memoryEvents: number } | null>(
     null
   );
@@ -1373,6 +1374,7 @@
   async function refreshBackups() {
     const response = await api('/api/admin/backups');
     backups = response.backups || [];
+    backupPolicy = response.policy || null;
   }
 
   async function createBackupNow() {
@@ -3160,6 +3162,7 @@
               {cacheEncrypted}
               {saveCacheEncryption}
               {backups}
+              {backupPolicy}
               {createBackupNow}
               {refreshBackups}
               {restoreBackupNow}

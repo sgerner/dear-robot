@@ -580,7 +580,7 @@ Authorization: Bearer ${MCP_AUTH_TOKEN}
 
 Connect from another agent/runtime:
 
-1. Read available tools (SSE-ready payload):
+1. Read available tools (SSE-ready discovery payload):
 
 ```bash
 curl -s \
@@ -588,7 +588,7 @@ curl -s \
   http://localhost:3000/api/mcp/sse
 ```
 
-2. Invoke a tool:
+2. Invoke a tool (`POST` only):
 
 ```bash
 curl -s \
@@ -609,6 +609,11 @@ Supported tools:
 - `generate_suggestion` with `{ "message_id": 123 }`
 - `regenerate_suggestion` with `{ "message_id": 123, "note": "make it shorter" }`
 - `execute_suggestion` with `{ "suggestion_id": 456 }`
+
+Notes:
+
+- `GET /api/mcp/sse` is discovery-only and does not execute tools.
+- Any tool execution attempt over `GET` is rejected; send JSON to `POST /api/mcp/sse`.
 
 ---
 

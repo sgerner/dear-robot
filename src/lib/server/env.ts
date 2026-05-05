@@ -78,11 +78,31 @@ const requiredProductionSecrets = [
   'MCP_AUTH_TOKEN'
 ] as const;
 
+const dataDirIsAbsolute = path.isAbsolute(env.DATA_DIR);
+const dbPathIsAbsolute = env.DB_PATH === ':memory:' ? false : path.isAbsolute(env.DB_PATH);
+
 if (isProduction) {
   const missing = requiredProductionSecrets.filter((name) => !env[name]);
   if (missing.length > 0) {
     throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
   }
+  if (!dataDirIsAbsolute) {
+    throw new Error(`DATA_DIR must be an absolute path in production. Received: ${env.DATA_DIR}`);
+  }
+  if (env.DB_PATH === ':memory:') {
+    throw new Error('DB_PATH must be a persistent absolute file path in production, not :memory:.');
+  }
+  if (!dbPathIsAbsolute) {
+    throw new Error(`DB_PATH must be an absolute path in production. Received: ${env.DB_PATH}`);
+  }
+}
+
+if (!isBuildProcess && !dataDirIsAbsolute) {
+  throw new Error(`DATA_DIR must be an absolute path. Received: ${env.DATA_DIR}`);
+}
+
+if (!isBuildProcess && env.DB_PATH !== ':memory:' && !dbPathIsAbsolute) {
+  throw new Error(`DB_PATH must be an absolute path when provided. Received: ${env.DB_PATH}`);
 }
 
 if (!env.ENCRYPTION_KEY && !isProduction) {
