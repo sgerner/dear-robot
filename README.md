@@ -35,9 +35,9 @@ Dear Robot is a self-hosted SvelteKit webmail dear-robot application that keeps 
 
 ### Data + files
 
-- Database default: `/data/dear-robot.db`
-- Override path: `DB_PATH`
+- Database default: `/data/dear-robot.db` derived from `DATA_DIR`
 - Memory file: `/data/AGENT_INSTRUCTIONS.md`
+- `DB_PATH` is not user-configurable at runtime; the app derives it from `DATA_DIR`
 
 ---
 
@@ -233,8 +233,7 @@ Create a repo-root `.env`:
 # App
 NODE_ENV=development
 PORT=3000
-DATA_DIR=/data
-DB_PATH=/data/dear-robot.db
+DATA_DIR=/absolute/path/to/your/data-dir
 
 # Security
 APP_SESSION_SECRET=
@@ -280,6 +279,53 @@ TEST_EMAIL_FROM=
 TEST_EMAIL_TO=
 ```
 
+### Development
+
+- Recommended `DATA_DIR` values:
+- local checkout on Linux/macOS: `/home/<you>/code/dear-robot/data`
+- local checkout on Windows WSL or similar: `/home/<you>/code/dear-robot/data`
+- if you want a shared local app data folder: `~/.local/share/dear-robot` expanded to an absolute path
+
+- Set `DATA_DIR` to one of those absolute paths, for example:
+
+```env
+DATA_DIR=/home/you/code/dear-robot/data
+```
+
+- The app derives the database file automatically as:
+
+```text
+/home/you/code/dear-robot/data/dear-robot.db
+```
+
+- Do not set `DB_PATH` manually. The app will reject relative data paths and will always persist state under `DATA_DIR`.
+
+### Docker
+
+- Recommended `DATA_DIR` value: `/data`
+- Use a persistent volume mounted at `/data`.
+- The app derives the database file automatically as `/data/dear-robot.db`.
+
+Example `docker-compose.yml` runtime values:
+
+```yaml
+environment:
+  DATA_DIR: /data
+volumes:
+  - dear-robot-data:/data
+```
+
+### Production
+
+- Recommended `DATA_DIR` values:
+- `/data` if your deployment platform gives you a durable data volume there
+- `/var/lib/dear-robot` on a traditional Linux host
+- another mounted persistent path owned by the app user
+
+- Use one absolute, persistent filesystem path for `DATA_DIR`.
+- The app derives the database file automatically from that directory and refuses to start if `DATA_DIR` is relative.
+- The production database and memory files must survive process restarts and container replacement.
+
 ### Production secret requirements
 
 Startup fails in production if any are missing:
@@ -319,6 +365,8 @@ The UI is password-gated:
 docker compose up --build
 ```
 
+With Compose, `DATA_DIR=/data` is mounted to the `dear-robot-data` volume, so the SQLite database and memory file survive container restarts.
+
 ### Direct Docker run
 
 ```bash
@@ -334,6 +382,8 @@ Volume mount `/data` persists:
 
 - `dear-robot.db`
 - `AGENT_INSTRUCTIONS.md`
+
+If you want a different persistent location, change `DATA_DIR` to an absolute path and mount that path into the container.
 
 ---
 

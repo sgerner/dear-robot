@@ -7,7 +7,6 @@ services:
       - .env
     environment:
       DATA_DIR: /data
-      DB_PATH: /data/dear-robot.db
       PORT: 3000
     volumes:
       - dear-robot-data:/data

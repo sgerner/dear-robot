@@ -12,7 +12,6 @@ const EnvSchema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().default(3000),
   DATA_DIR: z.string().default('/data'),
-  DB_PATH: z.string().optional(),
   APP_SESSION_SECRET: z.string().optional(),
   APP_PASSWORD: z.string().optional(),
   ENCRYPTION_KEY: z.string().optional(),
@@ -61,9 +60,10 @@ const EnvSchema = z.object({
 });
 
 const parsed = EnvSchema.parse(process.env);
+const derivedDbPath = isBuildProcess ? ':memory:' : path.join(parsed.DATA_DIR, 'dear-robot.db');
 export const env = {
   ...parsed,
-  DB_PATH: isBuildProcess ? ':memory:' : parsed.DB_PATH || path.join(parsed.DATA_DIR, 'dear-robot.db'),
+  DB_PATH: derivedDbPath,
   DEBUG_AI: parsed.DEBUG_AI ?? false,
   ATTACHMENT_SCAN_STRICT: parsed.ATTACHMENT_SCAN_STRICT ?? false,
   RUN_LIVE_PROVIDER_TESTS: parsed.RUN_LIVE_PROVIDER_TESTS ?? false
@@ -79,8 +79,6 @@ const requiredProductionSecrets = [
 ] as const;
 
 const dataDirIsAbsolute = path.isAbsolute(env.DATA_DIR);
-const dbPathIsAbsolute = env.DB_PATH === ':memory:' ? false : path.isAbsolute(env.DB_PATH);
-
 if (isProduction) {
   const missing = requiredProductionSecrets.filter((name) => !env[name]);
   if (missing.length > 0) {
@@ -92,17 +90,10 @@ if (isProduction) {
   if (env.DB_PATH === ':memory:') {
     throw new Error('DB_PATH must be a persistent absolute file path in production, not :memory:.');
   }
-  if (!dbPathIsAbsolute) {
-    throw new Error(`DB_PATH must be an absolute path in production. Received: ${env.DB_PATH}`);
-  }
 }
 
 if (!isBuildProcess && !dataDirIsAbsolute) {
   throw new Error(`DATA_DIR must be an absolute path. Received: ${env.DATA_DIR}`);
-}
-
-if (!isBuildProcess && env.DB_PATH !== ':memory:' && !dbPathIsAbsolute) {
-  throw new Error(`DB_PATH must be an absolute path when provided. Received: ${env.DB_PATH}`);
 }
 
 if (!env.ENCRYPTION_KEY && !isProduction) {
