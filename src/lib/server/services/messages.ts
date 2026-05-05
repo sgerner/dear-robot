@@ -130,15 +130,6 @@ export const RegenerateSchema = z.object({
   note: z.string().max(1000).nullable().optional()
 });
 
-function latestSuggestionSubquery() {
-  return sql<number>`(
-    SELECT id FROM ai_suggestions
-    WHERE ai_suggestions.message_id = messages.id
-    ORDER BY datetime(ai_suggestions.created_at) DESC
-    LIMIT 1
-  )`;
-}
-
 export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   const where = [];
   if (query.accountId) where.push(eq(messages.accountId, query.accountId));
@@ -183,7 +174,7 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
         isRead: messages.isRead,
         isAnswered: messages.isAnswered,
         isFlagged: messages.isFlagged,
-        latestSuggestionId: latestSuggestionSubquery(),
+        latestSuggestionId: messages.latestSuggestionId,
         category: aiSuggestions.category,
         recommendedAction: aiSuggestions.recommendedAction,
         riskLevel: aiSuggestions.riskLevel,
@@ -191,7 +182,7 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
       })
       .from(messages)
       .innerJoin(accounts, eq(accounts.id, messages.accountId))
-      .leftJoin(aiSuggestions, eq(aiSuggestions.id, latestSuggestionSubquery()))
+      .leftJoin(aiSuggestions, eq(aiSuggestions.id, messages.latestSuggestionId))
       .where(where.length ? and(...where) : undefined)
       .orderBy(desc(messages.date))
       .limit(query.limit)
@@ -237,7 +228,7 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
         isRead: messages.isRead,
         isAnswered: messages.isAnswered,
         isFlagged: messages.isFlagged,
-        latestSuggestionId: latestSuggestionSubquery(),
+        latestSuggestionId: messages.latestSuggestionId,
         category: aiSuggestions.category,
         recommendedAction: aiSuggestions.recommendedAction,
         riskLevel: aiSuggestions.riskLevel,
@@ -245,7 +236,7 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
       })
       .from(messages)
       .innerJoin(accounts, eq(accounts.id, messages.accountId))
-      .leftJoin(aiSuggestions, eq(aiSuggestions.id, latestSuggestionSubquery()))
+      .leftJoin(aiSuggestions, eq(aiSuggestions.id, messages.latestSuggestionId))
       .where(and(...fallbackWhere))
       .orderBy(desc(messages.date))
       .limit(query.limit)
@@ -310,6 +301,18 @@ export function getMessageDetail(id: number) {
   };
 }
 
+function getMessageWithAccount(id: number) {
+  return db
+    .select({
+      message: messages,
+      account: accounts
+    })
+    .from(messages)
+    .innerJoin(accounts, eq(accounts.id, messages.accountId))
+    .where(eq(messages.id, id))
+    .get();
+}
+
 export function getAttachment(messageId: number, attachmentId: number) {
   return db
     .select()
@@ -318,6 +321,18 @@ export function getAttachment(messageId: number, attachmentId: number) {
       and(eq(messageAttachments.id, attachmentId), eq(messageAttachments.messageId, messageId))
     )
     .get();
+}
+
+export function listAttachments(messageId: number) {
+  return db
+    .select()
+    .from(messageAttachments)
+    .where(eq(messageAttachments.messageId, messageId))
+    .all()
+    .map((attachment) => ({
+      ...attachment,
+      hasContent: Boolean(attachment.contentBase64)
+    }));
 }
 
 export function listFoldersWithCounts(accountId?: number) {
@@ -330,12 +345,24 @@ export function listFoldersWithCounts(accountId?: number) {
       name: folders.name,
       path: folders.path,
       role: folders.role,
-      total: sql<number>`(SELECT count(*) FROM messages m WHERE m.account_id = folders.account_id AND m.folder_path = folders.path)`,
-      unread: sql<number>`(SELECT count(*) FROM messages m WHERE m.account_id = folders.account_id AND m.folder_path = folders.path AND m.is_read = 0)`
+      total: sql<number>`count(${messages.id})`,
+      unread: sql<number>`coalesce(sum(case when ${messages.isRead} = 0 then 1 else 0 end), 0)`
     })
     .from(folders)
     .innerJoin(accounts, eq(accounts.id, folders.accountId))
+    .leftJoin(
+      messages,
+      and(eq(messages.accountId, folders.accountId), eq(messages.folderPath, folders.path))
+    )
     .where(where)
+    .groupBy(
+      folders.id,
+      folders.accountId,
+      accounts.email,
+      folders.name,
+      folders.path,
+      folders.role
+    )
     .orderBy(accounts.email, folders.path)
     .all();
   return folderRows;
@@ -473,10 +500,10 @@ export function deleteDraft(id: number) {
 }
 
 export async function moveMessage(id: number, folderPath: string) {
-  const detail = getMessageDetail(id);
-  if (!detail?.message || !detail.account) throw new Error('Message not found');
-  const provider = providerForAccount(detail.account);
-  await provider.move(detail.account, detail.message, folderPath);
+  const context = getMessageWithAccount(id);
+  if (!context?.message || !context.account) throw new Error('Message not found');
+  const provider = providerForAccount(context.account);
+  await provider.move(context.account, context.message, folderPath);
   return db
     .update(messages)
     .set({ folderPath, updatedAt: nowIso() })
@@ -486,24 +513,52 @@ export async function moveMessage(id: number, folderPath: string) {
 }
 
 export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionSchema>) {
-  const rows = db.select().from(messages).where(inArray(messages.id, input.messageIds)).all();
+  const rows = db
+    .select({
+      message: messages,
+      account: accounts
+    })
+    .from(messages)
+    .innerJoin(accounts, eq(accounts.id, messages.accountId))
+    .where(inArray(messages.id, input.messageIds))
+    .all();
   let processed = 0;
   for (const row of rows) {
-    if (input.action === 'move') await moveMessage(row.id, input.folderPath || 'INBOX');
-    if (input.action === 'mark_read') await setMessageRead(row.id, true);
-    if (input.action === 'mark_unread') await setMessageRead(row.id, false);
-    if (input.action === 'flag') await setMessageFlagged(row.id, true);
-    if (input.action === 'unflag') await setMessageFlagged(row.id, false);
+    const provider = providerForAccount(row.account);
+    if (input.action === 'move') {
+      const folderPath = input.folderPath || 'INBOX';
+      await provider.move(row.account, row.message, folderPath);
+      db.update(messages)
+        .set({ folderPath, updatedAt: nowIso() })
+        .where(eq(messages.id, row.message.id))
+        .run();
+    }
+    if (input.action === 'mark_read' || input.action === 'mark_unread') {
+      const read = input.action === 'mark_read';
+      await provider.markRead(row.account, row.message, read);
+      db.update(messages)
+        .set({ isRead: read, updatedAt: nowIso() })
+        .where(eq(messages.id, row.message.id))
+        .run();
+    }
+    if (input.action === 'flag' || input.action === 'unflag') {
+      const flagged = input.action === 'flag';
+      await provider.setFlagged(row.account, row.message, flagged);
+      db.update(messages)
+        .set({ isFlagged: flagged, updatedAt: nowIso() })
+        .where(eq(messages.id, row.message.id))
+        .run();
+    }
     processed += 1;
   }
   return { processed, requested: input.messageIds.length };
 }
 
 export async function setMessageRead(id: number, read: boolean) {
-  const detail = getMessageDetail(id);
-  if (!detail?.message || !detail.account) throw new Error('Message not found');
-  const provider = providerForAccount(detail.account);
-  await provider.markRead(detail.account, detail.message, read);
+  const context = getMessageWithAccount(id);
+  if (!context?.message || !context.account) throw new Error('Message not found');
+  const provider = providerForAccount(context.account);
+  await provider.markRead(context.account, context.message, read);
   return db
     .update(messages)
     .set({ isRead: read, updatedAt: nowIso() })
@@ -513,10 +568,10 @@ export async function setMessageRead(id: number, read: boolean) {
 }
 
 export async function setMessageFlagged(id: number, flagged: boolean) {
-  const detail = getMessageDetail(id);
-  if (!detail?.message || !detail.account) throw new Error('Message not found');
-  const provider = providerForAccount(detail.account);
-  await provider.setFlagged(detail.account, detail.message, flagged);
+  const context = getMessageWithAccount(id);
+  if (!context?.message || !context.account) throw new Error('Message not found');
+  const provider = providerForAccount(context.account);
+  await provider.setFlagged(context.account, context.message, flagged);
   return db
     .update(messages)
     .set({ isFlagged: flagged, updatedAt: nowIso() })
@@ -587,26 +642,27 @@ export async function suggestForMessage(
   id: number,
   options: { note?: string | null; existing?: EmailSuggestion | null } = {}
 ) {
-  const detail = getMessageDetail(id);
-  if (!detail?.message || !detail.account) throw new Error('Message not found');
+  const context = getMessageWithAccount(id);
+  if (!context?.message || !context.account) throw new Error('Message not found');
+  const message = context.message;
   const folderRows = db
     .select()
     .from(folders)
-    .where(eq(folders.accountId, detail.message.accountId))
+    .where(eq(folders.accountId, message.accountId))
     .all();
   const input = {
     agentInstructions: readAgentInstructions(),
     memoryContext: buildMemoryPromptContext({
-      subject: detail.message.subject,
-      bodyText: detail.message.bodyText,
+      subject: message.subject,
+      bodyText: message.bodyText,
       note: options.note || null
     }).text,
-    subject: detail.message.subject,
-    sender: detail.message.from,
-    recipients: detail.message.to,
-    cc: detail.message.cc,
-    date: detail.message.date,
-    bodyText: detail.message.bodyText,
+    subject: message.subject,
+    sender: message.from,
+    recipients: message.to,
+    cc: message.cc,
+    date: message.date,
+    bodyText: message.bodyText,
     availableFolders: folderRows.map((folder) => folder.path),
     existingSuggestion: options.existing ?? null,
     regenerationNote: options.note ?? null
@@ -635,6 +691,10 @@ export async function suggestForMessage(
     })
     .returning()
     .get();
+  db.update(messages)
+    .set({ latestSuggestionId: saved.id, updatedAt: nowIso() })
+    .where(eq(messages.id, id))
+    .run();
   recordAiObservation({
     messageId: id,
     suggestionId: saved.id,
@@ -644,7 +704,7 @@ export async function suggestForMessage(
     status: result.errorMessage ? 'error' : 'ok',
     latencyMs: Date.now() - started,
     promptHash: promptHash(input),
-    estimatedCostCents: estimateSuggestionCostCents(detail.message.bodyText.length),
+    estimatedCostCents: estimateSuggestionCostCents(message.bodyText.length),
     errorMessage: result.errorMessage
   });
   return saved;

@@ -260,15 +260,13 @@ function mockSuggestion(input: EmailSuggestionInput): EmailSuggestion {
     return {
       category: haystack.includes('pricing') ? 'Vendor Pricing' : 'Internal Task',
       confidence: 0.78,
-      recommended_action: 'delegate',
-      target_folder: null,
+      recommended_action: 'move_to_folder',
+      target_folder: folder('Newsletters'),
       draft_reply: null,
       forward_to: null,
-      delegate_instructions: haystack.includes('pricing')
-        ? 'Review vendor pricing update and adjust costing assumptions if needed.'
-        : 'Assign the requested internal checklist update.',
-      reasoning_summary: 'Operational follow-up is suitable for delegation.',
-      risk_level: haystack.includes('pricing') ? 'medium' : 'low'
+      delegate_instructions: null,
+      reasoning_summary: 'Operational update can be filed for review instead of immediate reply.',
+      risk_level: 'low'
     };
   }
   return {
@@ -364,7 +362,7 @@ export async function generateStructuredObject<T>(options: {
   const profile = options.profile || 'primary';
   const primary = configFor(profile);
   const fallback = configFor('fallback');
-  if (primary.provider === 'mock' || !primary.apiKey) {
+  if (env.NODE_ENV === 'test' || primary.provider === 'mock' || !primary.apiKey) {
     if (!options.mock) throw new ProviderError(`${primary.provider} API key is not configured`);
     const object = options.mock();
     return {
@@ -410,7 +408,7 @@ export async function generateEmailSuggestion(
   input: EmailSuggestionInput
 ): Promise<EmailSuggestionResult> {
   const primary = configFor('primary');
-  if (primary.provider === 'mock') {
+  if (env.NODE_ENV === 'test' || primary.provider === 'mock' || !primary.apiKey) {
     return {
       suggestion: mockSuggestion(input),
       provider: 'mock',

@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS messages (
   date TEXT NOT NULL,
   body_text TEXT NOT NULL,
   body_html TEXT,
+  latest_suggestion_id INTEGER,
   is_read INTEGER NOT NULL DEFAULT 0,
   is_answered INTEGER NOT NULL DEFAULT 0,
   is_flagged INTEGER NOT NULL DEFAULT 0,
@@ -435,20 +436,64 @@ CREATE TABLE IF NOT EXISTS memory_examples (
   migrateMessageClientColumns();
   migrateAccountAuthColumns();
   migrateAutomationPolicyColumns();
+  ensurePerformanceIndexes();
+  backfillLatestSuggestionPointers();
 
+  ensureMessagesFts();
+
+  fs.mkdirSync(env.DATA_DIR, { recursive: true });
+  ensureAgentInstructions();
+  seedMockDataIfEmpty();
+  seedAutomationDefaults();
+  seedAiDefaults();
+}
+
+function ensurePerformanceIndexes() {
+  sqlite.exec(`
+CREATE INDEX IF NOT EXISTS message_attachments_message_id_idx ON message_attachments(message_id);
+CREATE INDEX IF NOT EXISTS ai_suggestions_message_created_idx ON ai_suggestions(message_id, created_at);
+CREATE INDEX IF NOT EXISTS ai_suggestions_status_created_idx ON ai_suggestions(status, created_at);
+CREATE INDEX IF NOT EXISTS executed_actions_message_created_idx ON executed_actions(message_id, created_at);
+CREATE INDEX IF NOT EXISTS agent_action_queue_status_created_idx ON agent_action_queue(status, created_at);
+CREATE INDEX IF NOT EXISTS agent_action_queue_suggestion_id_idx ON agent_action_queue(suggestion_id);
+CREATE INDEX IF NOT EXISTS follow_up_reminders_status_due_idx ON follow_up_reminders(status, due_at);
+CREATE INDEX IF NOT EXISTS ai_observability_created_idx ON ai_observability(created_at);
+CREATE INDEX IF NOT EXISTS task_runs_message_created_idx ON task_runs(message_id, created_at);
+CREATE INDEX IF NOT EXISTS task_steps_run_step_idx ON task_steps(task_run_id, step_index);
+`);
+}
+
+function backfillLatestSuggestionPointers() {
+  sqlite.exec(`
+UPDATE messages
+SET latest_suggestion_id = (
+  SELECT s.id
+  FROM ai_suggestions s
+  WHERE s.message_id = messages.id
+  ORDER BY datetime(s.created_at) DESC
+  LIMIT 1
+)
+WHERE latest_suggestion_id IS NULL;
+`);
+}
+
+function ensureMessagesFts() {
   // FTS5 index for message search with triggers to keep it in sync.
   try {
-    sqlite.exec(`
-DROP TRIGGER IF EXISTS messages_ai;
-DROP TRIGGER IF EXISTS messages_ad;
-DROP TRIGGER IF EXISTS messages_au;
-DROP TABLE IF EXISTS messages_fts;
+    const hasFts = sqlite
+      .prepare(`SELECT 1 as value FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'`)
+      .get() as { value?: number } | undefined;
+    if (!hasFts?.value) {
+      sqlite.exec(`
 CREATE VIRTUAL TABLE messages_fts USING fts5(
   subject,
   sender,
   recipients,
   body_text
 );
+`);
+    }
+    sqlite.exec(`
 CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
   INSERT INTO messages_fts(rowid, subject, sender, recipients, body_text)
   VALUES (new.id, new.subject, new."from", new."to", new.body_text);
@@ -461,18 +506,19 @@ CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
   INSERT INTO messages_fts(rowid, subject, sender, recipients, body_text)
   VALUES (new.id, new.subject, new."from", new."to", new.body_text);
 END;
+`);
+    const ftsCount = sqlite.prepare(`SELECT count(*) as value FROM messages_fts`).get() as {
+      value: number;
+    };
+    if ((ftsCount?.value || 0) === 0) {
+      sqlite.exec(`
 INSERT INTO messages_fts(rowid, subject, sender, recipients, body_text)
 SELECT id, subject, "from", "to", body_text FROM messages;
 `);
+    }
   } catch (error) {
     console.warn('[dear-robot] FTS5 unavailable, falling back to LIKE search.', error);
   }
-
-  fs.mkdirSync(env.DATA_DIR, { recursive: true });
-  ensureAgentInstructions();
-  seedMockDataIfEmpty();
-  seedAutomationDefaults();
-  seedAiDefaults();
 }
 
 function seedMockDataIfEmpty() {
@@ -549,7 +595,8 @@ function seedMockDataIfEmpty() {
       })
       .run();
     if (email.seed_suggestion) {
-      db.insert(aiSuggestions)
+      const suggestion = db
+        .insert(aiSuggestions)
         .values({
           messageId: msg.id,
           ...email.seed_suggestion,
@@ -559,6 +606,11 @@ function seedMockDataIfEmpty() {
           createdAt: now,
           updatedAt: now
         })
+        .returning()
+        .get();
+      db.update(messages)
+        .set({ latestSuggestionId: suggestion.id, updatedAt: now })
+        .where(eq(messages.id, msg.id))
         .run();
     }
   }
@@ -669,6 +721,7 @@ function migrateMessageClientColumns() {
     ['message_id_header', 'TEXT'],
     ['in_reply_to', 'TEXT'],
     ['references', 'TEXT'],
+    ['latest_suggestion_id', 'INTEGER'],
     ['bcc', 'TEXT'],
     ['is_flagged', 'INTEGER NOT NULL DEFAULT 0']
   ];
@@ -786,6 +839,13 @@ function readFixtureEmails(): FixtureEmail[] {
 }
 
 export function resetForTests() {
+  const isSafeTestEnv = env.NODE_ENV === 'test' || env.DB_PATH === ':memory:';
+  const allowDangerousReset = process.env.ALLOW_DANGEROUS_DB_RESET === 'true';
+  if (!isSafeTestEnv && !allowDangerousReset) {
+    throw new Error(
+      `Refusing resetForTests() for persistent DB_PATH="${env.DB_PATH}". Set ALLOW_DANGEROUS_DB_RESET=true to override.`
+    );
+  }
   try {
     sqlite.exec(`
 DELETE FROM executed_actions;

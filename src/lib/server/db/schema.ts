@@ -90,6 +90,7 @@ export const messages = sqliteTable(
     date: text('date').notNull(),
     bodyText: text('body_text').notNull(),
     bodyHtml: text('body_html'),
+    latestSuggestionId: integer('latest_suggestion_id'),
     isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
     isAnswered: integer('is_answered', { mode: 'boolean' }).notNull().default(false),
     isFlagged: integer('is_flagged', { mode: 'boolean' }).notNull().default(false),
@@ -110,19 +111,25 @@ export const messages = sqliteTable(
   })
 );
 
-export const messageAttachments = sqliteTable('message_attachments', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  messageId: integer('message_id')
-    .notNull()
-    .references(() => messages.id, { onDelete: 'cascade' }),
-  filename: text('filename').notNull(),
-  contentType: text('content_type').notNull(),
-  sizeBytes: integer('size_bytes').notNull().default(0),
-  contentId: text('content_id'),
-  disposition: text('disposition'),
-  contentBase64: text('content_base64'),
-  createdAt: text('created_at').notNull()
-});
+export const messageAttachments = sqliteTable(
+  'message_attachments',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    filename: text('filename').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull().default(0),
+    contentId: text('content_id'),
+    disposition: text('disposition'),
+    contentBase64: text('content_base64'),
+    createdAt: text('created_at').notNull()
+  },
+  (table) => ({
+    messageIdx: index('message_attachments_message_id_idx').on(table.messageId)
+  })
+);
 
 export const contacts = sqliteTable(
   'contacts',
@@ -164,41 +171,48 @@ export const drafts = sqliteTable('drafts', {
   updatedAt: text('updated_at').notNull()
 });
 
-export const aiSuggestions = sqliteTable('ai_suggestions', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  messageId: integer('message_id')
-    .notNull()
-    .references(() => messages.id, { onDelete: 'cascade' }),
-  category: text('category').notNull(),
-  confidence: real('confidence').notNull(),
-  recommendedAction: text('recommended_action', {
-    enum: [
-      'reply',
-      'forward',
-      'move_to_folder',
-      'delete',
-      'spam',
-      'delegate',
-      'archive',
-      'no_action'
-    ]
-  }).notNull(),
-  targetFolder: text('target_folder'),
-  draftReply: text('draft_reply'),
-  forwardTo: text('forward_to'),
-  delegateInstructions: text('delegate_instructions'),
-  reasoningSummary: text('reasoning_summary').notNull(),
-  riskLevel: text('risk_level', { enum: ['low', 'medium', 'high'] }).notNull(),
-  status: text('status', {
-    enum: ['pending', 'approved', 'rejected', 'edited', 'executed', 'error']
+export const aiSuggestions = sqliteTable(
+  'ai_suggestions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    category: text('category').notNull(),
+    confidence: real('confidence').notNull(),
+    recommendedAction: text('recommended_action', {
+      enum: [
+        'reply',
+        'forward',
+        'move_to_folder',
+        'delete',
+        'spam',
+        'delegate',
+        'archive',
+        'no_action'
+      ]
+    }).notNull(),
+    targetFolder: text('target_folder'),
+    draftReply: text('draft_reply'),
+    forwardTo: text('forward_to'),
+    delegateInstructions: text('delegate_instructions'),
+    reasoningSummary: text('reasoning_summary').notNull(),
+    riskLevel: text('risk_level', { enum: ['low', 'medium', 'high'] }).notNull(),
+    status: text('status', {
+      enum: ['pending', 'approved', 'rejected', 'edited', 'executed', 'error']
+    })
+      .notNull()
+      .default('pending'),
+    errorMessage: text('error_message'),
+    rawModel: text('raw_model'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    messageCreatedIdx: index('ai_suggestions_message_created_idx').on(table.messageId, table.createdAt),
+    statusCreatedIdx: index('ai_suggestions_status_created_idx').on(table.status, table.createdAt)
   })
-    .notNull()
-    .default('pending'),
-  errorMessage: text('error_message'),
-  rawModel: text('raw_model'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull()
-});
+);
 
 export const feedbackLog = sqliteTable('feedback_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -222,19 +236,25 @@ export const webhookSubscriptions = sqliteTable('webhook_subscriptions', {
   updatedAt: text('updated_at').notNull()
 });
 
-export const executedActions = sqliteTable('executed_actions', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  messageId: integer('message_id')
-    .notNull()
-    .references(() => messages.id, { onDelete: 'cascade' }),
-  suggestionId: integer('suggestion_id')
-    .notNull()
-    .references(() => aiSuggestions.id, { onDelete: 'cascade' }),
-  actionType: text('action_type').notNull(),
-  status: text('status').notNull(),
-  detailsJson: text('details_json').notNull(),
-  createdAt: text('created_at').notNull()
-});
+export const executedActions = sqliteTable(
+  'executed_actions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    suggestionId: integer('suggestion_id')
+      .notNull()
+      .references(() => aiSuggestions.id, { onDelete: 'cascade' }),
+    actionType: text('action_type').notNull(),
+    status: text('status').notNull(),
+    detailsJson: text('details_json').notNull(),
+    createdAt: text('created_at').notNull()
+  },
+  (table) => ({
+    messageCreatedIdx: index('executed_actions_message_created_idx').on(table.messageId, table.createdAt)
+  })
+);
 
 export const agentActionQueue = sqliteTable(
   'agent_action_queue',
@@ -267,7 +287,9 @@ export const agentActionQueue = sqliteTable(
     executedAt: text('executed_at')
   },
   (table) => ({
-    idempotencyUnique: uniqueIndex('agent_action_queue_idempotency_unique').on(table.idempotencyKey)
+    idempotencyUnique: uniqueIndex('agent_action_queue_idempotency_unique').on(table.idempotencyKey),
+    statusCreatedIdx: index('agent_action_queue_status_created_idx').on(table.status, table.createdAt),
+    suggestionIdx: index('agent_action_queue_suggestion_id_idx').on(table.suggestionId)
   })
 );
 
@@ -289,23 +311,29 @@ export const autopilotRuns = sqliteTable('autopilot_runs', {
   finishedAt: text('finished_at')
 });
 
-export const aiObservability = sqliteTable('ai_observability', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  messageId: integer('message_id').references(() => messages.id, { onDelete: 'set null' }),
-  suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, {
-    onDelete: 'set null'
-  }),
-  taskRunId: integer('task_run_id'),
-  operation: text('operation').notNull(),
-  provider: text('provider').notNull(),
-  model: text('model').notNull(),
-  status: text('status', { enum: ['ok', 'error'] }).notNull(),
-  latencyMs: integer('latency_ms').notNull().default(0),
-  promptHash: text('prompt_hash').notNull(),
-  estimatedCostCents: real('estimated_cost_cents').notNull().default(0),
-  errorMessage: text('error_message'),
-  createdAt: text('created_at').notNull()
-});
+export const aiObservability = sqliteTable(
+  'ai_observability',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id').references(() => messages.id, { onDelete: 'set null' }),
+    suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, {
+      onDelete: 'set null'
+    }),
+    taskRunId: integer('task_run_id'),
+    operation: text('operation').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    status: text('status', { enum: ['ok', 'error'] }).notNull(),
+    latencyMs: integer('latency_ms').notNull().default(0),
+    promptHash: text('prompt_hash').notNull(),
+    estimatedCostCents: real('estimated_cost_cents').notNull().default(0),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull()
+  },
+  (table) => ({
+    createdIdx: index('ai_observability_created_idx').on(table.createdAt)
+  })
+);
 
 export const threadSummaries = sqliteTable(
   'thread_summaries',
@@ -334,19 +362,25 @@ export const threadSummaries = sqliteTable(
   })
 );
 
-export const followUpReminders = sqliteTable('follow_up_reminders', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  messageId: integer('message_id')
-    .notNull()
-    .references(() => messages.id, { onDelete: 'cascade' }),
-  dueAt: text('due_at').notNull(),
-  reason: text('reason').notNull(),
-  status: text('status', { enum: ['open', 'done', 'dismissed'] })
-    .notNull()
-    .default('open'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull()
-});
+export const followUpReminders = sqliteTable(
+  'follow_up_reminders',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    dueAt: text('due_at').notNull(),
+    reason: text('reason').notNull(),
+    status: text('status', { enum: ['open', 'done', 'dismissed'] })
+      .notNull()
+      .default('open'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    statusDueIdx: index('follow_up_reminders_status_due_idx').on(table.status, table.dueAt)
+  })
+);
 
 export const outcomeEvents = sqliteTable('outcome_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -393,59 +427,71 @@ export const agentTools = sqliteTable('agent_tools', {
   updatedAt: text('updated_at').notNull()
 });
 
-export const taskRuns = sqliteTable('task_runs', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  messageId: integer('message_id')
-    .notNull()
-    .references(() => messages.id, { onDelete: 'cascade' }),
-  suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, {
-    onDelete: 'set null'
-  }),
-  status: text('status', {
-    enum: ['planned', 'needs_approval', 'running', 'completed', 'failed', 'rejected', 'cancelled']
+export const taskRuns = sqliteTable(
+  'task_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, {
+      onDelete: 'set null'
+    }),
+    status: text('status', {
+      enum: ['planned', 'needs_approval', 'running', 'completed', 'failed', 'rejected', 'cancelled']
+    })
+      .notNull()
+      .default('planned'),
+    complexity: text('complexity', { enum: ['simple', 'advanced'] })
+      .notNull()
+      .default('simple'),
+    modelUsed: text('model_used').notNull(),
+    providerUsed: text('provider_used').notNull(),
+    summary: text('summary').notNull(),
+    planJson: text('plan_json').notNull(),
+    resultSummary: text('result_summary'),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    messageCreatedIdx: index('task_runs_message_created_idx').on(table.messageId, table.createdAt)
   })
-    .notNull()
-    .default('planned'),
-  complexity: text('complexity', { enum: ['simple', 'advanced'] })
-    .notNull()
-    .default('simple'),
-  modelUsed: text('model_used').notNull(),
-  providerUsed: text('provider_used').notNull(),
-  summary: text('summary').notNull(),
-  planJson: text('plan_json').notNull(),
-  resultSummary: text('result_summary'),
-  errorMessage: text('error_message'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull()
-});
+);
 
-export const taskSteps = sqliteTable('task_steps', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  taskRunId: integer('task_run_id')
-    .notNull()
-    .references(() => taskRuns.id, { onDelete: 'cascade' }),
-  stepIndex: integer('step_index').notNull(),
-  title: text('title').notNull(),
-  kind: text('kind', {
-    enum: ['draft_reply', 'move_to_folder', 'tool_call', 'delegate', 'mark_done']
-  }).notNull(),
-  details: text('details').notNull(),
-  toolName: text('tool_name'),
-  toolInputJson: text('tool_input_json'),
-  status: text('status', {
-    enum: ['pending', 'approved', 'running', 'completed', 'failed', 'rejected']
+export const taskSteps = sqliteTable(
+  'task_steps',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    taskRunId: integer('task_run_id')
+      .notNull()
+      .references(() => taskRuns.id, { onDelete: 'cascade' }),
+    stepIndex: integer('step_index').notNull(),
+    title: text('title').notNull(),
+    kind: text('kind', {
+      enum: ['draft_reply', 'move_to_folder', 'tool_call', 'delegate', 'mark_done']
+    }).notNull(),
+    details: text('details').notNull(),
+    toolName: text('tool_name'),
+    toolInputJson: text('tool_input_json'),
+    status: text('status', {
+      enum: ['pending', 'approved', 'running', 'completed', 'failed', 'rejected']
+    })
+      .notNull()
+      .default('pending'),
+    requiresApproval: integer('requires_approval', { mode: 'boolean' }).notNull().default(true),
+    riskLevel: text('risk_level', { enum: ['low', 'medium', 'high'] })
+      .notNull()
+      .default('low'),
+    outputJson: text('output_json'),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    runStepIdx: index('task_steps_run_step_idx').on(table.taskRunId, table.stepIndex)
   })
-    .notNull()
-    .default('pending'),
-  requiresApproval: integer('requires_approval', { mode: 'boolean' }).notNull().default(true),
-  riskLevel: text('risk_level', { enum: ['low', 'medium', 'high'] })
-    .notNull()
-    .default('low'),
-  outputJson: text('output_json'),
-  errorMessage: text('error_message'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull()
-});
+);
 
 export const toolCalls = sqliteTable('tool_calls', {
   id: integer('id').primaryKey({ autoIncrement: true }),

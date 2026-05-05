@@ -10,7 +10,7 @@
     Sparkles,
     X
   } from 'lucide-svelte';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { fade, fly, slide } from 'svelte/transition';
   import type { ModelsDevProvider } from '$lib/server/ai/modelsdev';
@@ -387,6 +387,7 @@
   });
 
   $effect(() => {
+    if (!isInboxView(view)) return;
     void replaceCache('messages', data.messages);
     void replaceCache('folders', data.folders);
     void replaceCache('contacts', data.contacts);
@@ -714,6 +715,14 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  async function invalidateAll() {
+    const keys = ['app:base'];
+    if (view === 'settings') keys.push('app:settings');
+    else if (view === 'operations') keys.push('app:operations');
+    else keys.push('app:inbox');
+    await Promise.all(keys.map((key) => invalidate(key)));
   }
 
   function loadUiPreferences() {

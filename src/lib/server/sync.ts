@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, nowIso } from './db';
 import { accounts, folders, folderSyncState, messageAttachments, messages } from './db/schema';
 import { providerForAccount } from './email/provider';
@@ -74,6 +74,10 @@ export async function syncAccount(accountId: number) {
     }
     const foldersToSync = remoteFolders.length ? remoteFolders : [{ path: 'INBOX' }];
     for (const folder of foldersToSync) {
+      const isInboxFolder =
+        (folder as { role?: string | null }).role === 'inbox' ||
+        folder.path.toLowerCase() === 'inbox';
+      const fetchLimit = isInboxFolder ? 1000 : 250;
       const now = nowIso();
       const priorState = db
         .select()
@@ -89,29 +93,32 @@ export async function syncAccount(accountId: number) {
         Boolean(priorState?.uidValidity && remoteState?.uidValidity) &&
         priorState?.uidValidity !== remoteState?.uidValidity;
       const sinceUid = uidValidityChanged ? 0 : (priorState?.highestUid ?? 0);
-      const incremental =
+      const remoteMessages =
         provider.fetchSinceUid && sinceUid > 0
-          ? await provider.fetchSinceUid(account, folder.path, sinceUid, 1000)
-          : await provider.backfill(account, 1000, folder.path);
-      // Reconcile recent state for remote flag/folder changes that may happen on existing messages.
-      const recent = await provider.backfill(account, 200, folder.path);
-      const remoteMessages = mergeByProviderMessageId([...incremental, ...recent]);
-      let maxSeenUid = sinceUid;
-      for (const remote of remoteMessages) {
-        const existedBefore = db
-          .select({ id: messages.id })
+          ? await provider.fetchSinceUid(account, folder.path, sinceUid, fetchLimit)
+          : await provider.backfill(account, fetchLimit, folder.path);
+      const uniqueRemote = mergeByProviderMessageId(remoteMessages);
+      const providerIds = uniqueRemote.map((remote) => remote.providerMessageId);
+      const existingProviderIds = new Set<string>();
+      for (let offset = 0; offset < providerIds.length; offset += 400) {
+        const batch = providerIds.slice(offset, offset + 400);
+        if (!batch.length) continue;
+        const rows = db
+          .select({ providerMessageId: messages.providerMessageId })
           .from(messages)
           .where(
-            and(
-              eq(messages.accountId, accountId),
-              eq(messages.providerMessageId, remote.providerMessageId)
-            )
+            and(eq(messages.accountId, accountId), inArray(messages.providerMessageId, batch))
           )
-          .get();
+          .all();
+        for (const row of rows) existingProviderIds.add(row.providerMessageId);
+      }
+      let maxSeenUid = sinceUid;
+      for (const remote of uniqueRemote) {
+        const existedBefore = existingProviderIds.has(remote.providerMessageId);
         const saved = upsertRemoteMessage(accountId, remote);
         const uid = messageUid(remote.providerMessageId);
         if (uid > maxSeenUid) maxSeenUid = uid;
-        if (!existedBefore && saved && remote.folderPath.toLowerCase() === 'inbox') {
+        if (!existedBefore && saved && isInboxFolder) {
           void suggestForMessage(saved.id).catch((error) => {
             console.error('[dear-robot] AI evaluation failed for inserted message', saved.id, error);
           });

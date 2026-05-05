@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { generateStructuredObject } from '../ai/provider';
 import { type EmailSuggestion } from '../ai/schema';
 import { db, nowIso } from '../db';
@@ -56,6 +56,43 @@ export function getTaskRunDetail(id: number) {
       output: safeParseJson(step.outputJson)
     }))
   };
+}
+
+export function listTaskRunDetailsForMessage(messageId: number, limit = 5) {
+  const runs = db
+    .select()
+    .from(taskRuns)
+    .where(eq(taskRuns.messageId, messageId))
+    .orderBy(desc(taskRuns.createdAt))
+    .limit(limit)
+    .all();
+  if (!runs.length) return [];
+  const runIds = runs.map((run) => run.id);
+  const steps = db
+    .select()
+    .from(taskSteps)
+    .where(inArray(taskSteps.taskRunId, runIds))
+    .orderBy(taskSteps.taskRunId, taskSteps.stepIndex)
+    .all();
+  const stepsByRunId = new Map<number, typeof steps>();
+  for (const step of steps) {
+    const existing = stepsByRunId.get(step.taskRunId) || [];
+    existing.push(step);
+    stepsByRunId.set(step.taskRunId, existing);
+  }
+  const message = db.select().from(messages).where(eq(messages.id, messageId)).get();
+  return runs.map((run) => ({
+    run: {
+      ...run,
+      plan: safeParseJson(run.planJson)
+    },
+    message,
+    steps: (stepsByRunId.get(run.id) || []).map((step) => ({
+      ...step,
+      toolInput: safeParseJson(step.toolInputJson),
+      output: safeParseJson(step.outputJson)
+    }))
+  }));
 }
 
 export async function createTaskPlanForMessage(messageId: number, input: unknown = {}) {

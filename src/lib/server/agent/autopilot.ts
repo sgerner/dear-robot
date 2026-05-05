@@ -213,7 +213,7 @@ export async function runAutopilotNow() {
       )`
       )
       .orderBy(desc(aiSuggestions.createdAt))
-      .limit(policy.maxMessagesPerRun)
+      .limit(Math.max(policy.maxMessagesPerRun * 4, 200))
       .all();
     for (const suggestion of pendingSuggestions) {
       scannedCount += 1;
