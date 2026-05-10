@@ -1,7 +1,16 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import { Plus, ChevronDown, ChevronRight, Folder, Sparkles, Loader2, Check, X } from 'lucide-svelte';
-  import DictationButton from '$lib/components/DictationButton.svelte';
+  import {
+    Plus,
+    ChevronDown,
+    ChevronRight,
+    Folder,
+    Sparkles,
+    Loader2,
+    Check,
+    Copy,
+    X
+  } from 'lucide-svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
   let {
@@ -10,13 +19,9 @@
     googleOauthSettings = $bindable(),
     googleOauthHasSecret,
     googleOauthConnectedEmail,
-    dictationTargetId,
-    dictationActive,
-    dictationUnavailable,
-    dictationLevel,
+    copyToClipboard,
     folderRoleOptions,
     saveFolderRole,
-    toggleDictation,
     accountAction,
     addAccount,
     testNewAccount,
@@ -46,18 +51,13 @@
       clientId: string;
       clientSecret: string;
       redirectUri: string;
-      scopes: string;
       isEnabled: boolean;
     };
     googleOauthHasSecret: boolean;
     googleOauthConnectedEmail: string;
-    dictationTargetId: string | null;
-    dictationActive: boolean;
-    dictationUnavailable: boolean;
-    dictationLevel: number;
+    copyToClipboard: (_value: string, _label?: string) => void | Promise<void>;
     folderRoleOptions: Array<{ value: string; label: string }>;
     saveFolderRole: (_folderId: number, _role: any) => void | Promise<void>;
-    toggleDictation: (_targetId: string) => void | Promise<void>;
     accountAction: (
       _id: number,
       _action: 'test' | 'enable' | 'disable' | 'delete'
@@ -328,7 +328,79 @@
     </div>
   </form>
   <section class="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-    <h3 class="text-sm font-medium">Connect Gmail (Google OAuth)</h3>
+    <div class="space-y-1">
+      <h3 class="text-sm font-medium">Connect Gmail (Google OAuth)</h3>
+      <p class="text-xs text-zinc-400">
+        Google App Passwords are not enough for this flow. Create an OAuth client in Google Cloud,
+        then paste the client ID and secret here.
+      </p>
+    </div>
+    <div class="space-y-2 rounded-md border border-sky-400/20 bg-sky-400/5 p-3 text-xs text-zinc-300">
+      <p class="font-medium text-sky-100">Setup steps</p>
+      <ol class="list-decimal space-y-1 pl-4 text-zinc-300">
+        <li>
+          Create or select a Google Cloud project:
+          <a
+            class="text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200"
+            href="https://console.cloud.google.com/projectcreate"
+            target="_blank"
+            rel="noreferrer">Google Cloud Console</a
+          >
+        </li>
+        <li>
+          Enable the Gmail API for that project:
+          <a
+            class="text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200"
+            href="https://developers.google.com/workspace/gmail/api/quickstart/nodejs"
+            target="_blank"
+            rel="noreferrer">Gmail API quickstart</a
+          >
+        </li>
+        <li>
+          Configure the OAuth consent screen:
+          <a
+            class="text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200"
+            href="https://developers.google.com/workspace/guides/configure-oauth-consent"
+            target="_blank"
+            rel="noreferrer">OAuth consent guide</a
+          >
+        </li>
+        <li>
+          Create an OAuth client ID:
+          <a
+            class="text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200"
+            href="https://developers.google.com/workspace/guides/create-credentials"
+            target="_blank"
+            rel="noreferrer">Create credentials guide</a
+          >
+        </li>
+        <li>
+          Add this redirect URI to the OAuth client:
+          <div class="mt-1 flex items-center gap-2 rounded border border-sky-400/15 bg-black/20 px-2 py-1">
+            <code class="min-w-0 flex-1 break-all font-mono text-[11px] text-sky-100">
+              {googleOauthSettings.redirectUri}
+            </code>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+              onclick={() => copyToClipboard(googleOauthSettings.redirectUri, 'Redirect URI')}
+              disabled={!googleOauthSettings.redirectUri}
+              aria-label="Copy redirect URI"
+            >
+              <Copy size={11} />
+              Copy
+            </button>
+          </div>
+        </li>
+      </ol>
+      <p class="text-[11px] text-zinc-400">
+        Use a <span class="font-medium text-zinc-200">Web application</span> OAuth client. If the
+        app is still in testing, add your Google account as a test user in the consent screen.
+      </p>
+      <p class="text-[11px] text-zinc-400">
+        The Gmail scopes are fixed by the app; you do not need to enter them manually.
+      </p>
+    </div>
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
       placeholder="Google OAuth Client ID"
@@ -342,29 +414,6 @@
       type="password"
       bind:value={googleOauthSettings.clientSecret}
     />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="Redirect URI"
-      bind:value={googleOauthSettings.redirectUri}
-    />
-    <div class="relative">
-      <textarea
-        id="google-oauth-scopes"
-        class="min-h-20 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none"
-        placeholder="One scope per line"
-        bind:value={googleOauthSettings.scopes}
-      ></textarea>
-      <div class="absolute right-2 top-2">
-        <DictationButton
-          targetId="google-oauth-scopes"
-          activeTargetId={dictationTargetId}
-          recording={dictationActive}
-          unavailable={dictationUnavailable}
-          level={dictationLevel}
-          onToggle={toggleDictation}
-        />
-      </div>
-    </div>
     <Switch bind:checked={googleOauthSettings.isEnabled} label="Enabled" />
     <div class="flex flex-wrap gap-2">
       <button

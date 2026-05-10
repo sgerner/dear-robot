@@ -264,11 +264,11 @@
     followUpDays: 2,
     autoApproveReadOnlyToolCalls: true
   });
+  const googleOauthDefaultScopes = ['openid', 'email', 'profile', 'https://mail.google.com/'];
   let googleOauthSettings = $state({
     clientId: '',
     clientSecret: '',
     redirectUri: '',
-    scopes: ['openid', 'email', 'profile', 'https://mail.google.com/'].join('\n'),
     isEnabled: true
   });
   let googleOauthHasSecret = $state(false);
@@ -399,14 +399,16 @@
   $effect(() => {
     const serverOauth = data.googleOauthSettings;
     const nextClientId = serverOauth?.clientId || '';
-    const nextRedirectUri = serverOauth?.redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/api/accounts/google/callback` : '');
-    const nextScopes = (serverOauth?.scopes || ['openid', 'email', 'profile', 'https://mail.google.com/']).join('\n');
+    const nextRedirectUri =
+      serverOauth?.redirectUri ||
+      (typeof window !== 'undefined'
+        ? `${window.location.origin}/api/accounts/google/callback`
+        : '');
     const nextIsEnabled = serverOauth?.isEnabled ?? true;
-    
+
     untrack(() => {
       if (googleOauthSettings.clientId !== nextClientId) googleOauthSettings.clientId = nextClientId;
       if (googleOauthSettings.redirectUri !== nextRedirectUri) googleOauthSettings.redirectUri = nextRedirectUri;
-      if (googleOauthSettings.scopes !== nextScopes) googleOauthSettings.scopes = nextScopes;
       if (googleOauthSettings.isEnabled !== nextIsEnabled) googleOauthSettings.isEnabled = nextIsEnabled;
     });
   });
@@ -1030,17 +1032,13 @@
   }
 
   async function saveGoogleOauthSettings() {
-    const scopes = googleOauthSettings.scopes
-      .split('\n')
-      .map((scope) => scope.trim())
-      .filter(Boolean);
     await api('/api/oauth/google/settings', {
       method: 'POST',
       body: JSON.stringify({
         clientId: googleOauthSettings.clientId,
         clientSecret: googleOauthSettings.clientSecret,
         redirectUri: googleOauthSettings.redirectUri,
-        scopes,
+        scopes: googleOauthDefaultScopes,
         isEnabled: googleOauthSettings.isEnabled
       })
     });
@@ -3053,13 +3051,9 @@
               bind:googleOauthSettings
               {googleOauthHasSecret}
               {googleOauthConnectedEmail}
-              dictationTargetId={dictationTarget?.id || null}
-              {dictationActive}
-              {dictationUnavailable}
-              {dictationLevel}
+              {copyToClipboard}
               {folderRoleOptions}
               {saveFolderRole}
-              {toggleDictation}
               {accountAction}
               {addAccount}
               {testNewAccount}

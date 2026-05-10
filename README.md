@@ -418,13 +418,21 @@ Passwords:
 You can connect Gmail without relying on `.env` OAuth keys:
 
 1. Open `Accounts` view.
-2. In `Connect Gmail (Google OAuth)`, enter:
+2. In Google Cloud, create or select a project:
+   - https://console.cloud.google.com/projectcreate
+3. Enable the Gmail API for that project:
+   - https://developers.google.com/workspace/gmail/api/quickstart/nodejs
+4. Configure the OAuth consent screen:
+   - https://developers.google.com/workspace/guides/configure-oauth-consent
+5. Create an OAuth client ID:
+   - https://developers.google.com/workspace/guides/create-credentials
+6. Add this redirect URI to the OAuth client:
+   - `https://your-host/api/accounts/google/callback`
+7. In `Connect Gmail (Google OAuth)`, enter:
    - Google OAuth Client ID
    - Google OAuth Client Secret
-   - Redirect URI (typically `https://your-host/api/accounts/google/callback`)
-   - Scopes (default includes `https://mail.google.com/`)
-3. Click `Save OAuth Settings`.
-4. Click `Connect Gmail Account` and complete Google consent.
+8. Click `Save OAuth Settings`.
+9. Click `Connect Gmail Account` and complete Google consent.
 
 After callback, the app saves the Gmail account with OAuth auth (`oauth_gmail`) and uses token refresh for IMAP/SMTP automatically.
 
