@@ -1,269 +1,92 @@
 # Dear Robot
 
-Dear Robot is a self-hosted SvelteKit webmail dear-robot application that keeps architecture simple and UX fast:
+Dear Robot is a self-hosted, AI-first email client built for people who want fast mail handling without giving up control. It keeps the core mechanics inspectable: SQLite for state, SvelteKit for the app, server-side secrets for credentials, and explicit review before anything destructive or external happens.
 
-- Multi-account IMAP + SMTP
-- Folder-based email client controls
-- SQLite cache for folders/messages/suggestions/actions
-- Review-first AI suggestions (never auto-send / never auto-delete)
-- Installable PWA with browser-side IndexedDB cache for recent working data
-- MCP endpoint for external agent tooling
-- Single Node process, single Docker container
+At a glance, Dear Robot gives you:
 
----
+- Multi-account IMAP and SMTP email handling
+- Review-first AI suggestions for replies, triage, and task planning
+- A fast inbox UI with folder navigation, bulk actions, search, and conversation view
+- Drafts, compose, reply, reply all, forward, attachments, and offline-ish compose persistence
+- A built-in MCP endpoint for external agent tooling
+- Optional Obsidian vault integration for durable notes and agent memory
+- A single Docker container with a single SQLite database file
 
-## 1) Architecture
+## Core Features
 
-### Runtime stack
+- Self-hosted email client with IMAP and SMTP support
+- Folder actions for archive, spam, trash, sent, drafts, and provider-specific folder mapping
+- AI-assisted triage and response drafting
+- Explicit approve/execute lifecycle for agent tasks
+- Contact autocomplete from real usage and import/export flows
+- Persistent drafts and action/audit logs
+- PWA support for a more app-like browser experience
+- Optional Obsidian vault mount for long-lived notes and handoffs
+- Optional live-provider test paths for IMAP, SMTP, and AI integrations
 
-- SvelteKit + `@sveltejs/adapter-node`
-- Node.js server process (`node build`)
-- SQLite (`better-sqlite3`) + Drizzle ORM
-- IMAP via `imapflow`
-- SMTP via `nodemailer`
+## What It Is Good At
 
-### AI stack
+- Handling multiple mailboxes from one interface
+- Keeping AI action visible and user-approved
+- Giving you a durable local store for mail, memory, and automation history
+- Running in a simple Docker deployment without external queues or extra services
 
-- Primary: DeepSeek (`AI_PROVIDER=deepseek`)
-- Primary model default: `deepseek-v4-flash`
-- Fallback: Gemini via OpenAI-compatible endpoint
-- Optional advanced planner profile for harder multi-step tasks
-- Zod schema validation on model output
-- One JSON repair attempt before fallback
-- AI provider details are editable in the UI under Config -> AI Profiles
-- Onboarding banner guides AI setup first, then email account setup
+## Limitations
 
-### Data + files
+- It is not a fully autonomous email autopilot. Send, move, delete, and task execution remain explicit actions.
+- Delete means move to Trash when a Trash folder is available. Permanent deletion is intentionally not the default behavior.
+- AI behavior depends on the providers you configure. If a provider is unreachable or misconfigured, the related feature will fail closed.
+- IMAP is the primary sync path. Provider-specific behavior varies depending on IMAP flags, special-use folders, and IDLE support.
+- Gmail requires the OAuth flow in the UI. Generic accounts require working IMAP and SMTP credentials.
+- The Obsidian vault integration is optional. It only appears as a tool when the vault is mounted, readable, and enabled in Settings.
+- The app expects one operator account model. It is not designed as a multi-tenant SaaS.
+- Production requires persistent secrets. Do not rely on development defaults.
 
-- Database default: `/data/dear-robot.db` derived from `DATA_DIR`
-- Memory file: `/data/AGENT_INSTRUCTIONS.md`
-- `DB_PATH` is not user-configurable at runtime; the app derives it from `DATA_DIR`
+## Docker Deployment
 
----
+The recommended deployment is the included Docker image or the bundled `docker-compose.yml`.
 
-## 2) Feature status
+### Recommended setup
 
-### Implemented
+1. Create a persistent data directory on the host, or use a named Docker volume.
+2. Create a `.env` file with the required runtime secrets.
+3. Build and start the container.
+4. Sign in, configure AI profiles, then add a mailbox.
+5. If you want Obsidian support, mount `/obsidian` and enable it in Settings.
 
-- Multi-account add/list/test/enable/disable/remove
-- Seeded demo mailbox auto-prunes when the first real mailbox is added
-- Sync status + last sync timestamps per account
-- IMAP backfill + active inbox watch loop using IMAP IDLE
-- SMTP send for reply/forward actions
-- Folder navigation, folder counts, and per-folder message filtering
-- Move, star/unstar, mark read/unread
-- Compose, reply, reply all, forward, cc, and bcc
-- Attachment metadata parsing and authenticated attachment download endpoints
-- Attach-to-send support in compose flows
-- Persistent drafts with autosave
-- Offline compose outbox queue with retry on reconnect
-- Rich/plain compose modes with HTML fallback
-- Bulk selection and bulk operations (read/unread, star/unstar, trash move)
-- Conversation timeline using message/thread headers with subject fallback
-- Address book/autocomplete from observed and manually used contacts
-- Contact CSV import/export APIs and config-panel controls
-- Action execution audit log
-- FTS5-backed message search with automatic LIKE fallback
-- Safe HTML rendering mode for email bodies (sanitized server-side)
-- PWA manifest/service worker and local IndexedDB cache for messages/folders/contacts
-- Memory editor for `AGENT_INSTRUCTIONS.md`
-- Memory system with core profile, learned rules, examples, and event log
-- Webhook delegate execution with optional signature
-- MCP endpoint with auth token
-- Incremental folder sync cursors + UIDVALIDITY tracking table
-- Folder-role mapping for archive/spam/trash routing
-- Best-effort sent folder append on IMAP accounts after SMTP send
-- Agent task planning (action graph) per email with explicit approve/execute lifecycle
-- Bring-your-own tool gateway (MCP HTTP + CLI) managed in UI
-- Advanced-model routing for complex planning tasks (with fallback behavior)
-- Task run + step + tool call audit persistence
-
-### Safety guarantees
-
-- Actions execute only after explicit user click
-- No automatic model action execution
-- No permanent delete in v1 (delete routes to Trash when available)
-- Secrets never exposed to browser JS
-
----
-
-## 3) Git-first setup (detailed)
-
-### Fresh clone
+### Quick start with Docker Compose
 
 ```bash
-git clone <your-repo-url> dear-robot
-cd dear-robot
-npm install
-# create .env manually from the template in section 4
-npm run dev
+docker compose up -d --build
 ```
 
-### First-time repo setup checklist
-
-1. Create `.env` at the repo root.
-2. Set `APP_PASSWORD`, `APP_SESSION_SECRET`, `ENCRYPTION_KEY`, and `MCP_AUTH_TOKEN`.
-3. Optionally set AI bootstrap defaults in `.env` if you want the first run to seed providers.
-4. Start dev server with `npm run dev`.
-5. Sign in at `/login` with `APP_PASSWORD`.
-6. Open Config -> AI Profiles and save the provider, model, base URL, and API key for each profile you want active.
-7. After the AI profiles are saved, add a real IMAP/SMTP account. The seeded demo mailbox is removed automatically the first time a real account is added.
-
-### Daily feature branch workflow
-
-```bash
-# make sure main is current
-git checkout main
-git pull --ff-only
-
-# create branch
-git checkout -b feat/<short-description>
-
-# develop
-npm run check
-npm run test:unit
-
-# commit
-git add -A
-git commit -m "feat: <summary>"
-
-# push
-git push -u origin feat/<short-description>
-```
-
-### Review + commit discipline
-
-```bash
-# inspect staged and unstaged deltas
-git status
-git diff
-git diff --staged
-
-# stage intentionally
-git add <paths>
-
-# re-check before commit
-npm run check
-npm run test:unit
-
-git commit -m "feat: <summary>"
-```
-
-### Keep branch up to date with main
-
-```bash
-git fetch origin
-git checkout feat/<short-description>
-git merge origin/main
-```
-
-### Resolve merge conflicts safely
-
-```bash
-# after merge reports conflicts
-git status
-# edit conflicting files, then:
-git add <resolved-files>
-git commit
-```
-
-Use `npm run check` and `npm run test:unit` immediately after resolving conflicts.
-
-### Rebase alternative (clean history)
-
-```bash
-git fetch origin
-git checkout feat/<short-description>
-git rebase origin/main
-```
-
-If conflicts occur during rebase:
-
-```bash
-git status
-# resolve files
-git add <resolved-files>
-git rebase --continue
-```
-
-Abort rebase if needed:
-
-```bash
-git rebase --abort
-```
-
-### Prepare for PR merge
-
-```bash
-npm run check
-npm run test:unit
-npm run test:e2e
-npm run eval:ai
-npm run build
-docker build -t dear-robot .
-```
-
-### Tagged release flow
-
-```bash
-git checkout main
-git pull --ff-only
-git tag -a v1.0.0 -m "Dear Robot v1.0.0"
-git push origin v1.0.0
-```
-
-### Syncing a deployed host from Git
-
-```bash
-git fetch origin
-git checkout main
-git pull --ff-only
-npm install
-npm run build
-docker compose up --build -d
-```
-
----
-
-## 4) Environment variables
-
-Create a repo-root `.env`:
+Create `.env` manually using the template below before starting the container.
 
 ```env
-# App
-NODE_ENV=development
+NODE_ENV=production
 PORT=3000
-DATA_DIR=/absolute/path/to/your/data-dir
+DATA_DIR=/data
 
-# Security
-APP_SESSION_SECRET=
-APP_PASSWORD=
-ENCRYPTION_KEY=
-MCP_AUTH_TOKEN=
+APP_SESSION_SECRET=replace-with-a-long-random-string
+APP_PASSWORD=replace-with-a-password
+ENCRYPTION_KEY=32-byte-hex-or-other-long-random-secret
+MCP_AUTH_TOKEN=replace-with-a-bearer-token
 
-# Primary AI provider: DeepSeek
 AI_PROVIDER=deepseek
 AI_MODEL=deepseek-v4-flash
 AI_BASE_URL=https://api.deepseek.com
-# Optional bootstrap API key if you want the DB to seed with a live key on first boot
 AI_API_KEY=
 
-# Fallback AI provider: Gemini OpenAI-compatible API
 AI_FALLBACK_PROVIDER=gemini
-AI_FALLBACK_MODEL=
+AI_FALLBACK_MODEL=gemini-2.5-flash
 AI_FALLBACK_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 AI_FALLBACK_API_KEY=
 
-# Optional advanced planning model (for complex task plans)
 AI_ADVANCED_PROVIDER=deepseek
 AI_ADVANCED_MODEL=deepseek-v4-pro
 AI_ADVANCED_BASE_URL=https://api.deepseek.com
 AI_ADVANCED_API_KEY=
 
-AI_MAX_REPAIR_ATTEMPTS=1
-DEBUG_AI=false
-
-# Optional live IMAP account for real sync testing
 IMAP_HOST=
 IMAP_PORT=993
 IMAP_USERNAME=
@@ -273,537 +96,192 @@ SMTP_HOST=
 SMTP_PORT=465
 SMTP_USERNAME=
 SMTP_PASSWORD=
-
-# Optional test account identity
-TEST_EMAIL_FROM=
-TEST_EMAIL_TO=
 ```
 
-### Development
-
-- Recommended `DATA_DIR` values:
-- local checkout on Linux/macOS: `/home/<you>/code/dear-robot/data`
-- local checkout on Windows WSL or similar: `/home/<you>/code/dear-robot/data`
-- if you want a shared local app data folder: `~/.local/share/dear-robot` expanded to an absolute path
-
-- Set `DATA_DIR` to one of those absolute paths, for example:
-
-```env
-DATA_DIR=/home/you/code/dear-robot/data
-```
-
-- The app derives the database file automatically as:
-
-```text
-/home/you/code/dear-robot/data/dear-robot.db
-```
-
-- Do not set `DB_PATH` manually. The app will reject relative data paths and will always persist state under `DATA_DIR`.
-
-### Docker
-
-- Recommended `DATA_DIR` value: `/data`
-- Use a persistent volume mounted at `/data`.
-- The app derives the database file automatically as `/data/dear-robot.db`.
-- Optional but recommended for note-taking: mount a second persistent volume at `/obsidian`
-  and enable the Obsidian vault setting in the UI.
-
-Example `docker-compose.yml` runtime values:
+### Example `docker-compose.yml`
 
 ```yaml
-environment:
-  DATA_DIR: /data
+services:
+  dear-robot:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      PORT: 3000
+    volumes:
+      - dear-robot-data:/data
+      - dear-robot-obsidian:/obsidian # optional, remove if you do not want Obsidian support
+
 volumes:
-  - dear-robot-data:/data
-  - dear-robot-obsidian:/obsidian
+  dear-robot-data:
+  dear-robot-obsidian:
 ```
 
-### Production
+### Bare `docker run`
 
-- Recommended `DATA_DIR` values:
-- `/data` if your deployment platform gives you a durable data volume there
-- `/var/lib/dear-robot` on a traditional Linux host
-- another mounted persistent path owned by the app user
+```bash
+docker build -t dear-robot .
+docker run -d \
+  --name dear-robot \
+  -p 3000:3000 \
+  --env-file .env \
+  -e DATA_DIR=/data \
+  -v dear-robot-data:/data \
+  -v dear-robot-obsidian:/obsidian \
+  dear-robot
+```
 
-- Use one absolute, persistent filesystem path for `DATA_DIR`.
-- The app derives the database file automatically from that directory and refuses to start if `DATA_DIR` is relative.
-- The production database and memory files must survive process restarts and container replacement.
+If you do not want Obsidian support, remove the `/obsidian` volume mount. The feature stays disabled unless you enable it in the UI.
 
-### Production secret requirements
+### Persistent paths inside the container
 
-Startup fails in production if any are missing:
+- `/data` holds the SQLite database, memory files, backups, skills, and other runtime state.
+- `/obsidian` is the optional vault mount used by the Obsidian tool.
 
-- `APP_SESSION_SECRET`
-- `APP_PASSWORD`
-- `ENCRYPTION_KEY`
-- `MCP_AUTH_TOKEN`
+Do not set `DB_PATH` manually in production. The app derives it from `DATA_DIR`.
 
-### Development behavior
+## First Run Checklist
 
-If `ENCRYPTION_KEY` is not set in development, Dear Robot logs a warning and uses a temporary dev-only key.
+1. Start the container.
+2. Open the app in a browser.
+3. Sign in with the password from `APP_PASSWORD`.
+4. Go to Config -> AI Profiles and save the provider settings you want to use.
+5. Add your mailbox account after AI profiles are configured.
+6. If you want Obsidian access, enable the Obsidian tool in Settings -> Agent Tools and point it at the mounted vault path.
 
----
+## Environment Variables
 
-## 5) Local run
+### Required in production
+
+| Variable | Purpose |
+| --- | --- |
+| `APP_SESSION_SECRET` | Signs the session cookie and CSRF/session state. Use a long random value. |
+| `APP_PASSWORD` | Password used for app login. |
+| `ENCRYPTION_KEY` | Encrypts stored secrets such as mail and provider credentials. |
+| `MCP_AUTH_TOKEN` | Protects the MCP endpoint from unauthenticated use. |
+| `DATA_DIR` | Absolute path to the persistent runtime directory. |
+
+### App runtime
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Runtime mode. Must be `production` in a real deployment. |
+| `PORT` | `3000` | Port the Node server listens on. |
+| `DATA_DIR` | `/data` | Root directory for SQLite, memory, backups, and skills. Must be absolute. |
+| `DB_PATH` | derived from `DATA_DIR` | Not meant to be set manually. The app derives the SQLite path automatically. |
+
+### AI profiles
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AI_PROVIDER` | `deepseek` | Primary AI provider preset. |
+| `AI_MODEL` | `deepseek-v4-flash` | Primary AI model. |
+| `AI_BASE_URL` | `https://api.deepseek.com` | Primary AI endpoint. |
+| `AI_API_KEY` | unset | Optional bootstrap API key for the primary profile. |
+| `AI_FALLBACK_PROVIDER` | `gemini` | Fallback AI provider preset. |
+| `AI_FALLBACK_MODEL` | `gemini-2.5-flash` | Fallback AI model. |
+| `AI_FALLBACK_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` | Fallback AI endpoint. |
+| `AI_FALLBACK_API_KEY` | unset | Optional bootstrap API key for the fallback profile. |
+| `AI_ADVANCED_PROVIDER` | `deepseek` | Advanced planner provider preset. |
+| `AI_ADVANCED_MODEL` | `deepseek-v4-pro` | Advanced planner model. |
+| `AI_ADVANCED_BASE_URL` | `AI_BASE_URL` or `https://api.deepseek.com` | Advanced planner endpoint. |
+| `AI_ADVANCED_API_KEY` | unset | Optional bootstrap API key for the advanced profile. |
+| `AI_MAX_REPAIR_ATTEMPTS` | `1` | Number of JSON repair attempts before the AI call fails. |
+| `DEBUG_AI` | `false` | Logs additional AI request and response data in development. |
+
+### Mail transport
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `IMAP_HOST` | unset | Optional live IMAP host used by integration tests and live account setup. |
+| `IMAP_PORT` | `993` | IMAP port. |
+| `IMAP_USERNAME` | unset | Optional IMAP username for live-provider testing. |
+| `IMAP_PASSWORD` | unset | Optional IMAP password for live-provider testing. |
+| `SMTP_HOST` | unset | Optional SMTP host used by live-provider testing. |
+| `SMTP_PORT` | `465` | SMTP port. |
+| `SMTP_USERNAME` | unset | Optional SMTP username for live-provider testing. |
+| `SMTP_PASSWORD` | unset | Optional SMTP password for live-provider testing. |
+| `MAILBOX_OP_MIN_INTERVAL_MS` | `120` | Minimum delay between mailbox operations. |
+| `RUN_LIVE_PROVIDER_TESTS` | `false` | Enables live integration test flows that require real provider credentials. |
+| `TEST_EMAIL_FROM` | unset | Optional test sender address. |
+| `TEST_EMAIL_TO` | unset | Optional test recipient address. |
+
+### Attachments and safety
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ATTACHMENT_MAX_BYTES` | `15728640` | Maximum attachment size in bytes. |
+| `ATTACHMENT_SCAN_STRICT` | `false` | Fails closed when attachment scanning reports warnings. |
+| `API_RATE_LIMIT_PER_MINUTE` | `180` | API request limit per minute. |
+
+### Automation and backups
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AUTOPILOT_INTERVAL_MINUTES` | `15` | Polling interval for autopilot processing. |
+| `BACKUP_RETENTION_DAYS` | `30` | How long backups are kept before cleanup. |
+| `BACKUP_MAX_COUNT` | `30` | Maximum number of retained backups. |
+| `ALLOW_DANGEROUS_DB_RESET` | `false` | Test-only override for destructive local reset paths. Do not use in production. |
+
+## Obsidian Vault Setup
+
+Obsidian support is optional and disabled by default.
+
+### What it does
+
+- Lets the agent search, read, write, and append notes inside a mounted vault
+- Makes it practical to keep decisions, summaries, and handoff notes close to the app
+- Exposes the vault as a built-in tool named `obsidian_vault`
+
+### How to enable it
+
+1. Mount a host directory or Docker volume to `/obsidian`.
+2. Make sure the mounted path is readable and writable by the container user.
+3. Open Settings -> Agent Tools.
+4. Enable the Obsidian vault integration.
+5. Confirm the vault path is set to the mounted path, usually `/obsidian`.
+
+### Notes
+
+- The vault path must be absolute.
+- The mounted path must exist as a real directory.
+- Symlink escapes are blocked inside the tool layer.
+- If the vault is missing or not writable, the app will keep the tool disabled.
+
+### Suggested vault usage
+
+- Put concise daily logs in append mode.
+- Keep final decisions and handoff notes as curated notes.
+- Search the vault before asking the model to recreate context.
+
+## Security Model
+
+- Session and CSRF protection are server-side.
+- API secrets stay on the server.
+- AI tool usage is opt-in and review-first.
+- Obsidian write actions require an enabled vault mount.
+- Dangerous deletion is intentionally routed through Trash instead of permanent removal.
+
+## Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Default local URL: `http://localhost:5173`
-
-The UI is password-gated:
-
-- uses `APP_PASSWORD` when set
-- dev fallback password is `password` only when unset
-
----
-
-## 6) Docker run
-
-### Docker Compose (recommended)
-
-```bash
-docker compose up --build
-```
-
-With Compose, `DATA_DIR=/data` is mounted to the `dear-robot-data` volume, so the SQLite database and memory file survive container restarts.
-If you keep the Obsidian volume mount, the agent can also store durable notes under `/obsidian`
-once you enable the vault in Settings -> Tools.
-
-### Direct Docker run
-
-```bash
-docker build -t dear-robot .
-docker run \
-  -p 3000:3000 \
-  -v dear-robot-data:/data \
-  -v dear-robot-obsidian:/obsidian \
-  --env-file .env \
-  dear-robot
-```
-
-Volume mount `/data` persists:
-
-- `dear-robot.db`
-- `AGENT_INSTRUCTIONS.md`
-
-Volume mount `/obsidian` persists any agent notes you write into the Obsidian vault.
-
-If you want a different persistent location, change `DATA_DIR` to an absolute path and mount that path into the container.
-
----
-
-## 7) Accounts: add/test/disable/remove
-
-In-app path:
-
-- Open `Accounts` view from the left nav.
-
-Supported operations:
-
-1. Add IMAP + SMTP account
-2. Test connectivity (`POST /api/accounts/:id/test`)
-3. Disable sync (`POST /api/accounts/:id/disable`)
-4. Re-enable sync (`POST /api/accounts/:id/enable`)
-5. Remove account (`DELETE /api/accounts/:id`)
-
-Delete semantics:
-
-- Active worker stopped
-- Account + folders + cached messages removed
-- Related suggestions, feedback, and executed actions removed
-
-Passwords:
-
-- encrypted at rest
-- never shown after save
-- never logged
-
-### 7b) Gmail OAuth From UI
-
-You can connect Gmail without relying on `.env` OAuth keys:
-
-1. Open `Accounts` view.
-2. In Google Cloud, create or select a project:
-   - https://console.cloud.google.com/projectcreate
-3. Enable the Gmail API for that project:
-   - https://developers.google.com/workspace/gmail/api/quickstart/nodejs
-4. Configure the OAuth consent screen:
-   - https://developers.google.com/workspace/guides/configure-oauth-consent
-5. Create an OAuth client ID:
-   - https://developers.google.com/workspace/guides/create-credentials
-6. Add this redirect URI to the OAuth client:
-   - `https://your-host/api/accounts/google/callback`
-7. In `Connect Gmail (Google OAuth)`, enter:
-   - Google OAuth Client ID
-   - Google OAuth Client Secret
-8. Click `Save OAuth Settings`.
-9. Click `Connect Gmail Account` and complete Google consent.
-
-After callback, the app saves the Gmail account with OAuth auth (`oauth_gmail`) and uses token refresh for IMAP/SMTP automatically.
-
----
-
-## 8) AI configuration
-
-AI settings are managed in the UI:
-
-- Open `Config`
-- Edit `AI Profiles`
-- Save `Primary`, `Fallback`, and `Advanced` profiles as needed
-
-Each profile supports:
-
-- preset selectors for DeepSeek, Gemini, OpenAI, Anthropic, Vertex/Gemini, OpenRouter, and manual setup
-- model, base URL, API key, and transport editing
-- enabling/disabling without losing stored values
-
-`.env` AI variables remain useful as bootstrap defaults for first-run seeding, but the app reads the saved profiles from SQLite at runtime.
-
-Recommended starting points:
-
-- Fast dear-robot: `deepseek-v4-flash`
-- Balanced default: `gemini-2.5-flash`
-- Strong planning: `deepseek-v4-pro`
-- Careful long-form drafting: `claude-sonnet-4`
-- OpenAI-compatible general purpose: `gpt-4.1-mini`
-
-Behavior summary:
-
-- Primary profile called first
-- If malformed output: one repair attempt
-- If primary fails: fallback profile, if configured
-- If all fail: safe error suggestion saved, no action executed
-
-### 8c) Audio Dictation Profile
-
-The app also supports an `audio` AI profile for voice-to-text:
-
-- Configure it under `Config -> AI Profiles` (profile key: `audio`).
-- Recommended model: `gpt-4o-mini-transcribe` (OpenAI-compatible audio endpoint).
-- The UI shows a floating `Dictate` button when a text input or textarea is focused.
-- Recording is transcribed server-side via `/api/audio/transcribe` and inserted at the cursor.
-
----
-
-## 8b) Memory configuration
-
-Memory now uses a layered model:
-
-- Core Profile: compact always-on instructions
-- Learned Rules: auto-promoted behavioral patterns from edits/regenerations
-- Examples: compact before/after snapshots
-- Advanced Memory File: optional direct editing of `/data/AGENT_INSTRUCTIONS.md` behind Advanced mode
-
-In the `Memory` route:
-
-- edit and save Core Profile
-- review/remove learned rules
-- optionally enable Advanced mode for direct file editing
-
-Learning triggers:
-
-- suggestion edit
-- suggestion regenerate with note
-- task planning prompt retrieval uses the same memory context
-
-## 8d) AI Autopilot
-
-The AI-first workflow is intentionally simple and inspectable:
-
-- `Run Autopilot` scans recent mail.
-- When enabled, the server also runs the same autopilot pass on a simple interval (`AUTOPILOT_INTERVAL_MINUTES`, default `15`).
-- Existing and newly generated AI suggestions are placed into one approval queue.
-- The queue supports bulk approve, reject, and execute.
-- Sends, forwards, and delegation stay approval-gated by default.
-- Optional low-risk auto-filing can be enabled in policy settings.
-- Every AI call records provider/model/status/latency/prompt hash in `ai_observability`.
-- Thread summaries, open questions, commitments, and follow-up reminders are stored in SQLite.
-
-Autopilot tables:
-
-- `agent_action_queue`
-- `autopilot_runs`
-- `ai_observability`
-- `thread_summaries`
-- `follow_up_reminders`
-- `outcome_events`
-
-The implementation plan is documented in `AI_AGENT_IMPLEMENTATION_PLAN.md`.
-
----
-
-## 9) Search behavior
-
-- Primary path: SQLite FTS5 index over subject/sender/recipients/body
-- Fallback path: LIKE search if FTS is unavailable or query parsing fails
-
-This keeps search fast in normal deployments and still reliable on constrained SQLite builds.
-
----
-
-## 10) Email body rendering
-
-Reader pane supports:
-
-- `HTML` mode: server-sanitized rich body
-- `Text` mode: plain body text
-
-Sanitization is done server-side before rendering to the browser.
-
-### Inbox ergonomics
-
-- Account filter in the left pane (`All accounts` or per account)
-- Folder navigation with unread/total counts
-- Compose drawer for new mail, reply, reply all, and forward
-- Star, read/unread, move, and trash controls in the reading pane
-- Keyboard shortcuts:
-  - `/` focuses search
-  - `c` opens compose
-  - `j` / `k` moves message selection
-
-## 10.1) PWA and Local Cache
-
-The app includes:
-
-- `/manifest.webmanifest`
-- service worker asset caching
-- standalone display mode for installable browser/PWA use
-- IndexedDB database named `dear-robot-client-cache`
-
-The local cache stores recent message-list rows, folders, contacts, and cache metadata. It is intended for faster UI startup and PWA ergonomics; the server SQLite database remains authoritative.
-
-Phase 2 adds:
-
-- `outbox` queue storage for offline sends
-- local draft cache snapshots alongside server-side persistent drafts
-
-For Phase 1, this cache is sized for normal mailbox operation around 1000 indexed messages. Future phases can move heavier local search to OPFS SQLite if IndexedDB becomes limiting.
-
-## 10.2) Email Client Roadmap
-
-See [EMAIL_CLIENT_ROADMAP.md](./EMAIL_CLIENT_ROADMAP.md) for the phased plan beyond the implemented Phase 4 baseline, including deeper production hardening and richer AI workflows.
-
-## 10.3) Agentic Operations
-
-Phase 4 adds a task/action-graph layer:
-
-- per-email task plans with ordered steps
-- explicit step approval and task execution controls
-- persistent status and outputs for each step
-
-Bring-your-own tools:
-
-- add tool definitions in Config view (`mcp_http` or `cli`)
-- test/enable/disable/remove tools from UI
-- task steps can call tools only through the gateway layer (audited)
-
-Phase 4 route additions:
-
-- `POST /api/messages/:id/plan`
-- `GET /api/tasks`
-- `GET /api/tasks/:id`
-- `POST /api/tasks/:id/approve`
-- `POST /api/tasks/:id/reject`
-- `POST /api/tasks/:id/execute`
-- `GET /api/tools`
-- `POST /api/tools`
-- `POST /api/tools/:id`
-- `POST /api/tools/:id/test`
-- `DELETE /api/tools/:id`
-
----
-
-## 11) Memory editor
-
-Memory file:
-
-- `/data/AGENT_INSTRUCTIONS.md`
-
-Usage:
-
-- edited in-app
-- included in every dear-robot prompt
-- affects future suggestion tone/rules/routing
-
----
-
-## 12) MCP usage
-
-Endpoint:
-
-```text
-/api/mcp/sse
-```
-
-Auth:
-
-```http
-Authorization: Bearer ${MCP_AUTH_TOKEN}
-```
-
-Connect from another agent/runtime:
-
-1. Read available tools (SSE-ready discovery payload):
-
-```bash
-curl -s \
-  -H "Authorization: Bearer ${MCP_AUTH_TOKEN}" \
-  http://localhost:3000/api/mcp/sse
-```
-
-2. Invoke a tool (`POST` only):
-
-```bash
-curl -s \
-  -H "Authorization: Bearer ${MCP_AUTH_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -X POST http://localhost:3000/api/mcp/sse \
-  -d '{"tool":"search_emails","args":{"query":"invoice"}}'
-```
-
-Supported tools:
-
-- `search_emails` with `{ "query": "..." }`
-- `get_email_context` with `{ "message_id": 123 }`
-- `list_folders` with `{ "account_id": 1 }` (optional `account_id`)
-- `move_message` with `{ "message_id": 123, "folder_path": "Archive" }`
-- `set_read` with `{ "message_id": 123, "read": true }`
-- `set_flagged` with `{ "message_id": 123, "flagged": true }`
-- `generate_suggestion` with `{ "message_id": 123 }`
-- `regenerate_suggestion` with `{ "message_id": 123, "note": "make it shorter" }`
-- `execute_suggestion` with `{ "suggestion_id": 456 }`
-
-Notes:
-
-- `GET /api/mcp/sse` is discovery-only and does not execute tools.
-- Any tool execution attempt over `GET` is rejected; send JSON to `POST /api/mcp/sse`.
-
----
-
-## 13) Scripts
-
-```json
-{
-  "dev": "vite dev --host 0.0.0.0",
-  "build": "vite build",
-  "preview": "node build",
-  "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-  "lint": "eslint .",
-  "test": "npm run test:unit && npm run test:e2e",
-  "test:unit": "vitest run",
-  "test:e2e": "playwright test",
-  "eval:ai": "tsx scripts/eval-ai.ts",
-  "db:push": "drizzle-kit push",
-  "db:studio": "drizzle-kit studio"
-}
-```
-
----
-
-## 14) Validation checklist
+Useful checks before merging:
 
 ```bash
 npm run check
 npm run lint
 npm run test:unit
 npm run test:e2e
-npm run eval:ai
 npm run build
-docker build -t dear-robot .
 ```
 
----
+## License
 
-## 15) Security notes
-
-- HTTP-only same-site auth cookie
-- CSRF token required for JSON mutation endpoints
-- Credentials encrypted with `ENCRYPTION_KEY`
-- `MCP_AUTH_TOKEN` required for MCP endpoint
-- Webhook payloads signed when webhook secret exists
-- Raw model outputs stored only when `DEBUG_AI=true`
-- BYO tools run under instance-owner trust model; treat tool access as highly privileged
-
----
-
-## 16) Troubleshooting
-
-### `401` from DeepSeek during eval/runtime
-
-Cause:
-
-- invalid or expired key in the saved AI profile or the bootstrap env value
-
-Actions:
-
-1. Open Config -> AI Profiles and confirm the saved key for the active profile
-2. If you are bootstrapping from `.env`, confirm the key there too
-3. Re-run `npm run eval:ai`
-4. Configure Gemini fallback so production suggestions continue
-
-### Runtime uses a different DeepSeek key than `.env`
-
-Cause:
-
-- the app now prefers saved AI profiles from SQLite over bootstrap env defaults
-- environment variables already exported in the shell can still override `.env` at process start
-- long-running Node/dev processes keep env values loaded at startup
-
-Actions:
-
-1. Open Config -> AI Profiles and check which profile is enabled
-2. Confirm the saved API key and base URL for that profile
-3. If you changed `.env`, fully restart `npm run dev` / `node build` / container after edits
-4. Avoid setting conflicting AI env vars in shell profiles when you expect the UI values to win
-
-### Task planning uses model you did not expect
-
-Cause:
-
-- complexity routing may choose advanced planner profile
-
-Actions:
-
-1. Set `AI_ADVANCED_MODEL` explicitly
-2. If you want one model only, set `AI_ADVANCED_MODEL` equal to `AI_MODEL`
-3. Restart app/container after env changes
-
-### No new mail appears
-
-Actions:
-
-1. Use account `Test` button
-2. Confirm account is `enabled`
-3. Check sync status/error in Accounts view
-4. Confirm IMAP server supports IDLE
-
-### Search seems empty
-
-Actions:
-
-1. Check if messages are present in Inbox
-2. Use simple single-word terms first
-3. If FTS unavailable in environment, LIKE fallback still works but may be slower
-
-### Container starts but no persistence
-
-Cause:
-
-- `/data` not mounted
-
-Action:
-
-- add `-v dear-robot-data:/data` or compose volume
-
----
-
-## 17) Intentional constraints
-
-These are by design, not bugs:
-
-- No automatic send/reply/forward/delete
-- Delete action is non-destructive (Trash move only)
-- Human approval required for all executions
+This project is licensed under the MIT License. See [LICENSE](./LICENSE).
