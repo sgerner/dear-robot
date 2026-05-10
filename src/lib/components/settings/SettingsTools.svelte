@@ -11,6 +11,8 @@
     addAgentTool,
     saveToolSkills,
     saveToolConfig,
+    obsidianSettings = $bindable(),
+    saveObsidianSettings,
     installCliPackage,
     addWebhook,
     agentToolForm = $bindable(),
@@ -28,6 +30,17 @@
       _id: number,
       _input: { envJson: string; headersJson: string }
     ) => void | Promise<void>;
+    obsidianSettings: {
+      isEnabled: boolean;
+      vaultPath: string;
+      isMounted: boolean;
+      isReadable: boolean;
+      isWritable: boolean;
+      resolvedVaultPath: string;
+      statusLabel: string;
+      statusMessage: string;
+    };
+    saveObsidianSettings: () => void | Promise<void>;
     installCliPackage: () => void | Promise<void>;
     addWebhook: () => void | Promise<void>;
     agentToolForm: {
@@ -99,6 +112,45 @@
     };
   }
 </script>
+
+<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+  <h3 class="font-medium">Obsidian Vault</h3>
+  <p class="mt-2 text-sm text-zinc-400">
+    Optional mounted vault for durable notes and retrieval. Mount the same absolute path inside
+    Docker, then enable it here so the agent can search, read, and write notes.
+  </p>
+  <div class="mt-3 grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+    <input
+      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      placeholder="Vault path inside the container, e.g. /obsidian"
+      bind:value={obsidianSettings.vaultPath}
+    />
+    <Switch bind:checked={obsidianSettings.isEnabled} label="Enabled" />
+  </div>
+  <div class="mt-3 rounded-md border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
+    <p class="font-medium text-zinc-200">Status</p>
+    <p class="mt-1">
+      {obsidianSettings.statusLabel} · {obsidianSettings.statusMessage}
+    </p>
+    <p class="mt-1">
+      Resolved path: <code>{obsidianSettings.resolvedVaultPath}</code>
+    </p>
+    {#if !obsidianSettings.isMounted || !obsidianSettings.isWritable}
+      <p class="mt-1 text-amber-300">
+        Mount the vault path in Docker before relying on this for durable notes.
+      </p>
+    {/if}
+  </div>
+  <div class="mt-3 flex flex-wrap items-center gap-2">
+    <button
+      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      onclick={saveObsidianSettings}>Save vault settings</button
+    >
+    <span class="text-xs text-zinc-500">
+      Supported agent actions: list, search, read, write, append.
+    </span>
+  </div>
+</div>
 
 <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
   <h3 class="font-medium">Agent Tools (Bring Your Own)</h3>

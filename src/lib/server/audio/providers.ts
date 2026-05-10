@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { fetchWithTimeout } from '$lib/server/fetch';
 import { getSpeechProvider } from '$lib/speech/providers';
 
 type AudioRuntimeProfile = {
@@ -42,13 +43,13 @@ async function openAiStyleTranscribe(profile: AudioRuntimeProfile, blob: Blob, l
   form.set('file', blob, 'dictation.webm');
   form.set('response_format', 'json');
   if (language) form.set('language', language);
-  const res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${profile.apiKey || ''}`
     },
     body: form
-  });
+  }, 45_000);
   if (!res.ok) {
     const text = await res.text();
     throw error(res.status, `Transcription failed: ${text.slice(0, 400)}`);
@@ -64,14 +65,14 @@ async function deepgramTranscribe(profile: AudioRuntimeProfile, blob: Blob, lang
   endpoint.searchParams.set('smart_format', 'true');
   endpoint.searchParams.set('punctuate', 'true');
   if (language) endpoint.searchParams.set('language', language);
-  const res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Token ${profile.apiKey || ''}`,
       'content-type': blob.type || 'audio/webm'
     },
     body: blob
-  });
+  }, 45_000);
   if (!res.ok) {
     const text = await res.text();
     throw error(res.status, `Transcription failed: ${text.slice(0, 400)}`);

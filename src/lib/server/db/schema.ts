@@ -427,6 +427,14 @@ export const agentTools = sqliteTable('agent_tools', {
   updatedAt: text('updated_at').notNull()
 });
 
+export const obsidianSettings = sqliteTable('obsidian_settings', {
+  id: integer('id').primaryKey(),
+  isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(false),
+  vaultPath: text('vault_path').notNull().default('/obsidian'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
 export const taskRuns = sqliteTable(
   'task_runs',
   {

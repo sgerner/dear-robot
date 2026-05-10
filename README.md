@@ -305,6 +305,8 @@ DATA_DIR=/home/you/code/dear-robot/data
 - Recommended `DATA_DIR` value: `/data`
 - Use a persistent volume mounted at `/data`.
 - The app derives the database file automatically as `/data/dear-robot.db`.
+- Optional but recommended for note-taking: mount a second persistent volume at `/obsidian`
+  and enable the Obsidian vault setting in the UI.
 
 Example `docker-compose.yml` runtime values:
 
@@ -313,6 +315,7 @@ environment:
   DATA_DIR: /data
 volumes:
   - dear-robot-data:/data
+  - dear-robot-obsidian:/obsidian
 ```
 
 ### Production
@@ -366,6 +369,8 @@ docker compose up --build
 ```
 
 With Compose, `DATA_DIR=/data` is mounted to the `dear-robot-data` volume, so the SQLite database and memory file survive container restarts.
+If you keep the Obsidian volume mount, the agent can also store durable notes under `/obsidian`
+once you enable the vault in Settings -> Tools.
 
 ### Direct Docker run
 
@@ -374,6 +379,7 @@ docker build -t dear-robot .
 docker run \
   -p 3000:3000 \
   -v dear-robot-data:/data \
+  -v dear-robot-obsidian:/obsidian \
   --env-file .env \
   dear-robot
 ```
@@ -382,6 +388,8 @@ Volume mount `/data` persists:
 
 - `dear-robot.db`
 - `AGENT_INSTRUCTIONS.md`
+
+Volume mount `/obsidian` persists any agent notes you write into the Obsidian vault.
 
 If you want a different persistent location, change `DATA_DIR` to an absolute path and mount that path into the container.
 

@@ -10,6 +10,8 @@ services:
       PORT: 3000
     volumes:
       - dear-robot-data:/data
+      - dear-robot-obsidian:/obsidian
 
 volumes:
   dear-robot-data:
+  dear-robot-obsidian:

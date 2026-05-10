@@ -273,6 +273,16 @@
   });
   let googleOauthHasSecret = $state(false);
   let googleOauthConnectedEmail = $state('');
+  let obsidianSettings = $state({
+    isEnabled: false,
+    vaultPath: '/obsidian',
+    isMounted: false,
+    isReadable: false,
+    isWritable: false,
+    resolvedVaultPath: '/obsidian',
+    statusLabel: 'missing',
+    statusMessage: 'Vault path is missing'
+  });
   let dictationTarget = $state<HTMLTextAreaElement | HTMLInputElement | null>(null);
   let dictationActive = $state(false);
   let dictationLevel = $state(0);
@@ -410,6 +420,31 @@
       if (googleOauthSettings.clientId !== nextClientId) googleOauthSettings.clientId = nextClientId;
       if (googleOauthSettings.redirectUri !== nextRedirectUri) googleOauthSettings.redirectUri = nextRedirectUri;
       if (googleOauthSettings.isEnabled !== nextIsEnabled) googleOauthSettings.isEnabled = nextIsEnabled;
+    });
+  });
+
+  $effect(() => {
+    const serverObsidian = data.obsidianSettings;
+    if (!serverObsidian) return;
+    const next = {
+      isEnabled: Boolean(serverObsidian.isEnabled),
+      vaultPath: serverObsidian.vaultPath || '/obsidian',
+      isMounted: Boolean(serverObsidian.isMounted),
+      isReadable: Boolean(serverObsidian.isReadable),
+      isWritable: Boolean(serverObsidian.isWritable),
+      resolvedVaultPath: serverObsidian.resolvedVaultPath || serverObsidian.vaultPath || '/obsidian',
+      statusLabel: serverObsidian.statusLabel || 'missing',
+      statusMessage: serverObsidian.statusMessage || 'Vault path is missing'
+    };
+    untrack(() => {
+      if (obsidianSettings.isEnabled !== next.isEnabled) obsidianSettings.isEnabled = next.isEnabled;
+      if (obsidianSettings.vaultPath !== next.vaultPath) obsidianSettings.vaultPath = next.vaultPath;
+      if (obsidianSettings.isMounted !== next.isMounted) obsidianSettings.isMounted = next.isMounted;
+      if (obsidianSettings.isReadable !== next.isReadable) obsidianSettings.isReadable = next.isReadable;
+      if (obsidianSettings.isWritable !== next.isWritable) obsidianSettings.isWritable = next.isWritable;
+      if (obsidianSettings.resolvedVaultPath !== next.resolvedVaultPath) obsidianSettings.resolvedVaultPath = next.resolvedVaultPath;
+      if (obsidianSettings.statusLabel !== next.statusLabel) obsidianSettings.statusLabel = next.statusLabel;
+      if (obsidianSettings.statusMessage !== next.statusMessage) obsidianSettings.statusMessage = next.statusMessage;
     });
   });
 
@@ -1045,6 +1080,23 @@
     googleOauthSettings.clientSecret = '';
     googleOauthHasSecret = true;
     status = 'Google OAuth settings saved';
+  }
+
+  async function saveObsidianSettings() {
+    const result = await api('/api/obsidian/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        isEnabled: obsidianSettings.isEnabled,
+        vaultPath: obsidianSettings.vaultPath
+      })
+    });
+    if (result?.settings) {
+      obsidianSettings = {
+        ...obsidianSettings,
+        ...result.settings
+      };
+    }
+    status = 'Obsidian vault settings saved';
   }
 
   async function testAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
@@ -2657,6 +2709,7 @@
     <div class="flex-1"></div>
     <button
       class="mb-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/30 hover:scale-105 active:scale-95"
+      aria-label="Compose"
       title="Compose (c)"
       onclick={() => openCompose('compose')}
     >
@@ -2808,7 +2861,7 @@
     class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${(data.query.messageId && data.selected) || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
   >
     <MessageDetail
-      selected={data.selected}
+      selected={data.selected ? { ...data.selected, tasks: data.tasks } : null}
       {view}
       {quickActionIds}
       {quickActionMeta}
@@ -3128,6 +3181,8 @@
               {addAgentTool}
               {saveToolSkills}
               {saveToolConfig}
+              bind:obsidianSettings
+              {saveObsidianSettings}
               {installCliPackage}
               {addWebhook}
               bind:agentToolForm

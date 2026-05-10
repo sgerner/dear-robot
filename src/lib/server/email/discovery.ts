@@ -1,4 +1,5 @@
 import { resolveSrv } from 'node:dns/promises';
+import { fetchWithTimeout } from '$lib/server/fetch';
 
 export type DiscoveredSettings = {
   host: string;
@@ -28,7 +29,7 @@ export async function discoverAccountSettings(email: string): Promise<Discovered
 async function tryMozillaAutoconfig(domain: string, email: string): Promise<DiscoveredSettings | null> {
   try {
     const url = `https://autoconfig.thunderbird.net/v1.1/${domain}`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, 8_000);
     if (!response.ok) return null;
     const xml = await response.text();
     

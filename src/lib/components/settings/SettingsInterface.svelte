@@ -23,9 +23,9 @@
     swipeSettings,
     swipeActionCatalog,
     updateSwipeSetting,
-    folderGroups: _folderGroups,
-    saveFolderRole: _saveFolderRole,
-    folderRoleOptions: _folderRoleOptions
+    folderGroups,
+    saveFolderRole,
+    folderRoleOptions
   } = $props<{
     quickActionCatalog: Array<{ id: string; label: string; tone?: 'danger' | 'accent' }>;
     quickActionIds: string[];
@@ -267,6 +267,43 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+    <h3 class="font-medium">Folder Role Mapping</h3>
+    <p class="mt-1 text-sm text-zinc-400">
+      Override provider folder roles used by archive, spam, trash, sent, and draft actions.
+    </p>
+    {#if folderGroups.length}
+      <div class="mt-4 space-y-4">
+        {#each folderGroups as group (group.accountId)}
+          <div class="rounded-md border border-white/10 bg-black/10 p-3">
+            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              {group.accountEmail}
+            </p>
+            <div class="mt-3 space-y-2">
+              {#each group.folders as folder (folder.id)}
+                <label class="flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <span class="min-w-0 truncate text-zinc-300">{folder.path}</span>
+                  <select
+                    class="rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-primary/50"
+                    value={folder.role || ''}
+                    onchange={(event) =>
+                      saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value)}
+                  >
+                    {#each folderRoleOptions as option (option.value)}
+                      <option value={option.value}>{option.label}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="mt-4 text-sm text-zinc-500">Add an account before mapping folder roles.</p>
+    {/if}
   </section>
 
 </div>

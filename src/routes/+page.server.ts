@@ -21,6 +21,7 @@ import { listAutopilotDashboard } from '$lib/server/agent/autopilot';
 import { env } from '$lib/server/env';
 import { speechToTextProviders } from '$lib/speech/providers';
 import { getAudioDictationSettings } from '$lib/server/ai/settings';
+import { getObsidianSettings } from '$lib/server/obsidian';
 
 export function load({ url, depends }) {
   const useDepends = typeof depends === 'function' ? depends : () => {};
@@ -76,6 +77,7 @@ export function load({ url, depends }) {
         isEnabled: true,
         hasClientSecret: false
       };
+  const obsidianSettings = isSettingsView ? getObsidianSettings() : null;
 
   return {
     query: {
@@ -96,6 +98,7 @@ export function load({ url, depends }) {
     tools,
     aiProfiles,
     googleOauthSettings,
+    obsidianSettings,
     speechProviders: speechToTextProviders,
     audioDictationSettings: getAudioDictationSettings(),
     onboarding: {

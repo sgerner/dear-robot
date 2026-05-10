@@ -151,6 +151,53 @@ describe('Phase 1 email client services', () => {
     expect(executed?.run.status).toBe('completed');
   });
 
+  it('exposes the obsidian vault tool when enabled and mounted', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const tempVault = fs.mkdtempSync(path.join(os.tmpdir(), 'dear-robot-obsidian-'));
+    const { upsertObsidianSettings, executeObsidianTool } = await import(
+      '../src/lib/server/obsidian'
+    );
+    const { getAvailableAgentToolByName, listAvailableAgentTools, executeTool } = await import(
+      '../src/lib/server/agent/tools'
+    );
+    upsertObsidianSettings({ isEnabled: true, vaultPath: tempVault });
+    expect(listAvailableAgentTools().some((tool) => tool.name === 'obsidian_vault')).toBe(true);
+    const tool = getAvailableAgentToolByName('obsidian_vault');
+    expect(tool).toBeTruthy();
+    await executeObsidianTool({
+      action: 'write',
+      path: 'notes/context.md',
+      content: '# Context\n\nImportant note'
+    });
+    const read = await executeObsidianTool({
+      action: 'read',
+      path: 'notes/context.md'
+    });
+    expect((read as { content?: string }).content).toContain('Important note');
+    const viaGateway = await executeTool(
+      tool as unknown as {
+        name: string;
+        kind: 'obsidian';
+        endpoint: null;
+        command: null;
+        args?: string[];
+        argsJson?: null;
+        timeoutMs: number;
+      },
+      {
+        action: 'append',
+        path: 'notes/context.md',
+        content: 'Follow-up'
+      },
+      { dryRun: false }
+    );
+    expect(viaGateway.ok).toBe(true);
+    const appended = fs.readFileSync(path.join(tempVault, 'notes/context.md'), 'utf8');
+    expect(appended).toContain('Follow-up');
+  });
+
   it('runs autopilot, queues actions, records observability and outcomes', async () => {
     const {
       approveQueueItems,

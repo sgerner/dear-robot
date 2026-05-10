@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fetchWithTimeout } from '$lib/server/fetch';
 
 export const ModelCatalogRequestSchema = z.object({
   profile: z.enum(['primary', 'fallback', 'advanced', 'audio']).optional(),
@@ -29,7 +30,7 @@ async function fetchOpenAiCompatibleModels(baseUrl: string, apiKey: string) {
   const errors: string[] = [];
   for (const endpoint of candidates) {
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchWithTimeout(endpoint, {
         headers: {
           Authorization: `Bearer ${apiKey}`
         }
@@ -54,7 +55,7 @@ async function fetchOpenAiCompatibleModels(baseUrl: string, apiKey: string) {
 
 async function fetchAnthropicModels(baseUrl: string, apiKey: string) {
   const base = baseUrl.replace(/\/+$/, '');
-  const response = await fetch(`${base}/models`, {
+  const response = await fetchWithTimeout(`${base}/models`, {
     headers: {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01'
@@ -89,7 +90,7 @@ function candidateModelEndpoints(base: string) {
 }
 
 async function fetchModelsDevCatalog() {
-  const response = await fetch('https://models.dev/api.json');
+  const response = await fetchWithTimeout('https://models.dev/api.json');
   const text = await response.text();
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 220)}`);
   const parsed = JSON.parse(text) as Record<

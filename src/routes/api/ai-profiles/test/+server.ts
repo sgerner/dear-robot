@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { env } from '$lib/server/env';
 import { getAiConfigForRuntime } from '$lib/server/ai/settings';
+import { fetchWithTimeout } from '$lib/server/fetch';
 import { getSpeechProvider } from '$lib/speech/providers';
 
 const TestSchema = z.object({
@@ -102,7 +103,7 @@ function profileConfig(
 
 async function testOpenAiCompatible(profile: RuntimeProfile) {
   const base = profile.baseUrl.replace(/\/+$/, '');
-  const response = await fetch(`${base}/models`, {
+  const response = await fetchWithTimeout(`${base}/models`, {
     headers: {
       Authorization: `Bearer ${profile.apiKey || ''}`
     }
@@ -113,7 +114,7 @@ async function testOpenAiCompatible(profile: RuntimeProfile) {
 
 async function testAnthropic(profile: RuntimeProfile) {
   const base = profile.baseUrl.replace(/\/+$/, '');
-  const response = await fetch(`${base}/models`, {
+  const response = await fetchWithTimeout(`${base}/models`, {
     headers: {
       'x-api-key': profile.apiKey || '',
       'anthropic-version': '2023-06-01'
@@ -125,12 +126,8 @@ async function testAnthropic(profile: RuntimeProfile) {
 
 export async function POST({ request }) {
   const payload = await request.json();
-  console.log('[test endpoint] Received payload:', JSON.stringify(payload, null, 2));
-
   const { profile, config: overrides } = TestSchema.parse(payload);
   const config = profileConfig(profile, overrides);
-  
-  console.log('[test endpoint] Resolved config:', JSON.stringify({ ...config, apiKey: config.apiKey ? '***' : undefined }, null, 2));
 
   if (!config.isEnabled) throw error(400, 'Profile is disabled');
   if (profile === 'audio' && config.provider === 'browser_web_speech') {
@@ -139,7 +136,7 @@ export async function POST({ request }) {
   if (!config.apiKey) throw error(400, 'Profile has no API key');
   try {
     if (profile === 'audio' && config.provider === 'deepgram') {
-      const res = await fetch('https://api.deepgram.com/v1/projects', {
+      const res = await fetchWithTimeout('https://api.deepgram.com/v1/projects', {
         headers: { Authorization: `Token ${config.apiKey || ''}` }
       });
       if (!res.ok) {

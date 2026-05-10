@@ -39,6 +39,9 @@ export function buildAgentPlanMessages(input: {
         })
         .join('\n')
     : '- none';
+  const obsidianNote = input.tools.some((tool) => tool.name === 'obsidian_vault')
+    ? '\nObsidian vault guidance: search the vault before asking for repeated context, and write short dated notes for durable decisions, commitments, and important facts.'
+    : '';
   return [
     {
       role: 'system',
@@ -97,7 +100,7 @@ User note:
 ${input.note || 'None'}
 
 Available tools:
-${toolsList}
+${toolsList}${obsidianNote}
 
 Body:
 ${body}`

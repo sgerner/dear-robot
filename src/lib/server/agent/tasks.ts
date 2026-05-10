@@ -8,7 +8,11 @@ import { buildMemoryPromptContext } from '../memory-learning';
 import { getMessageDetail, listFoldersWithCounts, moveMessage } from '../services/messages';
 import { buildAgentPlanMessages } from './prompts';
 import { AgentPlanSchema, TaskApproveSchema, TaskPlanInputSchema, type AgentPlan } from './schema';
-import { executeTool, getAgentToolByName, listAgentTools } from './tools';
+import {
+  executeTool,
+  getAvailableAgentToolByName,
+  listAvailableAgentTools
+} from './tools';
 
 export function listTaskRuns(messageId?: number, limit = 50) {
   return db
@@ -103,7 +107,7 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
   const accountFolders = listFoldersWithCounts(detail.message.accountId).map(
     (folder) => folder.path
   );
-  const tools = listAgentTools().filter((tool) => tool.isEnabled);
+  const tools = listAvailableAgentTools().filter((tool) => tool.isEnabled);
   const complexity = classifyComplexity(
     detail.message.subject,
     detail.message.bodyText,
@@ -309,7 +313,7 @@ async function executeStep(
   }
   if (step.kind === 'tool_call') {
     if (!step.toolName) throw new Error('tool_call step missing tool_name');
-    const tool = getAgentToolByName(step.toolName);
+    const tool = getAvailableAgentToolByName(step.toolName);
     if (!tool) throw new Error(`Tool "${step.toolName}" not found or disabled`);
     const executed = await executeTool(tool, input, { taskRunId, taskStepId: step.id });
     if (!executed.ok) throw new Error(JSON.stringify(executed.output));
@@ -347,7 +351,7 @@ function mockPlan(
   tools: Array<{ name: string; readOnly: boolean }>
 ): AgentPlan {
   const lower = subject.toLowerCase();
-  const tool = tools[0];
+  const tool = tools.find((candidate) => candidate.name !== 'obsidian_vault') || tools[0];
   if (tool && (lower.includes('credit') || lower.includes('erp') || lower.includes('refund'))) {
     return {
       summary: 'Collect context and prepare a tool-assisted resolution draft.',

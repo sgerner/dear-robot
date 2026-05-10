@@ -19,6 +19,15 @@ function backupsDir() {
   return path.join(env.DATA_DIR, 'backups');
 }
 
+function resolveInsideBackups(filePath: string) {
+  const root = path.resolve(backupsDir());
+  const resolved = path.resolve(filePath);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error('Backup path escapes backup directory');
+  }
+  return resolved;
+}
+
 function manifestPath() {
   return path.join(backupsDir(), 'manifest.json');
 }
@@ -39,13 +48,17 @@ function saveManifest(rows: BackupManifest[]) {
 }
 
 function removeBackupFiles(row: BackupManifest) {
-  const backupFolder = path.dirname(row.dbFile);
-  if (backupFolder.startsWith(backupsDir())) {
-    fs.rmSync(backupFolder, { recursive: true, force: true });
-  }
+  const backupFolder = resolveInsideBackups(path.dirname(row.dbFile));
+  fs.rmSync(backupFolder, { recursive: true, force: true });
 }
 
 function isManifestEntryPresent(row: BackupManifest) {
+  try {
+    resolveInsideBackups(row.dbFile);
+    if (row.memoryFile) resolveInsideBackups(row.memoryFile);
+  } catch {
+    return false;
+  }
   if (!fs.existsSync(row.dbFile)) return false;
   if (row.memoryFile && !fs.existsSync(row.memoryFile)) return false;
   return true;
@@ -119,8 +132,10 @@ export async function createBackup() {
 export function restoreBackup(id: string) {
   const backup = loadManifest().find((row) => row.id === id);
   if (!backup) throw new Error('Backup not found');
-  if (!fs.existsSync(backup.dbFile)) throw new Error('Backup database file missing');
-  const backupDb = new Database(backup.dbFile, { readonly: true });
+  const dbFile = resolveInsideBackups(backup.dbFile);
+  const memoryFile = backup.memoryFile ? resolveInsideBackups(backup.memoryFile) : null;
+  if (!fs.existsSync(dbFile)) throw new Error('Backup database file missing');
+  const backupDb = new Database(dbFile, { readonly: true });
   try {
     sqlite.exec(`PRAGMA foreign_keys=OFF;`);
     const liveTables = sqlite
@@ -131,7 +146,7 @@ export function restoreBackup(id: string) {
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
         .all() as Array<{ name: string }>
     ).map((row) => row.name);
-    sqlite.exec(`ATTACH DATABASE '${backup.dbFile.replace(/'/g, "''")}' AS backup_restore; BEGIN;`);
+    sqlite.exec(`ATTACH DATABASE '${dbFile.replace(/'/g, "''")}' AS backup_restore; BEGIN;`);
     for (const table of liveTables.map((row) => row.name)) {
       if (table === 'messages_fts') continue;
       if (!backupTables.includes(table)) continue;
@@ -149,8 +164,8 @@ export function restoreBackup(id: string) {
   } finally {
     backupDb.close();
   }
-  if (backup.memoryFile && fs.existsSync(backup.memoryFile)) {
-    fs.copyFileSync(backup.memoryFile, agentInstructionsPath());
+  if (memoryFile && fs.existsSync(memoryFile)) {
+    fs.copyFileSync(memoryFile, agentInstructionsPath());
   }
   return { ok: true };
 }

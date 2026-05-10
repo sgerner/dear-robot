@@ -6,13 +6,14 @@ import { encryptSecret } from '../security';
 import {
   aiProfiles,
   aiSuggestions,
+  accounts,
+  automationPolicies,
   contacts,
   drafts,
   folders,
   messageAttachments,
   messages,
-  accounts,
-  automationPolicies
+  obsidianSettings
 } from './schema';
 import { db, nowIso, sqlite } from './index';
 import { defaultAgentInstructions, ensureAgentInstructions } from '../memory';
@@ -302,6 +303,13 @@ CREATE TABLE IF NOT EXISTS agent_tools (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS obsidian_settings (
+  id INTEGER PRIMARY KEY,
+  is_enabled INTEGER NOT NULL DEFAULT 0,
+  vault_path TEXT NOT NULL DEFAULT '/obsidian',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS task_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -446,6 +454,7 @@ CREATE TABLE IF NOT EXISTS memory_examples (
   seedMockDataIfEmpty();
   seedAutomationDefaults();
   seedAiDefaults();
+  seedObsidianSettings();
 }
 
 function ensurePerformanceIndexes() {
@@ -714,6 +723,21 @@ function seedAiDefaults() {
     .run();
 }
 
+function seedObsidianSettings() {
+  const existing = db.select({ value: count() }).from(obsidianSettings).get()?.value ?? 0;
+  if (existing > 0) return;
+  const now = nowIso();
+  db.insert(obsidianSettings)
+    .values({
+      id: 1,
+      isEnabled: false,
+      vaultPath: '/obsidian',
+      createdAt: now,
+      updatedAt: now
+    })
+    .run();
+}
+
 function migrateMessageClientColumns() {
   const columns = sqlite.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
   const existing = new Set(columns.map((column) => column.name));
@@ -861,6 +885,7 @@ DELETE FROM tool_calls;
 DELETE FROM task_steps;
 DELETE FROM task_runs;
 DELETE FROM agent_tools;
+DELETE FROM obsidian_settings;
 DELETE FROM automation_policies;
 DELETE FROM ai_profiles;
     DELETE FROM oauth_providers;

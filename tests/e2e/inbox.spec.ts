@@ -4,7 +4,7 @@ test('dear-robots and executes a mock reply action', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Password').fill('test-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Dear Robot' })).toBeVisible();
+  await expect(page.getByTestId('message-row').first()).toBeVisible();
 
   await page
     .getByTestId('message-row')
@@ -16,7 +16,7 @@ test('dear-robots and executes a mock reply action', async ({ page }) => {
   await page
     .getByTestId('draft-reply')
     .fill('Hi Jordan, I am checking this now and will follow up today.');
-  await page.getByRole('button', { name: 'Save Edit' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Saved')).toBeVisible();
   await page.getByTestId('execute-suggestion').click();
   await expect(page.getByText('Executed')).toBeVisible();
@@ -47,10 +47,10 @@ test('uses email-client folder, flag, read, and compose controls', async ({ page
     .first()
     .click();
   await expect(page.getByTestId('quick-action-archive')).toBeVisible();
-  await page.getByTestId('reply-all').click();
-  await expect(page.getByText('AI-ready compose')).toBeVisible();
+  await page.getByTestId('quick-action-reply-all').click();
+  await expect(page.getByRole('heading', { name: 'Reply All' })).toBeVisible();
   await page
-    .getByPlaceholder('Write the message...')
+    .getByPlaceholder('Write your message...')
     .fill('Thanks, I am handling this from the client workflow.');
   await page.getByTestId('send-compose').click();
   await expect(page.getByText('Sent')).toBeVisible();
@@ -66,7 +66,7 @@ test('interface settings expose quick actions, swipes, and folder roles', async 
   await expect(page.getByText('Quick Action Bar')).toBeVisible();
   await expect(page.getByText('Mobile Swipe Gestures')).toBeVisible();
   await expect(page.getByText('Folder Role Mapping')).toBeVisible();
-  await expect(page.getByText('Short swipe left')).toBeVisible();
+  await expect(page.getByText('Short Swipe').first()).toBeVisible();
 });
 
 test('phase2 compose supports attachments and draft save', async ({ page }) => {
@@ -75,10 +75,10 @@ test('phase2 compose supports attachments and draft save', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await page.getByRole('button', { name: 'Compose', exact: true }).first().click();
-  await expect(page.getByText('AI-ready compose')).toBeVisible();
-  await page.getByPlaceholder('To').fill('steven@butteredupbakery.com');
+  await expect(page.getByRole('heading', { name: 'Compose' })).toBeVisible();
+  await page.getByPlaceholder('recipient@...').fill('steven@butteredupbakery.com');
   await page.getByPlaceholder('Subject').fill('Phase2 attachment draft');
-  await page.getByPlaceholder('Write the message...').fill('Attachment test body');
+  await page.getByPlaceholder('Write your message...').fill('Attachment test body');
   await page.locator('input[type="file"]').setInputFiles({
     name: 'phase2.txt',
     mimeType: 'text/plain',
@@ -95,15 +95,15 @@ test('phase3 inbox filters stay visible and shortcuts help opens', async ({ page
   await page.getByLabel('Password').fill('test-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'All', exact: true }).nth(1)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Unread', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Starred', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pending', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Show keyboard shortcuts' }).click();
+  await page.getByRole('button', { name: 'Show shortcuts (?)' }).click();
   await expect(page.getByText('Keyboard shortcuts')).toBeVisible();
   await page.getByRole('button', { name: 'Unread', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'All', exact: true }).nth(1)).toBeVisible();
   await expect(page.getByPlaceholder('Search mail...')).toBeVisible();
   await expect(page.locator('select').first()).toBeVisible();
   await expect(page.locator('button').filter({ hasText: 'Folders' }).first()).toBeVisible();

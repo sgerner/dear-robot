@@ -8,6 +8,7 @@ import {
   readToolSkillsMarkdown,
   writeToolSkillsMarkdown
 } from '../skills';
+import { executeObsidianTool, getObsidianToolDefinition } from '../obsidian';
 import { ToolCreateSchema, ToolUpdateSchema } from './schema';
 
 export function listAgentTools() {
@@ -35,6 +36,12 @@ export function listAgentTools() {
     }));
 }
 
+export function listAvailableAgentTools() {
+  const tools = listAgentTools();
+  const obsidianTool = getObsidianToolDefinition();
+  return obsidianTool ? [...tools, obsidianTool] : tools;
+}
+
 export function getAgentTool(id: number) {
   return db.select().from(agentTools).where(eq(agentTools.id, id)).get();
 }
@@ -45,6 +52,13 @@ export function getAgentToolByName(name: string) {
     .from(agentTools)
     .where(and(eq(agentTools.name, name), eq(agentTools.isEnabled, true)))
     .get();
+}
+
+export function getAvailableAgentToolByName(name: string) {
+  const existing = getAgentToolByName(name);
+  if (existing) return existing;
+  const obsidianTool = getObsidianToolDefinition();
+  return obsidianTool?.name === name ? obsidianTool : null;
 }
 
 export function createAgentTool(input: unknown) {
@@ -137,10 +151,11 @@ export async function executeTool(
     | {
         id?: number;
         name: string;
-        kind: 'mcp_http' | 'cli';
+        kind: 'mcp_http' | 'cli' | 'obsidian';
         endpoint: string | null;
         command: string | null;
-        argsJson: string | null;
+        argsJson?: string | null;
+        args?: string[];
         authHeadersEncrypted?: string | null;
         envEncrypted?: string | null;
         timeoutMs: number;
@@ -152,8 +167,12 @@ export async function executeTool(
   let status: 'completed' | 'failed' = 'completed';
   let resultOutput: unknown;
   try {
-    resultOutput =
-      tool.kind === 'mcp_http' ? await runHttpTool(tool, input) : await runCliTool(tool, input);
+    if (tool.kind === 'obsidian') {
+      resultOutput = await executeObsidianTool(input);
+    } else {
+      resultOutput =
+        tool.kind === 'mcp_http' ? await runHttpTool(tool, input) : await runCliTool(tool, input);
+    }
     return { ok: true, output: resultOutput, durationMs: Date.now() - started };
   } catch (error) {
     status = 'failed';
@@ -274,14 +293,15 @@ async function runHttpTool(
 async function runCliTool(
   tool: {
     command: string | null;
-    argsJson: string | null;
+    argsJson?: string | null;
+    args?: string[];
     envEncrypted?: string | null;
     timeoutMs: number;
   },
   input: Record<string, unknown>
 ) {
   if (!tool.command) throw new Error('Tool command is missing');
-  const args = safeParseStringArray(tool.argsJson);
+  const args = Array.isArray(tool.args) && tool.args.length ? tool.args : safeParseStringArray(tool.argsJson ?? null);
   const env = {
     ...process.env,
     ...decryptJsonRecord(tool.envEncrypted)

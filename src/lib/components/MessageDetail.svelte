@@ -150,6 +150,7 @@
                 ? 'default'
                 : 'outline'}
             size="sm"
+            data-testid={`quick-action-${actionId.replace(/_/g, '-')}`}
             onclick={() => runQuickAction(actionId)}
           >
             {#if actionId === 'toggle_read'}
@@ -301,6 +302,7 @@
       {#if selected.suggestion}
         <section
           class="mt-5 bg-primary/10 border-l-2 border-primary/20"
+          data-testid="ai-action-card"
           transition:slide={{ duration: 200 }}
         >
           <!-- Suggestion Header -->
@@ -370,7 +372,12 @@
 
           <!-- Action Row -->
           <div class="px-4 md:px-5 mt-3 flex flex-wrap items-center gap-2">
-            <Button variant="default" size="sm" onclick={executeSuggestion}>
+            <Button
+              variant="default"
+              size="sm"
+              data-testid="execute-suggestion"
+              onclick={executeSuggestion}
+            >
               <Send size={13} class="mr-1" /> Execute
             </Button>
             <Button variant="outline" size="sm" onclick={saveEdit}>Save</Button>
@@ -440,7 +447,13 @@
                   >Task Plan</span
                 >
               </div>
-              <Button variant="outline" size="sm" class="h-7 text-xs" onclick={createTaskPlan}>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-7 text-xs"
+                data-testid="plan-task"
+                onclick={createTaskPlan}
+              >
                 <Sparkles size={11} class="mr-1" /> Plan
               </Button>
             </div>
@@ -468,12 +481,14 @@
                           variant="outline"
                           size="sm"
                           class="h-7 text-xs px-2"
+                          data-testid="approve-task"
                           onclick={() => approveTask(task.run.id)}>Approve</Button
                         >
                         <Button
                           variant="outline"
                           size="sm"
                           class="h-7 text-xs px-2"
+                          data-testid="execute-task"
                           onclick={() => executeTask(task.run.id)}>Exec</Button
                         >
                       </div>

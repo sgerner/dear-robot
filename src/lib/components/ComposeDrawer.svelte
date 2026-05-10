@@ -239,6 +239,7 @@
           <button
             type="button"
             class="inline-flex items-center gap-1.5 bg-background border border-border px-2 py-0.5 text-[11px] text-foreground hover:border-destructive/50 group transition-colors"
+            aria-label={`${attachment.filename} Remove`}
             onclick={() => removeAttachment(idx)}
           >
             <Paperclip size={10} class="text-muted-foreground" />
