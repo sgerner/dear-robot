@@ -56,7 +56,7 @@
       bind:value={cachePassphrase}
     />
     <button
-      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
       onclick={saveCacheEncryption}>Save</button
     >
   </div>
@@ -76,7 +76,7 @@
   {/if}
   <div class="mt-3 flex flex-wrap gap-2">
     <button
-      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
       onclick={createBackupNow}>Create Backup</button
     >
     <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={refreshBackups}

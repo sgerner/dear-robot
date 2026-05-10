@@ -143,7 +143,7 @@
   </div>
   <div class="mt-3 flex flex-wrap items-center gap-2">
     <button
-      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
       onclick={saveObsidianSettings}>Save vault settings</button
     >
     <span class="text-xs text-zinc-500">
@@ -202,7 +202,7 @@
           ></textarea>
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <button
-              class="rounded-md bg-accent px-2 py-1 text-xs font-medium text-black"
+              class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
               onclick={() => persistToolSkills(tool)}>Save skills.md</button
             >
             <span class="text-[11px] text-zinc-500"
@@ -246,7 +246,7 @@
           </div>
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <button
-              class="rounded-md bg-accent px-2 py-1 text-xs font-medium text-black"
+              class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
               onclick={() => persistToolConfig(tool)}>Save config</button
             >
             <span class="text-[11px] text-zinc-500"
@@ -315,7 +315,10 @@
         label="Require approval for writes"
       />
     </div>
-    <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add tool</button>
+    <button
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
+      >Add tool</button
+    >
   </form>
 </div>
 
@@ -354,7 +357,7 @@
       bind:value={cliInstallForm.binaryName}
     />
     <button
-      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black md:col-span-4 md:justify-self-start"
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
       >Install CLI</button
     >
   </form>
@@ -386,7 +389,10 @@
     placeholder="Delegate webhook URL"
     bind:value={webhookTarget}
   />
-  <button class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black">Add webhook</button>
+  <button
+    class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
+    >Add webhook</button
+  >
 </form>
 
 <div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">

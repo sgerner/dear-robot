@@ -22,7 +22,9 @@
     {#if form?.message}
       <p class="mt-3 text-sm text-red-300">{form.message}</p>
     {/if}
-    <button class="focus-ring mt-6 w-full rounded-md bg-accent px-4 py-2 font-medium text-black">
+    <button
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
+    >
       Sign in
     </button>
   </form>

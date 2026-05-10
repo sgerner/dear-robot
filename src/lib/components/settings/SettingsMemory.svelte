@@ -71,7 +71,7 @@
         />
       </div>
       <button
-        class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+        class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
         onclick={applyMemoryAssistant}>Apply</button
       >
     </div>
@@ -95,7 +95,7 @@
   </div>
   <div class="flex gap-2">
     <button
-      class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+      class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
       onclick={saveCoreProfile}>Save Core Profile</button
     >
     <Switch
@@ -136,7 +136,7 @@
     </div>
     <div class="mt-3 flex gap-2">
       <button
-        class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black"
+        class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
         onclick={saveSkills}>Save Skills</button
       >
       <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={resetSkills}
