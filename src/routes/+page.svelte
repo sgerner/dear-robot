@@ -161,6 +161,8 @@
       transport: saved?.transport || chosen?.transport || 'openai_compatible',
       model: saved?.model || chosen?.defaultModel || '',
       baseUrl: saved?.baseUrl || chosen?.baseUrl || '',
+      proxyEnabled: saved?.proxyEnabled ?? false,
+      proxyUrl: saved?.proxyUrl || '',
       apiKey: '',
       hasApiKey: saved?.hasApiKey ?? false,
       preset: saved?.preset || chosen?.id || 'manual',
@@ -178,6 +180,8 @@
         transport: 'openai_compatible' | 'anthropic';
         model: string;
         baseUrl: string;
+        proxyEnabled: boolean;
+        proxyUrl: string;
         apiKey: string;
         hasApiKey: boolean;
         preset: string;
@@ -190,18 +194,9 @@
   let modelsDevProviders = $state<Array<ModelsDevProvider>>([]);
   let modelsDevLoaded = $state(false);
   let modelsDevLoading = $state(false);
-  let profileMode = $state<Record<string, 'catalog' | 'manual'>>({
-    primary: 'catalog',
-    fallback: 'catalog',
-    advanced: 'catalog',
-    audio: 'manual'
-  });
-  let profileEnvValues = $state<Record<string, Record<string, string>>>({
-    primary: {},
-    fallback: {},
-    advanced: {},
-    audio: {}
-  });
+  let profileMode = $state<Record<string, 'catalog' | 'manual'>>({});
+  let profileEnvValues = $state<Record<string, Record<string, string>>>({});
+  
   const aiProfileRecommendations: Record<string, string[]> = {
     primary: [
       'DeepSeek `deepseek-v4-flash`',
@@ -465,12 +460,35 @@
     }
   });
 
-  aiProfileForms = {
-    primary: seedAiProfileForm('primary'),
-    fallback: seedAiProfileForm('fallback'),
-    advanced: seedAiProfileForm('advanced'),
-    audio: seedAiProfileForm('audio')
-  } as typeof aiProfileForms;
+  $effect(() => {
+    const nextForms = { ...untrack(() => aiProfileForms) };
+    const nextMode = { ...untrack(() => profileMode) };
+    const nextEnv = { ...untrack(() => profileEnvValues) };
+    let changed = false;
+
+    const allProfiles = ['primary', 'fallback', 'advanced', 'audio', ...(data.aiProfiles?.map((p: any) => p.profile) || [])];
+    
+    for (const p of allProfiles) {
+      if (!nextForms[p]) {
+        nextForms[p] = seedAiProfileForm(p as any);
+        changed = true;
+      }
+      if (!nextMode[p]) {
+        nextMode[p] = p === 'audio' ? 'manual' : 'catalog';
+        changed = true;
+      }
+      if (!nextEnv[p]) {
+        nextEnv[p] = {};
+        changed = true;
+      }
+    }
+    
+    if (changed) {
+      aiProfileForms = nextForms;
+      profileMode = nextMode;
+      profileEnvValues = nextEnv;
+    }
+  });
 
   $effect(() => {
     const audioProfile = aiProfileForms.audio;
@@ -1099,7 +1117,7 @@
     status = 'Obsidian vault settings saved';
   }
 
-  async function testAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+  async function testAiProfile(profile: string) {
     status = `Testing ${profile} profile...`;
     const form = aiProfileForms[profile];
     let configOverrides: any;
@@ -1166,20 +1184,20 @@
     );
   }
 
-  function selectedCatalogProvider(profile: 'primary' | 'fallback' | 'advanced') {
+  function selectedCatalogProvider(profile: string) {
     return modelsDevProviderByInput(aiProfileForms[profile]?.provider || '');
   }
 
-  function selectedCatalogModels(profile: 'primary' | 'fallback' | 'advanced') {
+  function selectedCatalogModels(profile: string) {
     return selectedCatalogProvider(profile)?.models || [];
   }
 
-  function requiredEnvVars(profile: 'primary' | 'fallback' | 'advanced') {
+  function requiredEnvVars(profile: string) {
     return selectedCatalogProvider(profile)?.env || ['API_KEY'];
   }
 
   function setProfileMode(
-    profile: 'primary' | 'fallback' | 'advanced',
+    profile: string,
     mode: 'catalog' | 'manual'
   ) {
     if (mode === 'manual') {
@@ -2070,7 +2088,7 @@
     }
   }
 
-  async function saveAiProfile(profile: 'primary' | 'fallback' | 'advanced' | 'audio') {
+  async function saveAiProfile(profile: string) {
     const form = aiProfileForms[profile];
     if (!form) return;
     if (form.provider === 'modeldev' && form.baseUrl.includes('api.model.dev')) {
@@ -2080,8 +2098,8 @@
     const isCoreProfile = coreAiProfileKeys.includes(profile as (typeof coreAiProfileKeys)[number]);
     
     try {
-      if (isCoreProfile && profileMode[profile] === 'catalog') {
-        const envKeys = requiredEnvVars(profile as 'primary' | 'fallback' | 'advanced');
+      if (profileMode[profile] === 'catalog') {
+        const envKeys = requiredEnvVars(profile);
         const envPayload: Record<string, string> = {};
         for (const envKey of envKeys) {
           const value = profileEnvValues[profile]?.[envKey] || '';
@@ -2096,6 +2114,8 @@
             transport: form.transport,
             model: form.model,
             baseUrl: form.baseUrl,
+            proxyEnabled: form.proxyEnabled,
+            proxyUrl: form.proxyUrl,
             apiKey: envPayload,
             preset: 'modeldev',
             isEnabled: form.isEnabled,
@@ -2105,26 +2125,26 @@
             })
           })
         });
-        status = `${form.label} saved`;
-        await invalidateAll();
-        return;
+      } else {
+        status = `Saving ${form.label}...`;
+        await api('/api/ai-profiles', {
+          method: 'POST',
+          body: JSON.stringify({
+            profile: form.profile,
+            label: form.label,
+            provider: form.provider,
+            transport: form.transport,
+            model: form.model,
+            baseUrl: form.baseUrl,
+            proxyEnabled: form.proxyEnabled,
+            proxyUrl: form.proxyUrl,
+            apiKey: form.apiKey.trim() ? form.apiKey : undefined,
+            preset: form.preset || null,
+            isEnabled: form.isEnabled,
+            notes: form.notes || null
+          })
+        });
       }
-      status = `Saving ${form.label}...`;
-      await api('/api/ai-profiles', {
-        method: 'POST',
-        body: JSON.stringify({
-          profile: form.profile,
-          label: form.label,
-          provider: form.provider,
-          transport: form.transport,
-          model: form.model,
-          baseUrl: form.baseUrl,
-          apiKey: form.apiKey.trim() ? form.apiKey : undefined,
-          preset: form.preset || null,
-          isEnabled: form.isEnabled,
-          notes: form.notes || null
-        })
-      });
       status = `${form.label} saved`;
       await invalidateAll();
     } catch (e: any) {
