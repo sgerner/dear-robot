@@ -42,6 +42,30 @@ At a glance, Dear Robot gives you:
 - The app expects one operator account model. It is not designed as a multi-tenant SaaS.
 - Production requires persistent secrets. Do not rely on development defaults.
 
+## Cloudflare Worker Proxy (for VPS users)
+
+If you are hosting Dear Robot on a VPS (like Hetzner, OVH, or AWS) and find that your IP is blocked by Google (Gemini) or other providers, you can use a Cloudflare Worker as a relay.
+
+### 1. Deploy the Worker
+
+We've provided a ready-to-use worker in `workers/proxy`.
+
+1. Install [Wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/): `npm install -g wrangler`
+2. Login to Cloudflare: `wrangler login`
+3. Navigate to the worker directory: `cd workers/proxy`
+4. Deploy: `wrangler deploy`
+
+Take note of your worker URL (e.g., `https://proxy.your-subdomain.workers.dev`).
+
+### 2. Configure in Dear Robot
+
+1. Go to **Settings -> AI & Model Registry**.
+2. Find the profile you want to proxy (e.g., Fallback / Gemini).
+3. Enable the **Cloudflare Worker Proxy** toggle.
+4. Paste your worker URL into the **Proxy URL** field.
+5. Click **Save Profile**.
+6. Use **Test Connection** to verify that the relay is working.
+
 ## Docker Deployment
 
 The recommended deployment is the included Docker image or the bundled `docker-compose.yml`.
@@ -180,14 +204,17 @@ Do not set `DB_PATH` manually in production. The app derives it from `DATA_DIR`.
 | `AI_PROVIDER` | `deepseek` | Primary AI provider preset. |
 | `AI_MODEL` | `deepseek-v4-flash` | Primary AI model. |
 | `AI_BASE_URL` | `https://api.deepseek.com` | Primary AI endpoint. |
+| `AI_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the primary profile. |
 | `AI_API_KEY` | unset | Optional bootstrap API key for the primary profile. |
 | `AI_FALLBACK_PROVIDER` | `gemini` | Fallback AI provider preset. |
 | `AI_FALLBACK_MODEL` | `gemini-2.5-flash` | Fallback AI model. |
 | `AI_FALLBACK_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` | Fallback AI endpoint. |
+| `AI_FALLBACK_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the fallback profile. |
 | `AI_FALLBACK_API_KEY` | unset | Optional bootstrap API key for the fallback profile. |
 | `AI_ADVANCED_PROVIDER` | `deepseek` | Advanced planner provider preset. |
 | `AI_ADVANCED_MODEL` | `deepseek-v4-pro` | Advanced planner model. |
 | `AI_ADVANCED_BASE_URL` | `AI_BASE_URL` or `https://api.deepseek.com` | Advanced planner endpoint. |
+| `AI_ADVANCED_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the advanced profile. |
 | `AI_ADVANCED_API_KEY` | unset | Optional bootstrap API key for the advanced profile. |
 | `AI_MAX_REPAIR_ATTEMPTS` | `1` | Number of JSON repair attempts before the AI call fails. |
 | `DEBUG_AI` | `false` | Logs additional AI request and response data in development. |

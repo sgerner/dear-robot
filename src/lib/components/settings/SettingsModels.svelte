@@ -422,6 +422,28 @@
                     {/if}
                   </div>
                 </div>
+
+                <div class="pt-2">
+                  <div class="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
+                    <div class="space-y-0.5">
+                      <span class="text-xs font-bold text-foreground">Cloudflare Worker Proxy</span>
+                      <p class="text-[10px] text-muted-foreground">Relay requests to bypass IP blocking (e.g. for Gemini on VPS)</p>
+                    </div>
+                    <Switch bind:checked={profile.proxyEnabled} label="Proxy" />
+                  </div>
+                  {#if profile.proxyEnabled}
+                    <div class="mt-3" in:fly={{ y: -8, duration: 200 }}>
+                      <label class="block">
+                        <span class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Proxy URL</span>
+                        <input
+                          class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                          placeholder="https://your-worker.your-subdomain.workers.dev"
+                          bind:value={profile.proxyUrl}
+                        />
+                      </label>
+                    </div>
+                  {/if}
+                </div>
               </div>
             </div>
           {:else}
@@ -471,6 +493,27 @@
                   bind:value={profile.apiKey}
                 />
               </label>
+              <div class="col-span-full pt-2">
+                <div class="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
+                  <div class="space-y-0.5">
+                    <span class="text-xs font-bold text-foreground">Cloudflare Worker Proxy</span>
+                    <p class="text-[10px] text-muted-foreground">Relay requests to bypass IP blocking (e.g. for Gemini on VPS)</p>
+                  </div>
+                  <Switch bind:checked={profile.proxyEnabled} label="Proxy" />
+                </div>
+                {#if profile.proxyEnabled}
+                  <div class="mt-3" in:fly={{ y: -8, duration: 200 }}>
+                    <label class="block">
+                      <span class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Proxy URL</span>
+                      <input
+                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                        placeholder="https://your-worker.your-subdomain.workers.dev"
+                        bind:value={profile.proxyUrl}
+                      />
+                    </label>
+                  </div>
+                {/if}
+              </div>
             </div>
           {/if}
 

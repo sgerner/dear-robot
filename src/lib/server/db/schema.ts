@@ -553,6 +553,8 @@ export const aiProfiles = sqliteTable(
       .default('openai_compatible'),
     model: text('model').notNull(),
     baseUrl: text('base_url').notNull(),
+    proxyEnabled: integer('proxy_enabled', { mode: 'boolean' }).notNull().default(false),
+    proxyUrl: text('proxy_url'),
     apiKeyEncrypted: text('api_key_encrypted'),
     preset: text('preset'),
     isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),

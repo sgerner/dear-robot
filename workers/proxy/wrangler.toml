@@ -1,0 +1,6 @@
+name = "proxy"
+main = "index.ts"
+compatibility_date = "2024-05-10"
+
+# No need for variables or secrets in this simple relay worker
+# The API key is passed in the request header from the email agent

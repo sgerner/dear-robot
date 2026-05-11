@@ -11,6 +11,8 @@ type ProviderConfig = {
   provider: string;
   model: string;
   baseUrl: string;
+  proxyEnabled?: boolean;
+  proxyUrl?: string | null;
   apiKey: string | undefined;
   envValues?: Record<string, string>;
   transport: 'openai_compatible' | 'anthropic';
@@ -18,7 +20,8 @@ type ProviderConfig = {
 
 class ProviderError extends Error {}
 
-function endpointFor(baseUrl: string) {
+function endpointFor(config: ProviderConfig) {
+  const baseUrl = config.proxyEnabled && config.proxyUrl ? config.proxyUrl : config.baseUrl;
   const base = baseUrl.replace(/\/+$/, '');
   if (base.endsWith('/chat/completions')) return base;
   return `${base}/chat/completions`;
@@ -33,10 +36,11 @@ async function openAiCompatibleComplete(config: ProviderConfig, messages: ChatMe
       console.log('[dear-robot] ai request', {
         provider: config.provider,
         model: config.model,
-        messages
+        messages,
+        proxyUsed: !!(config.proxyEnabled && config.proxyUrl)
       });
     }
-    const response = await fetch(endpointFor(config.baseUrl), {
+    const response = await fetch(endpointFor(config), {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -84,10 +88,12 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
         provider: config.provider,
         model: config.model,
         transport: 'anthropic',
-        messages
+        messages,
+        proxyUsed: !!(config.proxyEnabled && config.proxyUrl)
       });
     }
-    const response = await fetch(config.baseUrl.replace(/\/+$/, '') + '/messages', {
+    const baseUrl = config.proxyEnabled && config.proxyUrl ? config.proxyUrl : config.baseUrl;
+    const response = await fetch(baseUrl.replace(/\/+$/, '') + '/messages', {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -134,6 +140,8 @@ function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig
       transport: 'openai_compatible' as const,
       model: env.AI_MODEL || 'deepseek-v4-flash',
       baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
+      proxyEnabled: !!env.AI_PROXY_URL,
+      proxyUrl: env.AI_PROXY_URL || null,
       apiKey: env.AI_API_KEY || undefined,
       preset: env.AI_PROVIDER || 'deepseek',
       isEnabled: true,
@@ -147,6 +155,8 @@ function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig
       model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
       baseUrl:
         env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      proxyEnabled: !!env.AI_FALLBACK_PROXY_URL,
+      proxyUrl: env.AI_FALLBACK_PROXY_URL || null,
       apiKey: env.AI_FALLBACK_API_KEY || undefined,
       preset: env.AI_FALLBACK_PROVIDER || 'gemini',
       isEnabled: true,
@@ -159,6 +169,8 @@ function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig
       transport: 'openai_compatible' as const,
       model: env.AI_ADVANCED_MODEL || 'deepseek-v4-pro',
       baseUrl: env.AI_ADVANCED_BASE_URL || env.AI_BASE_URL || 'https://api.deepseek.com',
+      proxyEnabled: !!env.AI_ADVANCED_PROXY_URL,
+      proxyUrl: env.AI_ADVANCED_PROXY_URL || null,
       apiKey: env.AI_ADVANCED_API_KEY || env.AI_API_KEY || undefined,
       preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
       isEnabled: true,

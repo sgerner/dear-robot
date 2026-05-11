@@ -23,6 +23,8 @@ export async function POST({ request, url }) {
     transport: 'openai_compatible',
     model: 'nova-3',
     baseUrl: 'https://api.deepgram.com',
+    proxyEnabled: false,
+    proxyUrl: null,
     apiKey: undefined,
     preset: 'deepgram',
     isEnabled: true,

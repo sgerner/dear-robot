@@ -20,7 +20,9 @@ async function generateWithOpenAiCompatible(
   messages: ChatMessage[]
 ) {
   if (!profile.apiKey) throw new Error('Primary AI profile has no API key');
-  const endpoint = `${profile.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const baseUrl = profile.proxyEnabled && profile.proxyUrl ? profile.proxyUrl : profile.baseUrl;
+  const base = baseUrl.replace(/\/+$/, '');
+  const endpoint = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
@@ -55,6 +57,8 @@ function profileForCompose() {
     transport: 'openai_compatible',
     model: env.AI_MODEL || 'deepseek-v4-flash',
     baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
+    proxyEnabled: false,
+    proxyUrl: null,
     apiKey: env.AI_API_KEY || undefined,
     preset: env.AI_PROVIDER || 'deepseek',
     isEnabled: true,
