@@ -50,10 +50,10 @@ If you are hosting Dear Robot on a VPS (like Hetzner, OVH, or AWS) and find that
 
 We've provided a ready-to-use worker in `workers/proxy`.
 
-1. Install [Wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/): `npm install -g wrangler`
-2. Login to Cloudflare: `wrangler login`
-3. Navigate to the worker directory: `cd workers/proxy`
-4. Deploy: `wrangler deploy`
+1. Navigate to the worker directory: `cd workers/proxy`
+2. Install dependencies: `npm install`
+3. Login to Cloudflare: `npx wrangler login`
+4. Deploy: `npx wrangler deploy`
 
 Take note of your worker URL (e.g., `https://proxy.your-subdomain.workers.dev`).
 

@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json* .npmrc ./
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
-  && npm ci --build-from-source=better-sqlite3 \
+  && npm ci \
   && apt-get purge -y python3 make g++ \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
