@@ -378,6 +378,8 @@ CREATE TABLE IF NOT EXISTS ai_profiles (
   transport TEXT NOT NULL DEFAULT 'openai_compatible',
   model TEXT NOT NULL,
   base_url TEXT NOT NULL,
+  proxy_enabled INTEGER NOT NULL DEFAULT 0,
+  proxy_url TEXT,
   api_key_encrypted TEXT,
   preset TEXT,
   is_enabled INTEGER NOT NULL DEFAULT 1,
@@ -444,6 +446,7 @@ CREATE TABLE IF NOT EXISTS memory_examples (
   migrateMessageClientColumns();
   migrateAccountAuthColumns();
   migrateAutomationPolicyColumns();
+  migrateAiProfileColumns();
   ensurePerformanceIndexes();
   backfillLatestSuggestionPointers();
 
@@ -789,6 +792,19 @@ function migrateAutomationPolicyColumns() {
   for (const [name, definition] of additions) {
     if (!existing.has(name))
       sqlite.exec(`ALTER TABLE automation_policies ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function migrateAiProfileColumns() {
+  const columns = sqlite.prepare(`PRAGMA table_info(ai_profiles)`).all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  const additions: Array<[string, string]> = [
+    ['proxy_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+    ['proxy_url', 'TEXT']
+  ];
+  for (const [name, definition] of additions) {
+    if (!existing.has(name))
+      sqlite.exec(`ALTER TABLE ai_profiles ADD COLUMN "${name}" ${definition};`);
   }
 }
 
