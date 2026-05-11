@@ -203,11 +203,11 @@
       {@const profile = aiProfileForms[profileKey]}
       {@const currentProvider = selectedCatalogProvider(profileKey)}
       {@const currentModel = currentProvider?.models.find(
-        (m: ModelsDevModel) => m.id === profile.model
+        (m: ModelsDevModel) => m.id === profile?.model
       )}
 
       <div
-        class="overflow-hidden transition-all duration-300 card-hover {profile.isEnabled
+        class="overflow-hidden transition-all duration-300 card-hover {profile?.isEnabled
           ? 'ai-card'
           : 'glass-card'}"
         in:fly={{ y: 12, duration: 250, delay: 50 * coreAiProfileKeys.indexOf(profileKey) }}
@@ -219,7 +219,7 @@
               class="h-10 w-10 flex items-center justify-center rounded-lg bg-primary border border-border/60 shrink-0"
             >
               <img
-                src="https://models.dev/logos/{profile.provider}.svg"
+                src="https://models.dev/logos/{profile?.provider}.svg"
                 alt=""
                 class="h-6 w-6 opacity-80"
                 onerror={(e) =>
@@ -229,17 +229,17 @@
             </div>
             <div>
               <h4 class="text-sm font-bold uppercase tracking-widest text-foreground">
-                {profile.label}
+                {profile?.label}
               </h4>
               <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{profile.provider}</span>
+                <span>{profile?.provider}</span>
                 <span class="text-border">•</span>
-                <span class="font-mono opacity-70">{profile.model}</span>
+                <span class="font-mono opacity-70">{profile?.model}</span>
               </div>
             </div>
           </div>
           <div class="flex items-center gap-3">
-            {#if profile.isEnabled}
+            {#if profile?.isEnabled}
               <span
                 class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary"
               >
@@ -247,15 +247,18 @@
                 Active
               </span>
             {/if}
-            <Switch bind:checked={profile.isEnabled} label="Active" />
+            {#if profile}
+              <Switch bind:checked={profile.isEnabled} label="Active" />
+            {/if}
           </div>
         </div>
 
         <!-- Mode Toggle -->
         <div class="px-5 md:px-6 pb-2">
-          <div
-            class="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit border border-border/40"
-          >
+          {#if profile}
+            <div
+              class="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit border border-border/40"
+            >
             <button
               class="px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {profileMode[
                 profileKey
@@ -276,12 +279,13 @@
             >
               Manual Setup
             </button>
-          </div>
-        </div>
-
+            </div>
+            {/if}
+            </div>
         <!-- Content -->
         <div class="px-5 md:px-6 pb-6 space-y-5">
-          {#if profileMode[profileKey] === 'catalog'}
+          {#if profile}
+            {#if profileMode[profileKey] === 'catalog'}
             <div class="space-y-4">
               <!-- Search -->
               <div class="relative">
@@ -407,12 +411,14 @@
                           class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-muted-foreground/50 pointer-events-none uppercase"
                           >{envKey}</span
                         >
-                        <input
-                          class="w-full rounded-lg border border-input bg-background pl-24 pr-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
-                          placeholder="Required"
-                          type="password"
-                          bind:value={profileEnvValues[profileKey][envKey]}
-                        />
+                        {#if profileEnvValues[profileKey]}
+                          <input
+                            class="w-full rounded-lg border border-input bg-background pl-24 pr-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                            placeholder="Required"
+                            type="password"
+                            bind:value={profileEnvValues[profileKey][envKey]}
+                          />
+                        {/if}
                       </label>
                     {/each}
                     {#if requiredEnvVars(profileKey).length === 0}
@@ -523,14 +529,14 @@
           >
             <div class="flex items-center gap-2 text-xs text-muted-foreground">
               <div
-                class="h-2 w-2 rounded-full {profile.hasApiKey
+                class="h-2 w-2 rounded-full {profile?.hasApiKey
                   ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                   : 'bg-muted-foreground/30'}"
               ></div>
               {#if (saveStates[profileKey] ?? 'idle') === 'success'}
                 <span in:fade class="text-emerald-400 font-medium">Profile saved</span>
               {:else}
-                {profile.hasApiKey ? 'Encrypted credentials saved' : 'No saved credentials'}
+                {profile?.hasApiKey ? 'Encrypted credentials saved' : 'No saved credentials'}
               {/if}
             </div>
             <div class="flex flex-col items-end gap-1.5">
@@ -583,6 +589,7 @@
               {/if}
             </div>
           </div>
+          {/if}
         </div>
       </div>
     {/each}

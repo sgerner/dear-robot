@@ -189,13 +189,28 @@
         notes: string;
       }
     >
-  >({});
+  >({
+    primary: seedAiProfileForm('primary'),
+    fallback: seedAiProfileForm('fallback'),
+    advanced: seedAiProfileForm('advanced'),
+    audio: seedAiProfileForm('audio')
+  });
   let aiCatalogOptions = $state<Record<string, Array<{ id: string; label: string }>>>({});
   let modelsDevProviders = $state<Array<ModelsDevProvider>>([]);
   let modelsDevLoaded = $state(false);
   let modelsDevLoading = $state(false);
-  let profileMode = $state<Record<string, 'catalog' | 'manual'>>({});
-  let profileEnvValues = $state<Record<string, Record<string, string>>>({});
+  let profileMode = $state<Record<string, 'catalog' | 'manual'>>({
+    primary: 'catalog',
+    fallback: 'catalog',
+    advanced: 'catalog',
+    audio: 'manual'
+  });
+  let profileEnvValues = $state<Record<string, Record<string, string>>>({
+    primary: {},
+    fallback: {},
+    advanced: {},
+    audio: {}
+  });
   
   const aiProfileRecommendations: Record<string, string[]> = {
     primary: [
