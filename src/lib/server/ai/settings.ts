@@ -16,7 +16,7 @@ export const AiProfileSchema = z.object({
   model: z.string().min(1).max(200),
   baseUrl: z.string().url(),
   proxyEnabled: z.boolean().default(false),
-  proxyUrl: z.string().url().nullable().optional(),
+  proxyUrl: z.preprocess((val) => (val === '' ? null : val), z.string().url().nullable().optional()),
   apiKey: z.union([z.string(), z.record(z.string(), z.string())]).nullable().optional(),
   preset: z.string().nullable().optional(),
   isEnabled: z.boolean().default(true),

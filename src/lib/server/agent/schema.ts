@@ -24,11 +24,11 @@ export const AgentPlanSchema = z
 
 export type AgentPlan = z.infer<typeof AgentPlanSchema>;
 
-const ToolBaseSchema = z.object({
+export const ToolBaseSchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(600).nullable().optional(),
   kind: z.enum(['mcp_http', 'cli']),
-  endpoint: z.string().url().nullable().optional(),
+  endpoint: z.preprocess((val) => (val === '' ? null : val), z.string().url().nullable().optional()),
   command: z.string().min(1).max(240).nullable().optional(),
   args: z.array(z.string()).default([]),
   authHeaders: z.record(z.string(), z.string()).default({}),
