@@ -21,9 +21,26 @@ type ProviderConfig = {
 class ProviderError extends Error {}
 
 function endpointFor(config: ProviderConfig) {
-  const baseUrl = config.proxyEnabled && config.proxyUrl ? config.proxyUrl : config.baseUrl;
-  const base = baseUrl.replace(/\/+$/, '');
+  const isGemini =
+    config.provider === 'gemini' ||
+    config.provider === 'google' ||
+    config.baseUrl.includes('googleapis.com');
+
+  let base = config.proxyEnabled && config.proxyUrl ? config.proxyUrl : config.baseUrl;
+  base = base.replace(/\/+$/, '');
+
+  // Smart detection for Gemini paths
+  if (isGemini) {
+    if (!base.includes('/v1beta/openai')) {
+      base = `${base}/v1beta/openai`;
+    }
+  }
+
   if (base.endsWith('/chat/completions')) return base;
+  if (config.transport === 'anthropic') {
+    if (base.endsWith('/messages')) return base;
+    return `${base}/messages`;
+  }
   return `${base}/chat/completions`;
 }
 
@@ -32,15 +49,16 @@ async function openAiCompatibleComplete(config: ProviderConfig, messages: ChatMe
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
+    const endpoint = endpointFor(config);
     if (env.DEBUG_AI) {
       console.log('[dear-robot] ai request', {
         provider: config.provider,
         model: config.model,
-        messages,
+        endpoint,
         proxyUsed: !!(config.proxyEnabled && config.proxyUrl)
       });
     }
-    const response = await fetch(endpointFor(config), {
+    const response = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -55,8 +73,16 @@ async function openAiCompatibleComplete(config: ProviderConfig, messages: ChatMe
       })
     });
     const text = await response.text();
-    if (!response.ok)
+    if (!response.ok) {
+      if (env.DEBUG_AI) {
+        console.error('[dear-robot] ai error response', {
+          status: response.status,
+          endpoint,
+          body: text
+        });
+      }
       throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
+    }
     const parsed = JSON.parse(text);
     const content = parsed?.choices?.[0]?.message?.content;
     if (typeof content !== 'string')
@@ -83,17 +109,17 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
+    const endpoint = endpointFor(config);
     if (env.DEBUG_AI) {
       console.log('[dear-robot] ai request', {
         provider: config.provider,
         model: config.model,
         transport: 'anthropic',
-        messages,
+        endpoint,
         proxyUsed: !!(config.proxyEnabled && config.proxyUrl)
       });
     }
-    const baseUrl = config.proxyEnabled && config.proxyUrl ? config.proxyUrl : config.baseUrl;
-    const response = await fetch(baseUrl.replace(/\/+$/, '') + '/messages', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: {
