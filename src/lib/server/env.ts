@@ -64,6 +64,11 @@ const EnvSchema = z.object({
 
 const parsed = EnvSchema.parse(process.env);
 const derivedDbPath = isBuildProcess ? ':memory:' : path.join(parsed.DATA_DIR, 'dear-robot.db');
+
+if (parsed.DEBUG_AI === 'true') {
+  console.log('[dear-robot] AI debugging is ENABLED');
+}
+
 export const env = {
   ...parsed,
   DB_PATH: derivedDbPath,

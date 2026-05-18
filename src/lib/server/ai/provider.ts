@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 type ChatMessage = { role: string; content: string };
 
-type ProviderConfig = {
+export type ProviderConfig = {
   provider: string;
   model: string;
   baseUrl: string;
@@ -20,7 +20,7 @@ type ProviderConfig = {
 
 class ProviderError extends Error {}
 
-function endpointFor(config: ProviderConfig) {
+export function endpointFor(config: ProviderConfig) {
   const isGemini =
     config.provider === 'gemini' ||
     config.provider === 'google' ||
