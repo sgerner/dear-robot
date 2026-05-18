@@ -24,8 +24,20 @@ function boot() {
 export const handle: Handle = async ({ event, resolve }) => {
   boot();
   const session = event.cookies.get('dear-robot_session');
-  event.locals.user = { authenticated: isValidSession(session) };
+  const authenticated = isValidSession(session);
+  event.locals.user = { authenticated };
   event.locals.csrfToken = csrfToken(session);
+
+  // Refresh session cookie on every request to keep it alive
+  if (authenticated && session) {
+    event.cookies.set('dear-robot_session', session, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 365
+    });
+  }
 
   const isLogin = event.url.pathname.startsWith('/login');
   const isHealth = event.url.pathname === '/api/health';
