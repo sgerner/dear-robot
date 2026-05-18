@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Star, Archive, Trash2 } from 'lucide-svelte';
   import { flip } from 'svelte/animate';
+  import { slide } from 'svelte/transition';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import { formatPlainText } from '$lib/utils/format';
 
@@ -55,6 +56,7 @@
     <div
       class="relative overflow-hidden border-b border-border/30 last:border-b-0"
       animate:flip={{ duration: 200 }}
+      out:slide={{ duration: 200 }}
     >
       <!-- Swipe left background (archive) -->
       <div
