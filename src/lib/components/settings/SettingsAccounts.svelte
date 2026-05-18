@@ -401,19 +401,40 @@
         The Gmail scopes are fixed by the app; you do not need to enter them manually.
       </p>
     </div>
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder="Google OAuth Client ID"
-      bind:value={googleOauthSettings.clientId}
-    />
-    <input
-      class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
-      placeholder={googleOauthHasSecret
-        ? 'Client secret (leave blank to rotate)'
-        : 'Google OAuth Client Secret'}
-      type="password"
-      bind:value={googleOauthSettings.clientSecret}
-    />
+    <div class="space-y-1">
+      <label class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+        Client ID
+        {#if googleOauthSettings.clientId}
+          <span class="flex items-center gap-1 normal-case tracking-normal text-emerald-400/80">
+            <Check size={10} /> Saved
+          </span>
+        {/if}
+      </label>
+      <input
+        class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm focus:border-accent/50 focus:outline-none"
+        placeholder="Enter Google OAuth Client ID"
+        bind:value={googleOauthSettings.clientId}
+      />
+    </div>
+
+    <div class="space-y-1">
+      <label class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+        Client Secret
+        {#if googleOauthHasSecret}
+          <span class="flex items-center gap-1 normal-case tracking-normal text-emerald-400/80">
+            <Check size={10} /> Saved
+          </span>
+        {/if}
+      </label>
+      <input
+        class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm focus:border-accent/50 focus:outline-none"
+        placeholder={googleOauthHasSecret
+          ? '••••••••••••••••'
+          : 'Enter Google OAuth Client Secret'}
+        type="password"
+        bind:value={googleOauthSettings.clientSecret}
+      />
+    </div>
     <Switch bind:checked={googleOauthSettings.isEnabled} label="Enabled" />
     <div class="flex flex-wrap gap-2">
       <button
