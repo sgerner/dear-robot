@@ -22,16 +22,23 @@ export function decryptSecret(value: string | null | undefined) {
   if (!value) return '';
   const [ivRaw, tagRaw, encryptedRaw] = value.split('.');
   if (!ivRaw || !tagRaw || !encryptedRaw) return '';
-  const decipher = crypto.createDecipheriv(
-    'aes-256-gcm',
-    encryptionKey(),
-    Buffer.from(ivRaw, 'base64')
-  );
-  decipher.setAuthTag(Buffer.from(tagRaw, 'base64'));
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedRaw, 'base64')),
-    decipher.final()
-  ]).toString('utf8');
+  try {
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      encryptionKey(),
+      Buffer.from(ivRaw, 'base64')
+    );
+    decipher.setAuthTag(Buffer.from(tagRaw, 'base64'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedRaw, 'base64')),
+      decipher.final()
+    ]).toString('utf8');
+  } catch (err) {
+    console.error('[dear-robot] Decryption failed. This usually means ENCRYPTION_KEY has changed.', {
+      error: err instanceof Error ? err.message : String(err)
+    });
+    return '';
+  }
 }
 
 export function sessionCookieValue() {

@@ -144,7 +144,7 @@ export function getAiConfigForRuntime(
     try {
       envValues = JSON.parse(decryptedRaw);
       // Fallback for primary key
-      apiKey = envValues.apiKey || Object.values(envValues)[0];
+      apiKey = envValues.apiKey || envValues.API_KEY || Object.values(envValues)[0];
     } catch {
       // Not JSON
     }
