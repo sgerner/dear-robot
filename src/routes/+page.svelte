@@ -357,6 +357,11 @@
   let quickActionOverflowOpen = $state(false);
   let isMobileViewport = $state(false);
   let mobileSettingsDetailOpen = $state(false);
+  let optimisticHiddenMessageIds = $state<number[]>([]);
+
+  let visibleMessages = $derived(
+    (data.messages || []).filter((m: any) => !optimisticHiddenMessageIds.includes(m.id))
+  );
 
   type DraftView = {
     id: number;
@@ -744,7 +749,7 @@
       } else if (event.key === 'e' && current) {
         event.preventDefault();
         void archiveSelected();
-      } else if (event.key === '#') {
+      } else if (event.key === '#' || event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         void deleteSelected();
       }
@@ -1701,13 +1706,17 @@
   }
 
   async function moveMessageToFolder(messageId: number, folderPath: string) {
-    status = 'Moving message...';
-    await api(`/api/messages/${messageId}/move`, {
-      method: 'POST',
-      body: JSON.stringify({ folderPath })
-    });
-    status = 'Moved';
-    await invalidateAll();
+    optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
+    try {
+      await api(`/api/messages/${messageId}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ folderPath })
+      });
+      await invalidateAll();
+    } catch (err) {
+      optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => id !== messageId);
+      status = err instanceof Error ? err.message : 'Move failed';
+    }
   }
 
   async function archiveSelected() {
@@ -1819,12 +1828,24 @@
   async function toggleMessageRead(messageId: number) {
     const row = messageForAction(messageId);
     if (!row) return;
-    await api(`/api/messages/${messageId}/read`, {
-      method: 'POST',
-      body: JSON.stringify({ read: !row.isRead })
-    });
-    status = row.isRead ? 'Marked unread' : 'Marked read';
-    await invalidateAll();
+    
+    // Optimistically update visible state (could be improved further, but avoids full page reload lag)
+    if (view === 'unread' && row.isRead === false) {
+       optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
+    }
+    
+    try {
+      await api(`/api/messages/${messageId}/read`, {
+        method: 'POST',
+        body: JSON.stringify({ read: !row.isRead })
+      });
+      await invalidateAll();
+    } catch (err) {
+      if (view === 'unread') {
+        optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter(id => id !== messageId);
+      }
+      status = err instanceof Error ? err.message : 'Toggle failed';
+    }
   }
 
   async function toggleFlagged() {
@@ -1838,32 +1859,54 @@
         message: { ...data.selected.message, isFlagged: nextFlagged }
       }
     };
-    await tick();
-    const result = await api(`/api/messages/${messageId}/flag`, {
-      method: 'POST',
-      body: JSON.stringify({ flagged: nextFlagged })
-    });
-    if (result?.message && data.selected) {
-      data = {
-        ...data,
-        selected: {
-          ...data.selected,
-          message: result.message
-        }
-      };
+    
+    if (view === 'starred' && !nextFlagged) {
+       optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
     }
-    await invalidateAll();
+
+    try {
+      const result = await api(`/api/messages/${messageId}/flag`, {
+        method: 'POST',
+        body: JSON.stringify({ flagged: nextFlagged })
+      });
+      if (result?.message && data.selected) {
+        data = {
+          ...data,
+          selected: {
+            ...data.selected,
+            message: result.message
+          }
+        };
+      }
+      await invalidateAll();
+    } catch (err) {
+       if (view === 'starred') {
+         optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter(id => id !== messageId);
+       }
+       status = err instanceof Error ? err.message : 'Toggle failed';
+    }
   }
 
   async function toggleMessageFlagged(messageId: number) {
     const row = messageForAction(messageId);
     if (!row) return;
-    await api(`/api/messages/${messageId}/flag`, {
-      method: 'POST',
-      body: JSON.stringify({ flagged: !row.isFlagged })
-    });
-    status = row.isFlagged ? 'Unstarred' : 'Starred';
-    await invalidateAll();
+    
+    if (view === 'starred' && row.isFlagged) {
+       optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
+    }
+    
+    try {
+      await api(`/api/messages/${messageId}/flag`, {
+        method: 'POST',
+        body: JSON.stringify({ flagged: !row.isFlagged })
+      });
+      await invalidateAll();
+    } catch (err) {
+       if (view === 'starred') {
+         optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter(id => id !== messageId);
+       }
+       status = err instanceof Error ? err.message : 'Toggle failed';
+    }
   }
 
   async function exportContacts() {
@@ -2814,7 +2857,7 @@
 
     {#if isInboxView(view)}
       <MessageList
-        messages={data.messages}
+        messages={visibleMessages}
         selectedId={data.selected?.message?.id ?? null}
         {swiping}
         {swipeSettings}
