@@ -63,9 +63,6 @@
     | 'drafts'
     | 'newsletters'
     | 'receipts';
-  let view = $state<AppView>('inbox');
-  let settingsCategory = $state<SettingsCategory>('accounts');
-  let operationsCategory = $state<'autopilot' | 'executed'>('autopilot');
   let isLoading = $state(false);
   let search = $state('');
   let accountFilter = $state<string>('');
@@ -107,6 +104,23 @@
     { key: 'advanced', label: 'Advanced', detail: 'Cache, backups, audit, contacts' }
   ] as const;
   const settingsCategoryKeys = settingsCategories.map((category) => category.key);
+
+  let view = $derived<AppView>(
+    typeof data.query?.view === 'string' &&
+    ['inbox', 'unread', 'starred', 'pending', 'operations', 'settings'].includes(data.query.view)
+      ? (data.query.view as AppView)
+      : 'inbox'
+  );
+  let settingsCategory = $derived<SettingsCategory>(
+    settingsCategoryKeys.includes(data.query?.settings as any)
+      ? (data.query.settings as SettingsCategory)
+      : 'accounts'
+  );
+  let operationsCategory = $derived<'autopilot' | 'executed'>(
+    data.query?.ops === 'executed' ? 'executed' : 'autopilot'
+  );
+  let googleOauthHasSecret = $derived(Boolean(data.googleOauthSettings?.hasClientSecret));
+  let googleOauthConnectedEmail = $derived(data.query?.oauth === 'connected' ? data.query?.email || '' : '');
   const quickActionCatalog: Array<{
     id: QuickActionId;
     label: string;
@@ -281,8 +295,6 @@
     redirectUri: '',
     isEnabled: true
   });
-  let googleOauthHasSecret = $state(false);
-  let googleOauthConnectedEmail = $state('');
   let obsidianSettings = $state({
     isEnabled: false,
     vaultPath: '/obsidian',
@@ -362,19 +374,6 @@
   };
 
   $effect(() => {
-    const nextView = data.query?.view;
-    view =
-      typeof nextView === 'string' &&
-      ['inbox', 'unread', 'starred', 'pending', 'operations', 'settings'].includes(nextView)
-        ? (nextView as AppView)
-        : 'inbox';
-    const nextSettings = data.query?.settings;
-    settingsCategory = settingsCategoryKeys.includes(nextSettings as SettingsCategory)
-      ? (nextSettings as SettingsCategory)
-      : 'accounts';
-    const nextOps = data.query?.ops;
-    operationsCategory = nextOps === 'executed' ? 'executed' : 'autopilot';
-
     accountFilter = data.query?.accountId ? String(data.query.accountId) : '';
     draftText = data.selected?.suggestion?.draftReply || '';
     memoryText = data.memory;
@@ -382,8 +381,6 @@
     coreProfileText = data.memoryOverview?.profile?.coreProfile || '';
     memoryAdvancedMode = data.memoryOverview?.profile?.advancedMode || false;
     bodyMode = data.selected?.message?.safeBodyHtml ? 'html' : 'text';
-    googleOauthHasSecret = Boolean(data.googleOauthSettings?.hasClientSecret);
-    googleOauthConnectedEmail = data.query?.oauth === 'connected' ? data.query?.email || '' : '';
   });
 
   $effect(() => {
