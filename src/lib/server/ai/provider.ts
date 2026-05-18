@@ -20,7 +20,12 @@ export type ProviderConfig = {
 
 class ProviderError extends Error {}
 
-export function endpointFor(config: ProviderConfig) {
+export function baseEndpointFor(config: {
+  provider: string;
+  baseUrl: string;
+  proxyEnabled?: boolean;
+  proxyUrl?: string | null;
+}) {
   const isGemini =
     config.provider === 'gemini' ||
     config.provider === 'google' ||
@@ -35,6 +40,11 @@ export function endpointFor(config: ProviderConfig) {
       base = `${base}/v1beta/openai`;
     }
   }
+  return base;
+}
+
+export function endpointFor(config: ProviderConfig) {
+  const base = baseEndpointFor(config);
 
   if (base.endsWith('/chat/completions')) return base;
   if (config.transport === 'anthropic') {

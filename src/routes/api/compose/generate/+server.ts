@@ -5,6 +5,7 @@ import { getAiConfigForRuntime } from '$lib/server/ai/settings';
 import { getMessageDetail } from '$lib/server/services/messages';
 import { readAgentInstructions } from '$lib/server/memory';
 import { readGlobalSkillsMarkdown, truncateMarkdown } from '$lib/server/skills';
+import { endpointFor, type ProviderConfig } from '$lib/server/ai/provider';
 
 const GenerateComposeSchema = z.object({
   prompt: z.string().min(1),
@@ -15,14 +16,9 @@ const GenerateComposeSchema = z.object({
 
 type ChatMessage = { role: 'system' | 'user'; content: string };
 
-async function generateWithOpenAiCompatible(
-  profile: ReturnType<typeof getAiConfigForRuntime>,
-  messages: ChatMessage[]
-) {
+async function generateWithOpenAiCompatible(profile: ProviderConfig, messages: ChatMessage[]) {
   if (!profile.apiKey) throw new Error('Primary AI profile has no API key');
-  const baseUrl = profile.proxyEnabled && profile.proxyUrl ? profile.proxyUrl : profile.baseUrl;
-  const base = baseUrl.replace(/\/+$/, '');
-  const endpoint = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
+  const endpoint = endpointFor(profile);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
@@ -49,7 +45,7 @@ async function generateWithOpenAiCompatible(
   }
 }
 
-function profileForCompose() {
+function profileForCompose(): ProviderConfig {
   return getAiConfigForRuntime('primary', {
     profile: 'primary',
     label: 'Primary',
@@ -57,13 +53,13 @@ function profileForCompose() {
     transport: 'openai_compatible',
     model: env.AI_MODEL || 'deepseek-v4-flash',
     baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
-    proxyEnabled: false,
-    proxyUrl: null,
+    proxyEnabled: !!env.AI_PROXY_URL,
+    proxyUrl: env.AI_PROXY_URL || null,
     apiKey: env.AI_API_KEY || undefined,
     preset: env.AI_PROVIDER || 'deepseek',
     isEnabled: true,
     notes: null
-  });
+  }) as ProviderConfig;
 }
 
 export async function POST({ request }) {

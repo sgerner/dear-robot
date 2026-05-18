@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { fetchWithTimeout } from '$lib/server/fetch';
+import { baseEndpointFor } from './provider';
 
 export const ModelCatalogRequestSchema = z.object({
   profile: z.enum(['primary', 'fallback', 'advanced', 'audio']).optional(),
   provider: z.string().min(1).max(120),
   transport: z.enum(['openai_compatible', 'anthropic']),
   baseUrl: z.string().url(),
+  proxyEnabled: z.boolean().optional(),
+  proxyUrl: z.string().nullable().optional(),
   apiKey: z.string().optional()
 });
 
@@ -18,10 +21,13 @@ export async function fetchModelCatalog(config: ModelCatalogRequest): Promise<Ca
     return fetchModelsDevCatalog();
   }
   if (!config.apiKey) throw new Error('API key required to fetch model catalog');
+  
+  const base = baseEndpointFor(config);
+  
   if (config.transport === 'anthropic') {
-    return fetchAnthropicModels(config.baseUrl, config.apiKey);
+    return fetchAnthropicModels(base, config.apiKey);
   }
-  return fetchOpenAiCompatibleModels(config.baseUrl, config.apiKey);
+  return fetchOpenAiCompatibleModels(base, config.apiKey);
 }
 
 async function fetchOpenAiCompatibleModels(baseUrl: string, apiKey: string) {

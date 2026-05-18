@@ -4,6 +4,7 @@ import { env } from '$lib/server/env';
 import { getAiConfigForRuntime } from '$lib/server/ai/settings';
 import { fetchWithTimeout } from '$lib/server/fetch';
 import { getSpeechProvider } from '$lib/speech/providers';
+import { baseEndpointFor } from '$lib/server/ai/provider';
 
 const TestSchema = z.object({
   profile: z.enum(['primary', 'fallback', 'advanced', 'audio']),
@@ -13,6 +14,8 @@ const TestSchema = z.object({
       transport: z.enum(['openai_compatible', 'anthropic']).optional(),
       model: z.string().optional(),
       baseUrl: z.string().optional(),
+      proxyEnabled: z.boolean().optional(),
+      proxyUrl: z.string().nullable().optional(),
       apiKey: z.string().or(z.record(z.string(), z.string())).optional()
     })
     .optional()
@@ -33,8 +36,8 @@ function profileConfig(
       transport: 'openai_compatible',
       model: env.AI_MODEL || 'deepseek-v4-flash',
       baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
-      proxyEnabled: false,
-      proxyUrl: null,
+      proxyEnabled: !!env.AI_PROXY_URL,
+      proxyUrl: env.AI_PROXY_URL || null,
       apiKey: env.AI_API_KEY || undefined,
       preset: env.AI_PROVIDER || 'deepseek',
       isEnabled: true,
@@ -49,8 +52,8 @@ function profileConfig(
       model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
       baseUrl:
         env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      proxyEnabled: false,
-      proxyUrl: null,
+      proxyEnabled: !!env.AI_FALLBACK_PROXY_URL,
+      proxyUrl: env.AI_FALLBACK_PROXY_URL || null,
       apiKey: env.AI_FALLBACK_API_KEY || undefined,
       preset: env.AI_FALLBACK_PROVIDER || 'gemini',
       isEnabled: true,
@@ -64,8 +67,8 @@ function profileConfig(
       transport: 'openai_compatible',
       model: env.AI_ADVANCED_MODEL || 'deepseek-v4-pro',
       baseUrl: env.AI_ADVANCED_BASE_URL || env.AI_BASE_URL || 'https://api.deepseek.com',
-      proxyEnabled: false,
-      proxyUrl: null,
+      proxyEnabled: !!env.AI_ADVANCED_PROXY_URL,
+      proxyUrl: env.AI_ADVANCED_PROXY_URL || null,
       apiKey: env.AI_ADVANCED_API_KEY || env.AI_API_KEY || undefined,
       preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
       isEnabled: true,
@@ -95,6 +98,8 @@ function profileConfig(
     if (overrides.transport) config.transport = overrides.transport;
     if (overrides.model) config.model = overrides.model;
     if (overrides.baseUrl) config.baseUrl = overrides.baseUrl;
+    if (overrides.proxyEnabled !== undefined) config.proxyEnabled = overrides.proxyEnabled;
+    if (overrides.proxyUrl !== undefined) config.proxyUrl = overrides.proxyUrl;
     if (overrides.apiKey) {
       if (typeof overrides.apiKey === 'string') {
         config.apiKey = overrides.apiKey;
@@ -110,7 +115,7 @@ function profileConfig(
 }
 
 async function testOpenAiCompatible(profile: RuntimeProfile) {
-  const base = profile.baseUrl.replace(/\/+$/, '');
+  const base = baseEndpointFor(profile);
   const response = await fetchWithTimeout(`${base}/models`, {
     headers: {
       Authorization: `Bearer ${profile.apiKey || ''}`
@@ -121,7 +126,7 @@ async function testOpenAiCompatible(profile: RuntimeProfile) {
 }
 
 async function testAnthropic(profile: RuntimeProfile) {
-  const base = profile.baseUrl.replace(/\/+$/, '');
+  const base = baseEndpointFor(profile);
   const response = await fetchWithTimeout(`${base}/models`, {
     headers: {
       'x-api-key': profile.apiKey || '',
