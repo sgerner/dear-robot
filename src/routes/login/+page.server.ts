@@ -23,7 +23,7 @@ export const actions = {
     cookies.set('dear-robot_session', sessionCookieValue(), {
       path: '/',
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       secure: env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 30
     });
