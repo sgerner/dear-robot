@@ -472,6 +472,9 @@ CREATE INDEX IF NOT EXISTS follow_up_reminders_status_due_idx ON follow_up_remin
 CREATE INDEX IF NOT EXISTS ai_observability_created_idx ON ai_observability(created_at);
 CREATE INDEX IF NOT EXISTS task_runs_message_created_idx ON task_runs(message_id, created_at);
 CREATE INDEX IF NOT EXISTS task_steps_run_step_idx ON task_steps(task_run_id, step_index);
+CREATE INDEX IF NOT EXISTS messages_account_date_idx ON messages(account_id, date);
+CREATE INDEX IF NOT EXISTS messages_account_read_date_idx ON messages(account_id, is_read, date);
+CREATE INDEX IF NOT EXISTS messages_account_flagged_date_idx ON messages(account_id, is_flagged, date);
 `);
 }
 

@@ -107,7 +107,18 @@ export const messages = sqliteTable(
       table.folderPath,
       table.date
     ),
-    accountThreadIdx: index('messages_account_thread_idx').on(table.accountId, table.threadId)
+    accountThreadIdx: index('messages_account_thread_idx').on(table.accountId, table.threadId),
+    accountDateIdx: index('messages_account_date_idx').on(table.accountId, table.date),
+    accountReadDateIdx: index('messages_account_read_date_idx').on(
+      table.accountId,
+      table.isRead,
+      table.date
+    ),
+    accountFlaggedDateIdx: index('messages_account_flagged_date_idx').on(
+      table.accountId,
+      table.isFlagged,
+      table.date
+    )
   })
 );
 

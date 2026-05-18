@@ -267,7 +267,21 @@ export function getMessageDetail(id: number) {
     .all();
   const threadKey = message.threadId || normalizedSubject(message.subject);
   const thread = db
-    .select()
+    .select({
+      id: messages.id,
+      accountId: messages.accountId,
+      providerMessageId: messages.providerMessageId,
+      threadId: messages.threadId,
+      folderPath: messages.folderPath,
+      subject: messages.subject,
+      from: messages.from,
+      to: messages.to,
+      date: messages.date,
+      snippet: sql<string>`substr(${messages.bodyText}, 1, 180)`,
+      isRead: messages.isRead,
+      isAnswered: messages.isAnswered,
+      isFlagged: messages.isFlagged
+    })
     .from(messages)
     .where(
       and(
@@ -294,17 +308,27 @@ export function getMessageDetail(id: number) {
     suggestion: suggestions[0] ?? null,
     suggestions,
     executed,
-    thread: thread.map((threadMessage) => ({
-      ...threadMessage,
-      safeBodyHtml: sanitizeEmailHtml(threadMessage.bodyHtml)
-    }))
+    thread
   };
 }
 
 function getMessageWithAccount(id: number) {
   return db
     .select({
-      message: messages,
+      message: {
+        id: messages.id,
+        accountId: messages.accountId,
+        providerMessageId: messages.providerMessageId,
+        threadId: messages.threadId,
+        folderPath: messages.folderPath,
+        subject: messages.subject,
+        from: messages.from,
+        to: messages.to,
+        date: messages.date,
+        isRead: messages.isRead,
+        isFlagged: messages.isFlagged,
+        isAnswered: messages.isAnswered
+      },
       account: accounts
     })
     .from(messages)
@@ -515,7 +539,20 @@ export async function moveMessage(id: number, folderPath: string) {
 export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionSchema>) {
   const rows = db
     .select({
-      message: messages,
+      message: {
+        id: messages.id,
+        accountId: messages.accountId,
+        providerMessageId: messages.providerMessageId,
+        threadId: messages.threadId,
+        folderPath: messages.folderPath,
+        subject: messages.subject,
+        from: messages.from,
+        to: messages.to,
+        date: messages.date,
+        isRead: messages.isRead,
+        isFlagged: messages.isFlagged,
+        isAnswered: messages.isAnswered
+      },
       account: accounts
     })
     .from(messages)
@@ -525,9 +562,10 @@ export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionS
   let processed = 0;
   for (const row of rows) {
     const provider = providerForAccount(row.account);
+    const msgContext = row.message as any;
     if (input.action === 'move') {
       const folderPath = input.folderPath || 'INBOX';
-      await provider.move(row.account, row.message, folderPath);
+      await provider.move(row.account, msgContext, folderPath);
       db.update(messages)
         .set({ folderPath, updatedAt: nowIso() })
         .where(eq(messages.id, row.message.id))
@@ -535,7 +573,7 @@ export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionS
     }
     if (input.action === 'mark_read' || input.action === 'mark_unread') {
       const read = input.action === 'mark_read';
-      await provider.markRead(row.account, row.message, read);
+      await provider.markRead(row.account, msgContext, read);
       db.update(messages)
         .set({ isRead: read, updatedAt: nowIso() })
         .where(eq(messages.id, row.message.id))
@@ -543,7 +581,7 @@ export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionS
     }
     if (input.action === 'flag' || input.action === 'unflag') {
       const flagged = input.action === 'flag';
-      await provider.setFlagged(row.account, row.message, flagged);
+      await provider.setFlagged(row.account, msgContext, flagged);
       db.update(messages)
         .set({ isFlagged: flagged, updatedAt: nowIso() })
         .where(eq(messages.id, row.message.id))
