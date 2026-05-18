@@ -568,7 +568,20 @@
     };
     applyViewport();
     media.addEventListener('change', applyViewport);
-    return () => media.removeEventListener('change', applyViewport);
+    
+    // Server-Sent Events for Realtime Updates
+    const eventSource = new EventSource('/api/events');
+    eventSource.addEventListener('sync_complete', () => {
+      void invalidateAll();
+    });
+    eventSource.onerror = () => {
+      // Reconnects automatically
+    };
+
+    return () => {
+      media.removeEventListener('change', applyViewport);
+      eventSource.close();
+    };
   });
 
   const onboardingTitle = $derived(

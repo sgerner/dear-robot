@@ -66,6 +66,20 @@ Take note of your worker URL (e.g., `https://proxy.your-subdomain.workers.dev`).
 5. Click **Save Profile**.
 6. Use **Test Connection** to verify that the relay is working.
 
+## Realtime Gmail Sync (Google Cloud Pub/Sub Webhooks)
+
+Unlike standard IMAP accounts which support instant push notifications via the `IDLE` command, Gmail's API relies on Google Cloud Pub/Sub to deliver real-time email notifications. If you connect a Gmail account via OAuth, it will default to a 5-minute polling fallback unless you configure Pub/Sub.
+
+To enable instant real-time sync for Gmail:
+
+1. **Set up a Topic:** In your [Google Cloud Console](https://console.cloud.google.com/cloudpubsub/topic/list), create a new Pub/Sub Topic (e.g., `dear-robot-gmail-sync`).
+2. **Grant Permissions:** Give `gmail-api-push@system.gserviceaccount.com` the `Pub/Sub Publisher` role for your new topic.
+3. **Create a Push Subscription:** Create a subscription for your topic. Set the Delivery Type to **Push**.
+4. **Set the Endpoint URL:** Set the Endpoint URL to your Dear Robot instance's webhook route: `https://your-domain.com/api/webhooks/google`.
+5. **Watch the Mailbox:** You must tell the Gmail API to start publishing to this topic. You can do this via the [Gmail API Watch method](https://developers.google.com/gmail/api/reference/rest/v1/users/watch) or by following the [Gmail Push Notification Guide](https://developers.google.com/gmail/api/guides/push).
+
+Once configured, Google will instantly ping your webhook when an email arrives, and Dear Robot will immediately sync the inbox and broadcast the update to your connected browser via Server-Sent Events (SSE).
+
 ## Docker Deployment
 
 The recommended deployment is the included Docker image or the bundled `docker-compose.yml`.

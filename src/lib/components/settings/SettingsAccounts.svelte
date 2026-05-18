@@ -392,6 +392,28 @@
             </button>
           </div>
         </li>
+        <li>
+          <span class="font-medium text-sky-100">Optional (for Realtime Sync):</span> Set up a Google Cloud Pub/Sub Topic and Push Subscription pointing to:
+          <div class="mt-1 flex items-center gap-2 rounded border border-sky-400/15 bg-black/20 px-2 py-1">
+            <code class="min-w-0 flex-1 break-all font-mono text-[11px] text-sky-100">
+              {googleOauthSettings.redirectUri ? googleOauthSettings.redirectUri.replace('/api/accounts/google/callback', '/api/webhooks/google') : ''}
+            </code>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+              onclick={() => copyToClipboard(googleOauthSettings.redirectUri ? googleOauthSettings.redirectUri.replace('/api/accounts/google/callback', '/api/webhooks/google') : '', 'Webhook URL')}
+              disabled={!googleOauthSettings.redirectUri}
+              aria-label="Copy Webhook URL"
+            >
+              <Copy size={11} />
+              Copy
+            </button>
+          </div>
+          <p class="mt-1 text-[10px] text-zinc-400">
+            Grant <code>gmail-api-push@system.gserviceaccount.com</code> the Publisher role on your Topic. Then configure your Gmail account to watch this Topic using the Gmail API. <br>
+            <a href="https://developers.google.com/gmail/api/guides/push" target="_blank" class="text-sky-300 hover:text-sky-200 underline">Read the full guide here</a>. Without this, Gmail falls back to a 5-minute poll.
+          </p>
+        </li>
       </ol>
       <p class="text-[11px] text-zinc-400">
         Use a <span class="font-medium text-zinc-200">Web application</span> OAuth client. If the

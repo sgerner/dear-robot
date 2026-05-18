@@ -3,6 +3,7 @@ import { db, nowIso } from './db';
 import { accounts, folders, folderSyncState, messageAttachments, messages } from './db/schema';
 import { providerForAccount } from './email/provider';
 import { suggestForMessage } from './services/messages';
+import { appEvents } from './events';
 
 type WorkerState = {
   abortController: AbortController;
@@ -170,6 +171,7 @@ export async function syncAccount(accountId: number) {
       .run();
   } finally {
     syncInFlight.delete(accountId);
+    appEvents.emit('sync_complete', { accountId });
   }
 }
 
@@ -224,6 +226,7 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
                 })
                 .where(eq(accounts.id, accountId))
                 .run();
+              appEvents.emit('sync_complete', { accountId });
             }
           },
           onError: (error) => {
