@@ -10,13 +10,12 @@ export async function GET({ url, cookies }) {
   cookies.delete('google_oauth_verifier', { path: '/' });
   if (!state || !cookieState || state !== cookieState) throw error(400, 'Invalid OAuth state');
   if (!code || !verifier) throw error(400, 'Missing OAuth authorization code');
+  let redirectUrl: string;
   try {
     const linked = await completeGoogleOauth(code, verifier);
-    throw redirect(
-      302,
-      `/?view=accounts&oauth=connected&email=${encodeURIComponent(linked.email)}`
-    );
+    redirectUrl = `/?view=accounts&oauth=connected&email=${encodeURIComponent(linked.email)}`;
   } catch (err) {
     throw error(400, err instanceof Error ? err.message : 'Unable to complete Google OAuth');
   }
+  throw redirect(302, redirectUrl);
 }
