@@ -30,6 +30,8 @@ export const handle: Handle = async ({ event, resolve }) => {
   const isLogin = event.url.pathname.startsWith('/login');
   const isHealth = event.url.pathname === '/api/health';
   const isMcp = event.url.pathname.startsWith('/api/mcp');
+  const isOAuth = event.url.pathname.startsWith('/api/accounts/google/start') || 
+                  event.url.pathname.startsWith('/api/accounts/google/callback');
   const isApi = event.url.pathname.startsWith('/api/');
 
   if (isMcp) {
@@ -39,7 +41,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  if (!isHealth && !isLogin && !isMcp && !event.locals.user.authenticated) {
+  if (!isHealth && !isLogin && !isOAuth && !isMcp && !event.locals.user.authenticated) {
     if (isApi) throw error(401, 'Unauthorized');
     throw redirect(303, '/login');
   }
