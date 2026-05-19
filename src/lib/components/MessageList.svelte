@@ -88,7 +88,7 @@
       <MessageRow
       {message}
       {selectedId}
-      open={openMessageIds.has(message.id)}
+      open={isMobileViewport && openMessageIds.has(message.id)}
       onToggle={onToggleMessage}
       {view}
       {swiping}

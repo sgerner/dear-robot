@@ -13,6 +13,7 @@
     ChevronDown,
     MessageSquare,
     Sparkles,
+    FileText,
     ThumbsUp,
     Sun,
     Moon,
@@ -231,9 +232,9 @@
     role="button"
     tabindex="0"
   >
-    <!-- Preview header (always visible) -->
+    <!-- Preview header (always visible, unified with body when open) -->
     <div class="px-3 py-2 min-w-0 {open ? 'pb-1' : ''}">
-      <!-- Line 1: From + inline badge + date -->
+      <!-- Line 1: From + inline badge + date + toggles -->
       <div class="flex items-center gap-2 min-w-0">
         <p
           class={`truncate text-sm flex-1 min-w-0 ${message.isRead ? 'text-muted-foreground font-normal' : 'font-semibold text-foreground'}`}
@@ -255,6 +256,59 @@
           >
             {message.recommendedAction}
           </span>
+        {/if}
+
+        {#if open && detail?.message?.safeBodyHtml}
+          <div class="shrink-0 flex items-center gap-1">
+            <!-- Light/Dark toggle -->
+            <div class="flex border border-border/40 p-0.5 bg-background">
+              <button
+                class={`px-1.5 py-0.5 transition-all duration-150 ${
+                  emailTheme === 'dark'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onclick={() => { emailTheme = 'dark'; }}
+                title="Dark Mode"
+              >
+                <Moon size={11} />
+              </button>
+              <button
+                class={`px-1.5 py-0.5 transition-all duration-150 ${
+                  emailTheme === 'light'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onclick={() => { emailTheme = 'light'; }}
+                title="Light Mode"
+              >
+                <Sun size={11} />
+              </button>
+            </div>
+            <!-- HTML/Plain toggle -->
+            <div class="flex border border-border/40 p-0.5 bg-background text-[11px]">
+              <button
+                class={`px-1.5 py-0.5 transition-all duration-150 ${
+                  bodyMode === 'html'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onclick={() => { bodyMode = 'html'; }}
+              >
+                H
+              </button>
+              <button
+                class={`px-1.5 py-0.5 transition-all duration-150 ${
+                  bodyMode === 'text'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onclick={() => { bodyMode = 'text'; }}
+              >
+                P
+              </button>
+            </div>
+          </div>
         {/if}
 
         <time
@@ -289,58 +343,6 @@
         {#if detailLoading}
           <div class="py-4 text-xs text-muted-foreground">Loading...</div>
         {:else if detail}
-          <!-- Toggles bar -->
-          {#if detail.message?.safeBodyHtml}
-            <div class="flex items-center justify-end gap-1 mb-2">
-              <div class="flex border border-border/40 p-0.5 bg-background">
-                <button
-                  class={`px-1.5 py-0.5 transition-all duration-150 ${
-                    emailTheme === 'dark'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => { emailTheme = 'dark'; }}
-                  title="Dark Mode"
-                >
-                  <Moon size={11} />
-                </button>
-                <button
-                  class={`px-1.5 py-0.5 transition-all duration-150 ${
-                    emailTheme === 'light'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => { emailTheme = 'light'; }}
-                  title="Light Mode"
-                >
-                  <Sun size={11} />
-                </button>
-              </div>
-              <div class="flex border border-border/40 p-0.5 bg-background text-[11px]">
-                <button
-                  class={`px-1.5 py-0.5 transition-all duration-150 ${
-                    bodyMode === 'html'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => { bodyMode = 'html'; }}
-                >
-                  H
-                </button>
-                <button
-                  class={`px-1.5 py-0.5 transition-all duration-150 ${
-                    bodyMode === 'text'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => { bodyMode = 'text'; }}
-                >
-                  P
-                </button>
-              </div>
-            </div>
-          {/if}
-
           <!-- Body content -->
           {#if bodyMode === 'html' && detail.message?.safeBodyHtml}
             <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
