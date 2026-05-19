@@ -2,7 +2,7 @@ const DB_NAME = 'dear-robot-client-cache';
 const DB_VERSION = 1;
 const CACHE_KEY_STORAGE = 'dear-robot-cache-passphrase';
 
-type StoreName = 'messages' | 'folders' | 'contacts' | 'meta' | 'outbox' | 'draft_local';
+type StoreName = 'messages' | 'folders' | 'contacts' | 'meta' | 'outbox' | 'draft_local' | 'message_details';
 
 let encryptionPassphrase: string | null = null;
 
@@ -100,10 +100,51 @@ function openCache() {
         db.createObjectStore('outbox', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('draft_local'))
         db.createObjectStore('draft_local', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('message_details'))
+        db.createObjectStore('message_details', { keyPath: 'id' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+export async function getCache(storeName: StoreName, id: string | number) {
+  if (typeof indexedDB === 'undefined') return null;
+  const db = await openCache();
+  const row = await new Promise<Record<string, unknown> | null>((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const request = tx.objectStore(storeName).get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return row ? unprotectRecord(row) : null;
+}
+
+export async function upsertCache(storeName: StoreName, rows: Array<Record<string, unknown>>) {
+  if (typeof indexedDB === 'undefined') return;
+  const protectedRows = await Promise.all(rows.map((row) => protectRecord(row)));
+  const db = await openCache();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    for (const row of protectedRows) store.put(row);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+export async function deleteFromCache(storeName: StoreName, id: string | number) {
+  if (typeof indexedDB === 'undefined') return;
+  const db = await openCache();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
 }
 
 export async function replaceCache(storeName: StoreName, rows: Array<Record<string, unknown>>) {

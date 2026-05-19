@@ -26,6 +26,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import { formatPlainText } from '$lib/utils/format';
+  import { getCache, upsertCache } from '$lib/client/local-cache';
 
   let {
     message,
@@ -151,11 +152,24 @@
     if (detail || detailLoading) return;
     detailLoading = true;
     try {
+      // 1. Try local cache first
+      const cached = await getCache('message_details', message.id);
+      if (cached && cached.message) {
+        detail = cached;
+        if (detail.message?.safeBodyHtml) bodyMode = 'html';
+        detailLoading = false;
+        return;
+      }
+
+      // 2. Fallback to network
       const res = await fetch(`/api/messages/${message.id}`);
       if (res.ok) {
         const data = await res.json();
         detail = data;
         if (data.message?.safeBodyHtml) bodyMode = 'html';
+        
+        // 3. Save to cache for next time
+        void upsertCache('message_details', [{ id: message.id, ...data }]);
       }
     } catch {
       // detail unavailable

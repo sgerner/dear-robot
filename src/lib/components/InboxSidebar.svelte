@@ -10,7 +10,9 @@
     Star,
     Clock,
     UserCircle,
-    Check
+    Check,
+    CircleDashed,
+    Database
   } from 'lucide-svelte';
   import { slide, fade, scale } from 'svelte/transition';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
@@ -30,7 +32,8 @@
     applySearch,
     scheduleSearch,
     searchInput = $bindable(),
-    selectFolder
+    selectFolder,
+    searchState = 'idle'
   }: {
     view: string;
     search: string;
@@ -46,6 +49,7 @@
     scheduleSearch: () => void;
     searchInput: HTMLInputElement | undefined;
     selectFolder: (_accountId: number, _path: string) => void;
+    searchState?: 'idle' | 'searching' | 'complete';
   } = $props();
 
   let showAccountPicker = $state(false);
@@ -185,19 +189,30 @@
             oninput={scheduleSearch}
             onkeydown={(e) => e.key === 'Enter' && applySearch({ clearMessage: true })}
           />
-          {#if search}
-            <button
-              class="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-              onclick={() => {
-                search = '';
-                applySearch({ clearMessage: true });
-              }}
-            >
-              <X size={12} />
-            </button>
-          {/if}
+          <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {#if searchState === 'searching'}
+              <div class="animate-spin text-primary">
+                <CircleDashed size={12} />
+              </div>
+            {:else if searchState === 'complete' && search}
+              <div class="text-primary/60" title="Deep search complete">
+                <Database size={11} />
+              </div>
+            {/if}
+
+            {#if search}
+              <button
+                class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                onclick={() => {
+                  search = '';
+                  applySearch({ clearMessage: true });
+                }}
+              >
+                <X size={12} />
+              </button>
+            {/if}
+          </div>
         </div>
-        
         <button
           class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           class:bg-muted={showShortcutHelp}

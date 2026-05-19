@@ -18,12 +18,14 @@
     cacheEncryptionEnabled,
     deleteOutbox,
     enqueueOutbox,
+    getCache,
     listOutbox,
     loadCacheEncryptionPassphrase,
     putLocalDraft,
     replaceCache,
     setCacheEncryptionPassphrase,
-    setCacheMeta
+    setCacheMeta,
+    upsertCache
   } from '$lib/client/local-cache';
   import ComposeDrawer from '$lib/components/ComposeDrawer.svelte';
   import MobileQuickActions from '$lib/components/MobileQuickActions.svelte';
@@ -64,7 +66,6 @@
     | 'newsletters'
     | 'receipts';
   let isLoading = $state(false);
-  let search = $state('');
   let accountFilter = $state<string>('');
   type ButtonState = 'idle' | 'loading' | 'success' | 'error';
   let accountAddState = $state<ButtonState>('idle');
@@ -258,6 +259,9 @@
     binaryName: ''
   });
   let bodyMode = $state<'text' | 'html'>('text');
+  let search = $state('');
+  let searchState = $state<'idle' | 'searching' | 'complete'>('idle');
+  let serverSearchResults = $state<any[]>([]);
   let searchInput = $state<HTMLInputElement | undefined>(undefined);
   let composeOpen = $state(false);
   let composeMode = $state<'compose' | 'reply' | 'reply_all' | 'forward'>('compose');
@@ -360,9 +364,28 @@
   let mobileSettingsDetailOpen = $state(false);
   let optimisticHiddenMessageIds = $state<number[]>([]);
 
-  let visibleMessages = $derived(
-    (data.messages || []).filter((m: any) => !optimisticHiddenMessageIds.includes(m.id))
-  );
+  let localFilteredMessages = $derived.by(() => {
+    if (!search.trim()) return data.messages || [];
+    const q = search.toLowerCase();
+    return (data.messages || []).filter((m: any) => 
+      m.subject.toLowerCase().includes(q) || 
+      m.from.toLowerCase().includes(q) || 
+      m.snippet?.toLowerCase().includes(q)
+    );
+  });
+
+  let visibleMessages = $derived.by(() => {
+    const hidden = optimisticHiddenMessageIds;
+    const local = localFilteredMessages.filter((m: any) => !hidden.includes(m.id));
+    
+    if (!search.trim()) return local;
+    
+    // Merge server results that aren't already in the local list
+    const localIds = new Set(local.map((m: any) => m.id));
+    const uniqueServer = serverSearchResults.filter((m: any) => !localIds.has(m.id) && !hidden.includes(m.id));
+    
+    return [...local, ...uniqueServer].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  });
 
   type DraftView = {
     id: number;
@@ -426,6 +449,35 @@
     void replaceCache('contacts', data.contacts);
     void setCacheMeta('lastPageCacheAt', new Date().toISOString());
     cacheEncrypted = cacheEncryptionEnabled();
+
+    // Prefetch message details for all visible messages
+    let aborted = false;
+    const prefetch = async () => {
+      const messagesToPrefetch = data.messages || [];
+      for (const msg of messagesToPrefetch) {
+        if (aborted) return;
+        try {
+          const cached = await getCache('message_details', msg.id);
+          if (!cached) {
+            // Small delay to be polite to the server
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            if (aborted) return;
+            const res = await fetch(`/api/messages/${msg.id}`);
+            if (res.ok) {
+              const detail = await res.json();
+              await upsertCache('message_details', [{ id: msg.id, ...detail }]);
+            }
+          }
+        } catch (e) {
+          console.error('Prefetch failed for message', msg.id, e);
+        }
+      }
+    };
+    void prefetch();
+
+    return () => {
+      aborted = true;
+    };
   });
 
   $effect(() => {
@@ -969,6 +1021,15 @@
       if (data.query?.folder) params.set('folder', data.query.folder);
       if (options.clearMessage) params.delete('message');
       await goto(`/?${params.toString()}`);
+      
+      // Also trigger a deep search if there's a query
+      if (search.trim()) {
+        void performSearch();
+      } else {
+        serverSearchResults = [];
+        searchState = 'idle';
+      }
+
       if (active) {
         await tick();
         if (typeof document !== 'undefined' && document.activeElement !== searchInput) {
@@ -983,9 +1044,17 @@
   function scheduleSearch() {
     if (searchDebounce) clearTimeout(searchDebounce);
     if (!['inbox', 'unread', 'starred', 'pending'].includes(view)) return;
+    
+    if (!search.trim()) {
+      serverSearchResults = [];
+      searchState = 'idle';
+    } else {
+      searchState = 'searching';
+    }
+
     searchDebounce = setTimeout(() => {
       void applySearch({ clearMessage: true });
-    }, 250);
+    }, 400);
   }
 
   onDestroy(() => {
@@ -1533,6 +1602,43 @@
 
   function getDictationTarget(targetId: string) {
     return document.getElementById(targetId) as HTMLTextAreaElement | HTMLInputElement | null;
+  }
+
+  async function performSearch() {
+    if (!search.trim()) {
+      searchState = 'idle';
+      serverSearchResults = [];
+      return;
+    }
+
+    searchState = 'searching';
+    try {
+      const res = await fetch(`/api/messages?q=${encodeURIComponent(search)}&limit=100`);
+      if (res.ok) {
+        const results = await res.json();
+        serverSearchResults = results;
+      }
+    } catch (e) {
+      console.error('Deep search failed', e);
+    } finally {
+      searchState = 'complete';
+    }
+  }
+
+  function onSearchInput(e: Event) {
+    const val = (e.currentTarget as HTMLInputElement).value;
+    search = val;
+    if (searchDebounce) clearTimeout(searchDebounce);
+    
+    if (!val.trim()) {
+      searchState = 'idle';
+      serverSearchResults = [];
+      return;
+    }
+
+    searchDebounce = setTimeout(() => {
+      void performSearch();
+    }, 400);
   }
 
   async function toggleDictation(targetId: string) {
@@ -2886,6 +2992,7 @@
           {scheduleSearch}
           bind:searchInput
           {selectFolder}
+          {searchState}
         />
       {/if}
     </div>
