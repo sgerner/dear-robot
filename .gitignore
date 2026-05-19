@@ -10,3 +10,4 @@ playwright-report
 coverage
 /data
 .codex/config.toml
+.opencode/plugins/emdash-notifications.js
