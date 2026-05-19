@@ -428,7 +428,7 @@ function mapFolderRole(path: string, specialUse: string | null) {
   const normalized = path.toLowerCase();
   const special = (specialUse || '').toLowerCase();
   if (special.includes('inbox') || normalized === 'inbox') return 'inbox';
-  if (special.includes('archive') || normalized.includes('archive')) return 'archive';
+  if (special.includes('archive') || normalized.includes('archive') || normalized.includes('all mail')) return 'archive';
   if (
     special.includes('junk') ||
     special.includes('spam') ||
