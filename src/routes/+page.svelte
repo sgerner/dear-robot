@@ -2678,7 +2678,7 @@
 </svelte:head>
 
 <main
-  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground md:grid-cols-[60px_minmax(300px,380px)_1fr] md:pt-0"
+  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground md:grid-cols-[60px_1fr] md:pt-0"
 >
   {#if isLoading}
     <div class="fixed left-0 right-0 top-0 z-50 h-0.5 bg-primary/20" transition:fade>
@@ -2991,7 +2991,7 @@
 
   {#if isInboxView(view)}
     <section
-      class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 hidden md:block"
+      class="hidden"
     >
       <MessageDetail
         selected={data.selected ? { ...data.selected, tasks: data.tasks } : null}
