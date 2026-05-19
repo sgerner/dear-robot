@@ -88,6 +88,7 @@
   } = $props();
 
   let emailTheme = $state<'light' | 'dark'>('dark');
+  let visibleThreadLimit = $state(5);
 
   const actionIcons: Record<string, any> = {
     reply: Reply,
@@ -178,14 +179,8 @@
       <!-- Thread/Conversation Section -->
       {#if selected.thread?.length > 1}
         <section class="mt-5 py-4" transition:slide={{ duration: 200 }}>
-          <div class="flex items-center gap-2 mb-3">
-            <MessageSquare size={14} class="text-muted-foreground" />
-            <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-              Conversation
-            </p>
-          </div>
           <div class="space-y-2">
-            {#each selected.thread as item (item.id)}
+            {#each [...selected.thread].reverse().slice(0, visibleThreadLimit) as item (item.id)}
               <button
                 class={`w-full p-3 text-left transition-all duration-150 ${
                   item.id === selected.message.id
@@ -212,6 +207,14 @@
                 </div>
               </button>
             {/each}
+            {#if selected.thread.length > visibleThreadLimit}
+              <button
+                class="w-full py-2 text-center text-xs text-primary hover:text-primary/80 transition-colors"
+                onclick={() => { visibleThreadLimit += 5; }}
+              >
+                + More ({selected.thread.length - visibleThreadLimit} remaining)
+              </button>
+            {/if}
           </div>
         </section>
       {/if}
