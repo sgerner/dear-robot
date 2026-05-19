@@ -90,6 +90,10 @@
 
   let emailTheme = $state<'light' | 'dark'>('dark');
   let visibleThreadLimit = $state(5);
+  let openMessageIds = $state(new Set<number>());
+
+  const perMessageBodyMode = $state<Record<number, 'text' | 'html'>>({});
+  const perMessageEmailTheme = $state<Record<number, 'light' | 'dark'>>({});
 
   const actionIcons: Record<string, any> = {
     reply: Reply,
@@ -110,6 +114,44 @@
       hour: 'numeric',
       minute: '2-digit'
     });
+  }
+
+  function getMessageBodyMode(id: number): 'text' | 'html' {
+    if (perMessageBodyMode[id]) return perMessageBodyMode[id];
+    const item = getThreadItem(id);
+    if (item?.bodyHtml) return 'html';
+    return 'text';
+  }
+
+  function setMessageBodyMode(id: number, mode: 'text' | 'html') {
+    perMessageBodyMode[id] = mode;
+  }
+
+  function getMessageEmailTheme(id: number): 'light' | 'dark' {
+    return perMessageEmailTheme[id] || 'dark';
+  }
+
+  function setMessageEmailTheme(id: number, theme: 'light' | 'dark') {
+    perMessageEmailTheme[id] = theme;
+  }
+
+  function getThreadItem(id: number) {
+    if (selected?.message?.id === id) return selected.message;
+    return selected?.thread?.find((item: any) => item.id === id);
+  }
+
+  function toggleMessageOpen(id: number) {
+    const next = new Set(openMessageIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    openMessageIds = next;
+  }
+
+  function isMessageOpen(id: number) {
+    return openMessageIds.has(id);
   }
 </script>
 
@@ -179,128 +221,251 @@
 
       <!-- Thread/Conversation Section -->
       {#if selected.thread?.length > 1}
-        <section class="mt-5 py-4" transition:slide={{ duration: 200 }}>
-          <div class="space-y-2">
-            {#each [...selected.thread].reverse().slice(0, visibleThreadLimit) as item (item.id)}
+        <section class="mt-5 space-y-3" transition:slide={{ duration: 200 }}>
+          {#each [...selected.thread].reverse().slice(0, visibleThreadLimit) as item (item.id)}
+            <div
+              class={`rounded-lg border transition-all duration-150 ${
+                item.id === selected.message.id
+                  ? 'border-primary/30 bg-primary/[0.04]'
+                  : 'border-border/40 bg-muted/10 hover:bg-muted/20'
+              }`}
+            >
+              <!-- Message header (always visible, clickable to expand) -->
               <button
-                class={`w-full p-3 text-left transition-all duration-150 ${
-                  item.id === selected.message.id
-                    ? 'bg-primary/[0.04] border-l-2 border-primary/30'
-                    : 'bg-muted/20 border-l-2 border-transparent hover:bg-muted/40'
-                }`}
-                onclick={() => selectMessage(item.id)}
+                class="w-full p-3 text-left"
+                onclick={() => {
+                  if (item.id !== selected.message.id) selectMessage(item.id);
+                  toggleMessageOpen(item.id);
+                }}
               >
-                <div class="flex items-center justify-between gap-2 mb-1">
-                  <p class="truncate text-sm font-medium text-foreground">{item.from}</p>
-                  <time class="shrink-0 text-[11px] text-muted-foreground">
-                    {new Date(item.date).toLocaleString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit'
-                    })}
-                  </time>
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <p class="truncate text-sm font-medium text-foreground">{item.from}</p>
+                    {#if item.id === selected.message.id}
+                      <span class="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-primary/15 text-primary font-medium">
+                        Selected
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <time class="text-[11px] text-muted-foreground">
+                      {new Date(item.date).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </time>
+                    <ChevronDown
+                      size={14}
+                      class="text-muted-foreground transition-transform duration-200 {isMessageOpen(item.id) ? 'rotate-180' : ''}"
+                    />
+                  </div>
                 </div>
-                <p class="truncate text-xs text-muted-foreground">{item.subject}</p>
-                <div class="mt-1.5 line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed">
-                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                  {@html formatPlainText(item.bodyText)}
+                <p class="truncate text-xs text-muted-foreground mt-0.5">{item.subject}</p>
+                {#if !isMessageOpen(item.id)}
+                  <div class="mt-1.5 line-clamp-2 text-xs text-muted-foreground/80 leading-relaxed">
+                    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                    {@html formatPlainText(item.bodyText)}
+                  </div>
+                {/if}
+              </button>
+
+              <!-- Expanded body -->
+              {#if isMessageOpen(item.id)}
+                <div class="px-3 pb-3" transition:slide={{ duration: 200 }}>
+                  <!-- Toggles bar -->
+                  {#if item.bodyHtml}
+                    <div class="flex items-center justify-end gap-1 mb-2">
+                      <div class="flex border border-border/40 p-0.5 bg-background">
+                        <button
+                          class={`px-1.5 py-0.5 transition-all duration-150 ${
+                            getMessageEmailTheme(item.id) === 'dark'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onclick={() => setMessageEmailTheme(item.id, 'dark')}
+                          title="Dark Mode"
+                        >
+                          <Moon size={11} />
+                        </button>
+                        <button
+                          class={`px-1.5 py-0.5 transition-all duration-150 ${
+                            getMessageEmailTheme(item.id) === 'light'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onclick={() => setMessageEmailTheme(item.id, 'light')}
+                          title="Light Mode"
+                        >
+                          <Sun size={11} />
+                        </button>
+                      </div>
+                      <div class="flex border border-border/40 p-0.5 bg-background text-[11px]">
+                        <button
+                          class={`px-1.5 py-0.5 transition-all duration-150 ${
+                            getMessageBodyMode(item.id) === 'html'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onclick={() => setMessageBodyMode(item.id, 'html')}
+                        >
+                          H
+                        </button>
+                        <button
+                          class={`px-1.5 py-0.5 transition-all duration-150 ${
+                            getMessageBodyMode(item.id) === 'text'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onclick={() => setMessageBodyMode(item.id, 'text')}
+                        >
+                          P
+                        </button>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <!-- Body content -->
+                  {#if getMessageBodyMode(item.id) === 'html' && item.bodyHtml}
+                    <div class="overflow-x-auto w-full {getMessageEmailTheme(item.id) === 'dark' ? 'email-dark' : ''}">
+                      <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                        {@html item.safeBodyHtml ?? item.bodyHtml}
+                      </article>
+                    </div>
+                  {:else}
+                    <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground">
+                      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                      {@html formatPlainText(item.bodyText)}
+                    </div>
+                  {/if}
+
+                  <!-- Attachments for this message -->
+                  {#if item.id === selected.message.id && selected.attachments?.length}
+                    <div class="mt-3">
+                      <details>
+                        <summary class="flex cursor-pointer list-none items-center gap-2 text-xs text-foreground">
+                          <Paperclip size={13} class="text-muted-foreground" />
+                          <span class="font-medium">Attachments</span>
+                          <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-muted text-muted-foreground">
+                            {selected.attachments.length}
+                          </span>
+                          <ChevronDown size={12} class="text-muted-foreground transition-transform group-open:rotate-180" />
+                        </summary>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                          {#each selected.attachments as attachment (attachment.id)}
+                            <a
+                              class="inline-flex items-center gap-2 bg-muted px-3 py-1.5 text-xs text-foreground hover:bg-muted/40 transition-colors"
+                              href={`/api/messages/${selected.message.id}/attachments/${attachment.id}`}
+                            >
+                              <Paperclip size={11} />
+                              <span class="max-w-[150px] truncate">{attachment.filename}</span>
+                              <span class="text-muted-foreground">
+                                {Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB
+                              </span>
+                            </a>
+                          {/each}
+                        </div>
+                      </details>
+                    </div>
+                  {/if}
                 </div>
-              </button>
-            {/each}
-            {#if selected.thread.length > visibleThreadLimit}
-              <button
-                class="w-full py-2 text-center text-xs text-primary hover:text-primary/80 transition-colors"
-                onclick={() => { visibleThreadLimit += 5; }}
-              >
-                + More ({selected.thread.length - visibleThreadLimit} remaining)
-              </button>
-            {/if}
-          </div>
+              {/if}
+            </div>
+          {/each}
+          {#if selected.thread.length > visibleThreadLimit}
+            <button
+              class="w-full py-2 text-center text-xs text-primary hover:text-primary/80 transition-colors"
+              onclick={() => { visibleThreadLimit += 5; }}
+            >
+              + More ({selected.thread.length - visibleThreadLimit} remaining)
+            </button>
+          {/if}
+        </section>
+      {:else}
+        <!-- Single message: show body directly -->
+        <section
+          class="mt-5 py-4 bg-muted/10 border-primary/25 border"
+          transition:slide={{ duration: 200 }}
+        >
+          {#if selected.message.safeBodyHtml}
+            <div class="flex items-center justify-between pb-3 px-4 md:px-5">
+              <div class="flex items-center gap-2">
+                <FileText size={14} class="text-muted-foreground" />
+                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                  Message
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <!-- Email Theme Toggle -->
+                <div class="flex border border-border/40 p-0.5 text-xs bg-background">
+                  <button
+                    class={`px-2 py-1 transition-all duration-150 ${
+                      emailTheme === 'dark'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onclick={() => (emailTheme = 'dark')}
+                    title="Dark Mode"
+                  >
+                    <Moon size={12} />
+                  </button>
+                  <button
+                    class={`px-2 py-1 transition-all duration-150 ${
+                      emailTheme === 'light'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onclick={() => (emailTheme = 'light')}
+                    title="Light Mode"
+                  >
+                    <Sun size={12} />
+                  </button>
+                </div>
+
+                <!-- HTML/Plain Toggle -->
+                <div class="flex border border-border/40 p-0.5 text-xs bg-background">
+                  <button
+                    class={`px-3 py-1 transition-all duration-150 ${
+                      bodyMode === 'html'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onclick={() => (bodyMode = 'html')}
+                  >
+                    HTML
+                  </button>
+                  <button
+                    class={`px-3 py-1 transition-all duration-150 ${
+                      bodyMode === 'text'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onclick={() => (bodyMode = 'text')}
+                  >
+                    Plain
+                  </button>
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          {#if bodyMode === 'html' && selected.message.safeBodyHtml}
+            <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
+              <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html selected.message.safeBodyHtml}
+              </article>
+            </div>
+          {:else}
+            <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground px-4 md:px-5">
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              {@html formatPlainText(selected.message.bodyText)}
+            </div>
+          {/if}
         </section>
       {/if}
-
-      <!-- Message Body Section -->
-      <section
-        class="mt-5 py-4 bg-muted/10 border-primary/25 border"
-        transition:slide={{ duration: 200 }}
-      >
-        {#if selected.message.safeBodyHtml}
-          <div class="flex items-center justify-between pb-3 px-4 md:px-5">
-            <div class="flex items-center gap-2">
-              <FileText size={14} class="text-muted-foreground" />
-              <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-                Message
-              </p>
-            </div>
-            <div class="flex items-center gap-3">
-              <!-- Email Theme Toggle -->
-              <div class="flex border border-border/40 p-0.5 text-xs bg-background">
-                <button
-                  class={`px-2 py-1 transition-all duration-150 ${
-                    emailTheme === 'dark'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (emailTheme = 'dark')}
-                  title="Dark Mode"
-                >
-                  <Moon size={12} />
-                </button>
-                <button
-                  class={`px-2 py-1 transition-all duration-150 ${
-                    emailTheme === 'light'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (emailTheme = 'light')}
-                  title="Light Mode"
-                >
-                  <Sun size={12} />
-                </button>
-              </div>
-
-              <!-- HTML/Plain Toggle -->
-              <div class="flex border border-border/40 p-0.5 text-xs bg-background">
-                <button
-                  class={`px-3 py-1 transition-all duration-150 ${
-                    bodyMode === 'html'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (bodyMode = 'html')}
-                >
-                  HTML
-                </button>
-                <button
-                  class={`px-3 py-1 transition-all duration-150 ${
-                    bodyMode === 'text'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (bodyMode = 'text')}
-                >
-                  Plain
-                </button>
-              </div>
-            </div>
-          </div>
-        {/if}
-
-        {#if bodyMode === 'html' && selected.message.safeBodyHtml}
-          <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
-            <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-              {@html selected.message.safeBodyHtml}
-            </article>
-          </div>
-        {:else}
-          <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground px-4 md:px-5">
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            {@html formatPlainText(selected.message.bodyText)}
-          </div>
-        {/if}
-      </section>
 
       <!-- AI Panel -->
       {#if selected.suggestion}
@@ -542,44 +707,6 @@
             <Sparkles size={13} class="mr-1" /> Generate Suggestion
           </Button>
         </div>
-      {/if}
-
-      <!-- Attachments Section -->
-      {#if selected.attachments?.length}
-        <section class="mt-5 py-4" transition:slide={{ duration: 200 }}>
-          <details>
-            <summary
-              class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm text-foreground"
-            >
-              <span class="flex items-center gap-2">
-                <Paperclip size={14} class="text-muted-foreground" />
-                <span class="font-medium">Attachments</span>
-                <span
-                  class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-muted text-muted-foreground"
-                  >{selected.attachments.length}</span
-                >
-              </span>
-              <ChevronDown
-                size={14}
-                class="text-muted-foreground transition-transform group-open:rotate-180"
-              />
-            </summary>
-            <div class="mt-3 flex flex-wrap gap-2">
-              {#each selected.attachments as attachment (attachment.id)}
-                <a
-                  class="inline-flex items-center gap-2 bg-muted px-3 py-1.5 text-xs text-foreground hover:bg-muted/40 transition-colors"
-                  href={`/api/messages/${selected.message.id}/attachments/${attachment.id}`}
-                >
-                  <Paperclip size={12} />
-                  <span class="max-w-[150px] truncate">{attachment.filename}</span>
-                  <span class="text-muted-foreground">
-                    {Math.max(1, Math.round((attachment.sizeBytes || 0) / 1024))}KB
-                  </span>
-                </a>
-              {/each}
-            </div>
-          </details>
-        </section>
       {/if}
     </article>
   </ScrollArea>

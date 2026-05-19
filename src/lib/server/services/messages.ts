@@ -278,6 +278,8 @@ export function getMessageDetail(id: number) {
       to: messages.to,
       date: messages.date,
       snippet: sql<string>`substr(${messages.bodyText}, 1, 180)`,
+      bodyText: messages.bodyText,
+      bodyHtml: messages.bodyHtml,
       isRead: messages.isRead,
       isAnswered: messages.isAnswered,
       isFlagged: messages.isFlagged
