@@ -63,7 +63,7 @@
     --secondary: oklch(0.18 0.08 280);
     --secondary-fg: oklch(0.88 0.02 100);
     --muted: oklch(0.16 0.06 280);
-    --muted-fg: oklch(0.75 0.08 280);
+    --muted-fg: oklch(0.82 0.08 280);
     --destructive: oklch(0.65 0.24 25);
     --destructive-fg: oklch(0.98 0.02 100);
     --border: oklch(0.2 0.08 280);
@@ -96,7 +96,7 @@
     --secondary: oklch(0.12 0.05 300);
     --secondary-fg: oklch(0.9 0.05 320);
     --muted: oklch(0.1 0.04 300);
-    --muted-fg: oklch(0.6 0.1 300);
+    --muted-fg: oklch(0.8 0.1 300);
     --destructive: oklch(0.6 0.2 0);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.15 0.05 300);
@@ -125,7 +125,7 @@
     --secondary: oklch(0.25 0.05 240);
     --secondary-fg: oklch(0.9 0.03 240);
     --muted: oklch(0.22 0.04 240);
-    --muted-fg: oklch(0.7 0.05 240);
+    --muted-fg: oklch(0.82 0.05 240);
     --destructive: oklch(0.6 0.15 30);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.28 0.06 240);
@@ -154,7 +154,7 @@
     --secondary: oklch(0.22 0.12 280);
     --secondary-fg: oklch(0.9 0.1 45);
     --muted: oklch(0.18 0.08 280);
-    --muted-fg: oklch(0.7 0.1 280);
+    --muted-fg: oklch(0.82 0.1 280);
     --destructive: oklch(0.55 0.22 25);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.25 0.1 280);
@@ -182,7 +182,7 @@
     --secondary: oklch(0.22 0.06 150);
     --secondary-fg: oklch(0.9 0.05 145);
     --muted: oklch(0.18 0.04 150);
-    --muted-fg: oklch(0.6 0.08 150);
+    --muted-fg: oklch(0.8 0.08 150);
     --destructive: oklch(0.6 0.18 20);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.25 0.06 150);
@@ -240,7 +240,7 @@
     --secondary: oklch(0.25 0.15 85);
     --secondary-fg: oklch(0.9 0.2 340);
     --muted: oklch(0.18 0.08 85);
-    --muted-fg: oklch(0.6 0.12 85);
+    --muted-fg: oklch(0.8 0.12 85);
     --destructive: oklch(0.55 0.25 20);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.28 0.12 85);
@@ -272,7 +272,7 @@
     --secondary: oklch(0.18 0.08 25);
     --secondary-fg: oklch(0.9 0.15 25);
     --muted: oklch(0.15 0.04 25);
-    --muted-fg: oklch(0.6 0.1 25);
+    --muted-fg: oklch(0.8 0.1 25);
     --destructive: oklch(0.45 0.2 25);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.35 0.08 25); /* Polished Steel */
@@ -302,7 +302,7 @@
     --secondary: oklch(0.65 0.3 330); /* Electric Pink */
     --secondary-fg: oklch(1 0 0);
     --muted: oklch(0.18 0.1 280);
-    --muted-fg: oklch(0.65 0.15 280);
+    --muted-fg: oklch(0.82 0.15 280);
     --destructive: oklch(0.6 0.25 0);
     --destructive-fg: oklch(1 0 0);
     --border: oklch(0.3 0.15 280);
