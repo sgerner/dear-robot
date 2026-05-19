@@ -16,7 +16,6 @@
     ChevronDown,
     MessageSquare,
     Sparkles,
-    FileText,
     ThumbsUp,
     Sun,
     Moon
@@ -117,7 +116,7 @@
   <ScrollArea class="h-[calc(100dvh-3.5rem)] md:h-screen scrollbar-thin">
     <article class="mx-auto max-w-4xl p-4 md:p-6 lg:p-8">
       <!-- Header -->
-      <header class="pb-5">
+      <header class="pb-3">
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <span
             class="text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-2 py-0.5 bg-muted"
@@ -135,8 +134,61 @@
           {selected.message.subject}
         </h2>
 
-        <div class="mt-3 flex items-center gap-2 text-sm">
-          <time class="text-muted-foreground">{formatDate(selected.message.date)}</time>
+        <div class="mt-3 flex items-center justify-between gap-2">
+          <time class="text-muted-foreground text-sm">{formatDate(selected.message.date)}</time>
+
+          {#if selected.message.safeBodyHtml}
+            <div class="flex items-center gap-1 shrink-0">
+              <!-- Light/Dark toggle -->
+              <div class="flex border border-border/40 p-0.5 bg-background">
+                <button
+                  class={`px-1.5 py-0.5 transition-all duration-150 ${
+                    emailTheme === 'dark'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (emailTheme = 'dark')}
+                  title="Dark Mode"
+                >
+                  <Moon size={11} />
+                </button>
+                <button
+                  class={`px-1.5 py-0.5 transition-all duration-150 ${
+                    emailTheme === 'light'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (emailTheme = 'light')}
+                  title="Light Mode"
+                >
+                  <Sun size={11} />
+                </button>
+              </div>
+              <!-- HTML/Plain toggle -->
+              <div class="flex border border-border/40 p-0.5 bg-background text-[11px]">
+                <button
+                  class={`px-1.5 py-0.5 transition-all duration-150 ${
+                    bodyMode === 'html'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (bodyMode = 'html')}
+                >
+                  H
+                </button>
+                <button
+                  class={`px-1.5 py-0.5 transition-all duration-150 ${
+                    bodyMode === 'text'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onclick={() => (bodyMode = 'text')}
+                >
+                  P
+                </button>
+              </div>
+            </div>
+          {/if}
         </div>
       </header>
 
@@ -179,7 +231,7 @@
 
       <!-- Thread/Conversation Section -->
       {#if selected.thread?.length > 1}
-        <section class="mt-5 py-4" transition:slide={{ duration: 200 }}>
+        <section class="mt-4 py-4" transition:slide={{ duration: 200 }}>
           <div class="space-y-2">
             {#each [...selected.thread].reverse().slice(0, visibleThreadLimit) as item (item.id)}
               <button
@@ -220,73 +272,8 @@
         </section>
       {/if}
 
-      <!-- Message Body Section -->
-      <section
-        class="mt-5 py-4 bg-muted/10 border-primary/25 border"
-        transition:slide={{ duration: 200 }}
-      >
-        {#if selected.message.safeBodyHtml}
-          <div class="flex items-center justify-between pb-3 px-4 md:px-5">
-            <div class="flex items-center gap-2">
-              <FileText size={14} class="text-muted-foreground" />
-              <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-                Message
-              </p>
-            </div>
-            <div class="flex items-center gap-3">
-              <!-- Email Theme Toggle -->
-              <div class="flex border border-border/40 p-0.5 text-xs bg-background">
-                <button
-                  class={`px-2 py-1 transition-all duration-150 ${
-                    emailTheme === 'dark'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (emailTheme = 'dark')}
-                  title="Dark Mode"
-                >
-                  <Moon size={12} />
-                </button>
-                <button
-                  class={`px-2 py-1 transition-all duration-150 ${
-                    emailTheme === 'light'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (emailTheme = 'light')}
-                  title="Light Mode"
-                >
-                  <Sun size={12} />
-                </button>
-              </div>
-
-              <!-- HTML/Plain Toggle -->
-              <div class="flex border border-border/40 p-0.5 text-xs bg-background">
-                <button
-                  class={`px-3 py-1 transition-all duration-150 ${
-                    bodyMode === 'html'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (bodyMode = 'html')}
-                >
-                  HTML
-                </button>
-                <button
-                  class={`px-3 py-1 transition-all duration-150 ${
-                    bodyMode === 'text'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onclick={() => (bodyMode = 'text')}
-                >
-                  Plain
-                </button>
-              </div>
-            </div>
-          </div>
-        {/if}
-
+      <!-- Message Body -->
+      <div transition:slide={{ duration: 200 }}>
         {#if bodyMode === 'html' && selected.message.safeBodyHtml}
           <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
             <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
@@ -295,17 +282,17 @@
             </article>
           </div>
         {:else}
-          <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground px-4 md:px-5">
+          <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground">
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
             {@html formatPlainText(selected.message.bodyText)}
           </div>
         {/if}
-      </section>
+      </div>
 
       <!-- AI Panel -->
       {#if selected.suggestion}
         <section
-          class="mt-5 bg-primary/10 border-l-2 border-primary/20"
+          class="mt-4 bg-primary/10 border-l-2 border-primary/20"
           data-testid="ai-action-card"
           transition:slide={{ duration: 200 }}
         >
@@ -533,7 +520,7 @@
           </div>
         </section>
       {:else}
-        <div class="mt-5" transition:fade={{ duration: 150 }}>
+        <div class="mt-4" transition:fade={{ duration: 150 }}>
           <Button
             variant="outline"
             size="sm"
@@ -546,7 +533,7 @@
 
       <!-- Attachments Section -->
       {#if selected.attachments?.length}
-        <section class="mt-5 py-4" transition:slide={{ duration: 200 }}>
+        <section class="mt-4 py-4" transition:slide={{ duration: 200 }}>
           <details>
             <summary
               class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm text-foreground"
