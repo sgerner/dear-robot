@@ -63,6 +63,10 @@ export type MailProvider = {
     uidValidity: string | null;
     highestUid: number;
   }>;
+  fetchAllUids?(
+    account: Account,
+    folderPath: string
+  ): Promise<number[]>;
   watchInbox(
     account: Account,
     handlers: {

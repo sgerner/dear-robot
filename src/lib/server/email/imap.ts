@@ -191,6 +191,21 @@ export const imapEmailProvider: MailProvider = {
       await client.logout().catch(() => undefined);
     }
   },
+  async fetchAllUids(account, folderPath) {
+    const client = await clientFor(account);
+    await client.connect();
+    try {
+      const lock = await client.getMailboxLock(folderPath);
+      try {
+        const uids = await client.search({ all: true }, { uid: true });
+        return Array.isArray(uids) ? uids.map(Number) : [];
+      } finally {
+        lock.release();
+      }
+    } finally {
+      await client.logout().catch(() => undefined);
+    }
+  },
   async watchInbox(account, handlers, signal) {
     while (!signal.aborted) {
       const client = await clientFor(account);

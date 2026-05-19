@@ -126,6 +126,28 @@ export async function syncAccount(accountId: number) {
         }
       }
       const highestUid = Math.max(maxSeenUid, remoteState?.highestUid ?? 0);
+      if (provider.fetchAllUids && priorState?.uidValidity && !uidValidityChanged) {
+        const remoteUids = await provider.fetchAllUids(account, folder.path);
+        const remoteUidSet = new Set(remoteUids);
+        const localRows = db
+          .select({ id: messages.id, providerMessageId: messages.providerMessageId })
+          .from(messages)
+          .where(
+            and(eq(messages.accountId, accountId), eq(messages.folderPath, folder.path))
+          )
+          .all();
+        const staleIds: number[] = [];
+        for (const local of localRows) {
+          const uid = messageUid(local.providerMessageId);
+          if (uid > 0 && !remoteUidSet.has(uid)) {
+            staleIds.push(local.id);
+          }
+        }
+        for (let offset = 0; offset < staleIds.length; offset += 400) {
+          const batch = staleIds.slice(offset, offset + 400);
+          db.delete(messages).where(inArray(messages.id, batch)).run();
+        }
+      }
       db.insert(folderSyncState)
         .values({
           accountId,
