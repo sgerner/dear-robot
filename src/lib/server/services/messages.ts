@@ -244,6 +244,82 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   }
 }
 
+export function searchRelatedEmailsForAgent(input: {
+  messageId: number;
+  query?: string | null;
+  subject?: string | null;
+  sender?: string | null;
+  limit?: number;
+}) {
+  const anchor = db.select().from(messages).where(eq(messages.id, input.messageId)).get();
+  if (!anchor) return [];
+  const limit = Math.max(1, Math.min(20, input.limit ?? 8));
+  const where = [
+    eq(messages.accountId, anchor.accountId),
+    sql`${messages.id} <> ${input.messageId}`
+  ];
+  if (input.sender?.trim()) where.push(like(messages.from, `%${input.sender.trim()}%`));
+  if (input.subject?.trim()) where.push(like(messages.subject, `%${input.subject.trim()}%`));
+  const ftsQuery = input.query ? toFtsQuery(input.query) : '';
+  if (ftsQuery) {
+    where.push(sql`messages.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ${ftsQuery})`);
+  } else if (input.query?.trim()) {
+    const pattern = `%${input.query.trim()}%`;
+    where.push(
+      sql`(${messages.subject} LIKE ${pattern} OR ${messages.from} LIKE ${pattern} OR ${messages.to} LIKE ${pattern} OR ${messages.bodyText} LIKE ${pattern})`
+    );
+  }
+  try {
+    return db
+      .select({
+        id: messages.id,
+        accountId: messages.accountId,
+        subject: messages.subject,
+        from: messages.from,
+        to: messages.to,
+        date: messages.date,
+        folderPath: messages.folderPath,
+        snippet: sql<string>`substr(${messages.bodyText}, 1, 220)`,
+        isRead: messages.isRead,
+        isFlagged: messages.isFlagged
+      })
+      .from(messages)
+      .where(and(...where))
+      .orderBy(desc(messages.date))
+      .limit(limit)
+      .all();
+  } catch (error) {
+    if (!input.query?.trim()) throw error;
+    const pattern = `%${input.query.trim()}%`;
+    const fallbackWhere = [
+      eq(messages.accountId, anchor.accountId),
+      sql`${messages.id} <> ${input.messageId}`,
+      sql`(${messages.subject} LIKE ${pattern} OR ${messages.from} LIKE ${pattern} OR ${messages.to} LIKE ${pattern} OR ${messages.bodyText} LIKE ${pattern})`
+    ];
+    if (input.sender?.trim()) fallbackWhere.push(like(messages.from, `%${input.sender.trim()}%`));
+    if (input.subject?.trim())
+      fallbackWhere.push(like(messages.subject, `%${input.subject.trim()}%`));
+    return db
+      .select({
+        id: messages.id,
+        accountId: messages.accountId,
+        subject: messages.subject,
+        from: messages.from,
+        to: messages.to,
+        date: messages.date,
+        folderPath: messages.folderPath,
+        snippet: sql<string>`substr(${messages.bodyText}, 1, 220)`,
+        isRead: messages.isRead,
+        isFlagged: messages.isFlagged
+      })
+      .from(messages)
+      .where(and(...fallbackWhere))
+      .orderBy(desc(messages.date))
+      .limit(limit)
+      .all();
+  }
+}
+
 export function getMessageDetail(id: number) {
   const message = db.select().from(messages).where(eq(messages.id, id)).get();
   if (!message) return null;

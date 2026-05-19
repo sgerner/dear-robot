@@ -5,7 +5,12 @@ import { db, nowIso } from '../db';
 import { aiSuggestions, automationPolicies, messages, taskRuns, taskSteps } from '../db/schema';
 import { readAgentInstructions } from '../memory';
 import { buildMemoryPromptContext } from '../memory-learning';
-import { getMessageDetail, listFoldersWithCounts, moveMessage } from '../services/messages';
+import {
+  getMessageDetail,
+  listFoldersWithCounts,
+  moveMessage,
+  searchRelatedEmailsForAgent
+} from '../services/messages';
 import { buildAgentPlanMessages } from './prompts';
 import { AgentPlanSchema, TaskApproveSchema, TaskPlanInputSchema, type AgentPlan } from './schema';
 import {
@@ -13,6 +18,16 @@ import {
   getAvailableAgentToolByName,
   listAvailableAgentTools
 } from './tools';
+
+const BUILTIN_MAILBOX_SEARCH_TOOL = {
+  name: 'mailbox_search',
+  description:
+    'Search related emails outside the current thread using query, sender, and subject filters.',
+  kind: 'builtin',
+  readOnly: true,
+  skillsMarkdown:
+    'Use when the task needs cross-thread context, prior commitments, related incidents, or historical outcomes.'
+} as const;
 
 export function listTaskRuns(messageId?: number, limit = 50) {
   return db
@@ -108,6 +123,7 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     (folder) => folder.path
   );
   const tools = listAvailableAgentTools().filter((tool) => tool.isEnabled);
+  const relatedEmails = loadRelatedEmailContext(messageId, detail.message.subject, detail.message.from);
   const complexity = classifyComplexity(
     detail.message.subject,
     detail.message.bodyText,
@@ -129,7 +145,8 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     availableFolders: accountFolders,
     existingSuggestion: suggestion,
     note: parsed.note || null,
-    tools: tools.map((tool) => ({
+    relatedEmailContext: relatedEmails,
+    tools: [BUILTIN_MAILBOX_SEARCH_TOOL, ...tools].map((tool) => ({
       name: tool.name,
       description: tool.description || 'No description',
       kind: tool.kind,
@@ -313,6 +330,17 @@ async function executeStep(
   }
   if (step.kind === 'tool_call') {
     if (!step.toolName) throw new Error('tool_call step missing tool_name');
+    if (step.toolName === BUILTIN_MAILBOX_SEARCH_TOOL.name) {
+      const query = typeof input.query === 'string' ? input.query : null;
+      const sender = typeof input.sender === 'string' ? input.sender : null;
+      const subject = typeof input.subject === 'string' ? input.subject : null;
+      const limit =
+        typeof input.limit === 'number' && Number.isFinite(input.limit)
+          ? Math.max(1, Math.min(20, Math.floor(input.limit)))
+          : 8;
+      const rows = searchRelatedEmailsForAgent({ messageId, query, sender, subject, limit });
+      return { query, sender, subject, count: rows.length, results: rows };
+    }
     const tool = getAvailableAgentToolByName(step.toolName);
     if (!tool) throw new Error(`Tool "${step.toolName}" not found or disabled`);
     const executed = await executeTool(tool, input, { taskRunId, taskStepId: step.id });
@@ -490,4 +518,52 @@ function inferFolderFromDetails(details: string) {
 function summarizeOutputs(outputs: Array<Record<string, unknown>>) {
   if (!outputs.length) return 'No executable steps completed.';
   return `Completed ${outputs.length} step(s).`;
+}
+
+function loadRelatedEmailContext(messageId: number, subject: string, sender: string) {
+  const senderEmail = extractEmail(sender);
+  const normalizedSubject = normalizeSubjectForSearch(subject);
+  const subjectMatches = normalizedSubject
+    ? searchRelatedEmailsForAgent({
+        messageId,
+        subject: normalizedSubject,
+        query: normalizedSubject,
+        limit: 6
+      })
+    : [];
+  const senderMatches = senderEmail
+    ? searchRelatedEmailsForAgent({ messageId, sender: senderEmail, limit: 6 })
+    : [];
+  const merged = [...subjectMatches, ...senderMatches]
+    .filter((row, idx, all) => all.findIndex((candidate) => candidate.id === row.id) === idx)
+    .slice(0, 10);
+  return merged.map((row) => ({
+    id: row.id,
+    date: row.date,
+    from: row.from,
+    subject: row.subject,
+    folderPath: row.folderPath,
+    snippet: row.snippet
+  }));
+}
+
+function extractEmail(value: string) {
+  const match = value.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
+  return match?.[1]?.toLowerCase() || null;
+}
+
+function normalizeSubjectForSearch(subject: string) {
+  const normalized = subject
+    .toLowerCase()
+    .replace(/^(re|fwd?):\s*/i, '')
+    .replace(/\[[^\]]+\]/g, ' ')
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return '';
+  const tokens = normalized
+    .split(' ')
+    .filter((token) => token.length > 2)
+    .slice(0, 8);
+  return tokens.join(' ');
 }

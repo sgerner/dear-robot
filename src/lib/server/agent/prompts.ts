@@ -13,6 +13,14 @@ export function buildAgentPlanMessages(input: {
   availableFolders: string[];
   existingSuggestion: EmailSuggestion | null;
   note: string | null;
+  relatedEmailContext: Array<{
+    id: number;
+    date: string;
+    from: string;
+    subject: string;
+    folderPath: string;
+    snippet: string;
+  }>;
   tools: Array<{
     name: string;
     description: string;
@@ -75,7 +83,9 @@ Safety:
 - legal/financial/hr/medical/tax/contract/refund/chargeback/sensitive personal data => medium/high risk.
 - never auto-send.
 - never permanently delete.
-- if uncertain, ask for approval in the plan.`
+- if uncertain, ask for approval in the plan.
+- for advanced tasks, use related emails outside the thread when relevant.
+- prefer mailbox_search when you need historical context by sender, subject, or topic.`
     },
     {
       role: 'user',
@@ -95,6 +105,9 @@ Available folders: ${input.availableFolders.join(', ')}
 
 Existing suggestion:
 ${input.existingSuggestion ? JSON.stringify(input.existingSuggestion, null, 2) : 'None'}
+
+Related emails outside current thread:
+${input.relatedEmailContext.length ? JSON.stringify(input.relatedEmailContext, null, 2) : 'None'}
 
 User note:
 ${input.note || 'None'}
