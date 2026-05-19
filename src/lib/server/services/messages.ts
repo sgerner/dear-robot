@@ -249,7 +249,17 @@ export function getMessageDetail(id: number) {
   if (!message) return null;
   const account = db.select().from(accounts).where(eq(accounts.id, message.accountId)).get();
   const attachments = db
-    .select()
+    .select({
+      id: messageAttachments.id,
+      messageId: messageAttachments.messageId,
+      filename: messageAttachments.filename,
+      contentType: messageAttachments.contentType,
+      sizeBytes: messageAttachments.sizeBytes,
+      contentId: messageAttachments.contentId,
+      disposition: messageAttachments.disposition,
+      createdAt: messageAttachments.createdAt,
+      hasContent: sql<boolean>`${messageAttachments.contentBase64} IS NOT NULL`
+    })
     .from(messageAttachments)
     .where(eq(messageAttachments.messageId, id))
     .all();
@@ -277,9 +287,7 @@ export function getMessageDetail(id: number) {
       from: messages.from,
       to: messages.to,
       date: messages.date,
-      snippet: sql<string>`substr(${messages.bodyText}, 1, 180)`,
-      bodyText: messages.bodyText,
-      bodyHtml: messages.bodyHtml,
+      bodyText: sql<string>`substr(${messages.bodyText}, 1, 500)`,
       isRead: messages.isRead,
       isAnswered: messages.isAnswered,
       isFlagged: messages.isFlagged
@@ -303,10 +311,7 @@ export function getMessageDetail(id: number) {
       safeBodyHtml: sanitizeEmailHtml(message.bodyHtml)
     },
     account,
-    attachments: attachments.map((attachment) => ({
-      ...attachment,
-      hasContent: Boolean(attachment.contentBase64)
-    })),
+    attachments,
     suggestion: suggestions[0] ?? null,
     suggestions,
     executed,
@@ -322,14 +327,24 @@ function getMessageWithAccount(id: number) {
         accountId: messages.accountId,
         providerMessageId: messages.providerMessageId,
         threadId: messages.threadId,
+        messageIdHeader: messages.messageIdHeader,
+        inReplyTo: messages.inReplyTo,
+        references: messages.references,
         folderPath: messages.folderPath,
         subject: messages.subject,
         from: messages.from,
         to: messages.to,
+        cc: messages.cc,
+        bcc: messages.bcc,
         date: messages.date,
+        bodyText: messages.bodyText,
+        bodyHtml: messages.bodyHtml,
+        latestSuggestionId: messages.latestSuggestionId,
         isRead: messages.isRead,
+        isAnswered: messages.isAnswered,
         isFlagged: messages.isFlagged,
-        isAnswered: messages.isAnswered
+        createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt
       },
       account: accounts
     })

@@ -162,6 +162,44 @@ export async function replaceCache(storeName: StoreName, rows: Array<Record<stri
   db.close();
 }
 
+export async function syncCache(
+  storeName: StoreName,
+  rows: Array<Record<string, unknown>>,
+  options: { deleteMissing?: boolean } = {}
+) {
+  if (typeof indexedDB === 'undefined') return;
+  const db = await openCache();
+  const existingRows = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const request = tx.objectStore(storeName).getAll();
+    request.onsuccess = () => resolve((request.result || []) as Array<Record<string, unknown>>);
+    request.onerror = () => reject(request.error);
+  });
+  const existingById = new Map(existingRows.map((row) => [row.id, row]));
+  const nextIds = new Set(rows.map((row) => row.id));
+  const rowsToPut: Array<Record<string, unknown>> = [];
+
+  for (const row of rows) {
+    const existing = existingById.get(row.id);
+    if (!existing?.__enc && JSON.stringify(existing) === JSON.stringify(row)) continue;
+    rowsToPut.push(await protectRecord(row));
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    for (const row of rowsToPut) store.put(row);
+    if (options.deleteMissing) {
+      for (const row of existingRows) {
+        if (!nextIds.has(row.id)) store.delete(row.id as IDBValidKey);
+      }
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
 export async function setCacheMeta(key: string, value: unknown) {
   if (typeof indexedDB === 'undefined') return;
   const row = await protectRecord({ key, value, updatedAt: new Date().toISOString() });

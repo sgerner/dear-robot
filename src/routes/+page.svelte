@@ -22,9 +22,9 @@
     listOutbox,
     loadCacheEncryptionPassphrase,
     putLocalDraft,
-    replaceCache,
     setCacheEncryptionPassphrase,
     setCacheMeta,
+    syncCache,
     upsertCache
   } from '$lib/client/local-cache';
   import ComposeDrawer from '$lib/components/ComposeDrawer.svelte';
@@ -35,13 +35,6 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/Card.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
-  import SettingsAccounts from '$lib/components/settings/SettingsAccounts.svelte';
-  import SettingsAdvanced from '$lib/components/settings/SettingsAdvanced.svelte';
-  import SettingsCategoryList from '$lib/components/settings/SettingsCategoryList.svelte';
-  import SettingsInterface from '$lib/components/settings/SettingsInterface.svelte';
-  import SettingsMemory from '$lib/components/settings/SettingsMemory.svelte';
-  import SettingsModels from '$lib/components/settings/SettingsModels.svelte';
-  import SettingsTools from '$lib/components/settings/SettingsTools.svelte';
 
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
@@ -444,39 +437,48 @@
 
   $effect(() => {
     if (!isInboxView(view)) return;
-    void replaceCache('messages', data.messages);
-    void replaceCache('folders', data.folders);
-    void replaceCache('contacts', data.contacts);
+    void syncCache('messages', data.messages, { deleteMissing: true });
+    void syncCache('folders', data.folders, { deleteMissing: true });
+    void syncCache('contacts', data.contacts, { deleteMissing: true });
     void setCacheMeta('lastPageCacheAt', new Date().toISOString());
     cacheEncrypted = cacheEncryptionEnabled();
 
-    // Prefetch message details for all visible messages
     let aborted = false;
+    const warmableMessageIds = (data.messages || [])
+      .map((message: { id: number }) => message.id)
+      .filter((id: number) => id !== data.selected?.message?.id)
+      .slice(0, 3);
     const prefetch = async () => {
-      const messagesToPrefetch = data.messages || [];
-      for (const msg of messagesToPrefetch) {
+      for (const id of warmableMessageIds) {
         if (aborted) return;
         try {
-          const cached = await getCache('message_details', msg.id);
+          const cached = await getCache('message_details', id);
           if (!cached) {
-            // Small delay to be polite to the server
             await new Promise((resolve) => setTimeout(resolve, 50));
             if (aborted) return;
-            const res = await fetch(`/api/messages/${msg.id}`);
+            const res = await fetch(`/api/messages/${id}`);
             if (res.ok) {
               const detail = await res.json();
-              await upsertCache('message_details', [{ id: msg.id, ...detail }]);
+              await upsertCache('message_details', [{ id, ...detail }]);
             }
           }
         } catch (e) {
-          console.error('Prefetch failed for message', msg.id, e);
+          console.error('Prefetch failed for message', id, e);
         }
       }
     };
-    void prefetch();
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(() => void prefetch(), { timeout: 1500 });
+      return () => {
+        aborted = true;
+        window.cancelIdleCallback(idleId);
+      };
+    }
+    const prefetchTimer = setTimeout(() => void prefetch(), 600);
 
     return () => {
       aborted = true;
+      clearTimeout(prefetchTimer);
     };
   });
 
@@ -3332,146 +3334,167 @@
         {#if isMobileViewport && !mobileSettingsDetailOpen}
           <h2 class="text-2xl font-semibold text-foreground">Settings</h2>
           <p class="mt-2 text-muted-foreground">Choose what you want to configure.</p>
-          <SettingsCategoryList
-            categories={settingsCategories as unknown as Array<{
-              key: string;
-              label: string;
-              detail: string;
-            }>}
-            selected={settingsCategory}
-            onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
-          />
+          {#await import('$lib/components/settings/SettingsCategoryList.svelte') then module}
+            {@const SettingsCategoryList = module.default}
+            <SettingsCategoryList
+              categories={settingsCategories as unknown as Array<{
+                key: string;
+                label: string;
+                detail: string;
+              }>}
+              selected={settingsCategory}
+              onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
+            />
+          {/await}
         {:else}
           <h2 class="text-2xl font-semibold text-foreground">Configuration</h2>
           {#if settingsCategory === 'accounts'}
-            <SettingsAccounts
-              {data}
-              bind:accountForm
-              bind:googleOauthSettings
-              {googleOauthHasSecret}
-              {googleOauthConnectedEmail}
-              {copyToClipboard}
-              {folderRoleOptions}
-              {saveFolderRole}
-              {accountAction}
-              {addAccount}
-              {testNewAccount}
-              {discoverAccountSettings}
-              {saveGoogleOauthSettings}
-              {startGoogleConnect}
-              {accountAddState}
-              {accountAddError}
-              {accountTestState}
-              {accountTestError}
-              {accountDiscoverState}
-              {accountDiscoverError}
-              />
+            {#await import('$lib/components/settings/SettingsAccounts.svelte') then module}
+              {@const SettingsAccounts = module.default}
+              <SettingsAccounts
+                {data}
+                bind:accountForm
+                bind:googleOauthSettings
+                {googleOauthHasSecret}
+                {googleOauthConnectedEmail}
+                {copyToClipboard}
+                {folderRoleOptions}
+                {saveFolderRole}
+                {accountAction}
+                {addAccount}
+                {testNewAccount}
+                {discoverAccountSettings}
+                {saveGoogleOauthSettings}
+                {startGoogleConnect}
+                {accountAddState}
+                {accountAddError}
+                {accountTestState}
+                {accountTestError}
+                {accountDiscoverState}
+                {accountDiscoverError}
+                />
+            {/await}
           {/if}
           {#if settingsCategory === 'memory'}
-            <SettingsMemory
-              {data}
-              bind:memoryAssistantPrompt
-              bind:coreProfileText
-              bind:memoryAdvancedMode
-              bind:memoryText
-              bind:skillsText
-              dictationTargetId={dictationTarget?.id || null}
-              {dictationActive}
-              {dictationUnavailable}
-              {dictationLevel}
-              {toggleDictation}
-              {applyMemoryAssistant}
-              {saveCoreProfile}
-              {saveSkills}
-              {resetSkills}
-              {setAdvancedMemoryMode}
-              {saveMemory}
-              {resetMemory}
-              {removeMemoryRule}
-            />
+            {#await import('$lib/components/settings/SettingsMemory.svelte') then module}
+              {@const SettingsMemory = module.default}
+              <SettingsMemory
+                {data}
+                bind:memoryAssistantPrompt
+                bind:coreProfileText
+                bind:memoryAdvancedMode
+                bind:memoryText
+                bind:skillsText
+                dictationTargetId={dictationTarget?.id || null}
+                {dictationActive}
+                {dictationUnavailable}
+                {dictationLevel}
+                {toggleDictation}
+                {applyMemoryAssistant}
+                {saveCoreProfile}
+                {saveSkills}
+                {resetSkills}
+                {setAdvancedMemoryMode}
+                {saveMemory}
+                {resetMemory}
+                {removeMemoryRule}
+              />
+            {/await}
           {/if}
           {#if settingsCategory === 'models'}
-            <SettingsModels
-              {data}
-              {coreAiProfileKeys}
-              bind:aiProfileForms
-              bind:profileMode
-              bind:profileEnvValues
-              {aiProfileRecommendations}
-              {modelsDevProviders}
-              {loadModelsDevCatalog}
-              {selectCatalogProviderForProfile}
-              {selectedCatalogModels}
-              {selectedCatalogProvider}
-              {requiredEnvVars}
-              {setProfileMode}
-              {testAiProfile}
-              {saveAiProfile}
-              {modelsDevLoading}
-              bind:audioProviderId
-              bind:audioModelId
-              bind:audioApiKey
-              {audioProvider}
-              {audioModels}
-              {selectAudioProvider}
-              {saveAudioDictationProfile}
-            />
+            {#await import('$lib/components/settings/SettingsModels.svelte') then module}
+              {@const SettingsModels = module.default}
+              <SettingsModels
+                {data}
+                {coreAiProfileKeys}
+                bind:aiProfileForms
+                bind:profileMode
+                bind:profileEnvValues
+                {aiProfileRecommendations}
+                {modelsDevProviders}
+                {loadModelsDevCatalog}
+                {selectCatalogProviderForProfile}
+                {selectedCatalogModels}
+                {selectedCatalogProvider}
+                {requiredEnvVars}
+                {setProfileMode}
+                {testAiProfile}
+                {saveAiProfile}
+                {modelsDevLoading}
+                bind:audioProviderId
+                bind:audioModelId
+                bind:audioApiKey
+                {audioProvider}
+                {audioModels}
+                {selectAudioProvider}
+                {saveAudioDictationProfile}
+              />
+            {/await}
           {/if}
           {#if settingsCategory === 'tools'}
-            <SettingsTools
-              {data}
-              {copyToClipboard}
-              {testAgentTool}
-              {toggleAgentTool}
-              {removeAgentTool}
-              {addAgentTool}
-              {saveToolSkills}
-              {saveToolConfig}
-              bind:obsidianSettings
-              {saveObsidianSettings}
-              {installCliPackage}
-              {addWebhook}
-              bind:agentToolForm
-              bind:cliInstallForm
-              bind:webhookTarget
-            />
+            {#await import('$lib/components/settings/SettingsTools.svelte') then module}
+              {@const SettingsTools = module.default}
+              <SettingsTools
+                {data}
+                {copyToClipboard}
+                {testAgentTool}
+                {toggleAgentTool}
+                {removeAgentTool}
+                {addAgentTool}
+                {saveToolSkills}
+                {saveToolConfig}
+                bind:obsidianSettings
+                {saveObsidianSettings}
+                {installCliPackage}
+                {addWebhook}
+                bind:agentToolForm
+                bind:cliInstallForm
+                bind:webhookTarget
+              />
+            {/await}
           {/if}
           {#if settingsCategory === 'interface'}
-            <SettingsInterface
-              {quickActionCatalog}
-              {quickActionIds}
-              {resetInterfacePreferences}
-              {setQuickActionEnabled}
-              {moveQuickAction}
-              {swipeSettings}
-              {swipeActionCatalog}
-              {updateSwipeSetting}
-              folderGroups={folderGroups()}
-              {saveFolderRole}
-              {folderRoleOptions}
-            />
+            {#await import('$lib/components/settings/SettingsInterface.svelte') then module}
+              {@const SettingsInterface = module.default}
+              <SettingsInterface
+                {quickActionCatalog}
+                {quickActionIds}
+                {resetInterfacePreferences}
+                {setQuickActionEnabled}
+                {moveQuickAction}
+                {swipeSettings}
+                {swipeActionCatalog}
+                {updateSwipeSetting}
+                folderGroups={folderGroups()}
+                {saveFolderRole}
+                {folderRoleOptions}
+              />
+            {/await}
           {/if}
           {#if settingsCategory === 'advanced'}
-            <SettingsAdvanced
-              bind:cachePassphrase
-              {cacheEncrypted}
-              {saveCacheEncryption}
-              {backups}
-              {backupPolicy}
-              {createBackupNow}
-              {refreshBackups}
-              {restoreBackupNow}
-              {auditSnapshot}
-              {loadAuditSnapshot}
-              bind:contactsImportCsv
-              {exportContacts}
-              {importContacts}
-              dictationTargetId={dictationTarget?.id || null}
-              {dictationActive}
-              {dictationUnavailable}
-              {dictationLevel}
-              {toggleDictation}
-            />
+            {#await import('$lib/components/settings/SettingsAdvanced.svelte') then module}
+              {@const SettingsAdvanced = module.default}
+              <SettingsAdvanced
+                bind:cachePassphrase
+                {cacheEncrypted}
+                {saveCacheEncryption}
+                {backups}
+                {backupPolicy}
+                {createBackupNow}
+                {refreshBackups}
+                {restoreBackupNow}
+                {auditSnapshot}
+                {loadAuditSnapshot}
+                bind:contactsImportCsv
+                {exportContacts}
+                {importContacts}
+                dictationTargetId={dictationTarget?.id || null}
+                {dictationActive}
+                {dictationUnavailable}
+                {dictationLevel}
+                {toggleDictation}
+              />
+            {/await}
           {/if}
         {/if}
       </div>

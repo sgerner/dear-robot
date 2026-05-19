@@ -64,8 +64,8 @@ function profileForCompose(): ProviderConfig {
 
 export async function POST({ request }) {
   const { prompt, to, subject, context } = GenerateComposeSchema.parse(await request.json());
-  const profile = profileForCompose();
-  if (!profile.isEnabled) throw error(400, 'Primary AI profile is disabled');
+  const profile = profileForCompose() as ProviderConfig & { isEnabled?: boolean };
+  if (profile.isEnabled === false) throw error(400, 'Primary AI profile is disabled');
   if (profile.transport !== 'openai_compatible')
     throw error(400, 'Compose generation currently supports OpenAI-compatible profiles only');
   let contextText = '';
