@@ -570,6 +570,9 @@ export const aiProfiles = sqliteTable(
     preset: text('preset'),
     isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),
     notes: text('notes'),
+    // Nullable — existing profiles default to provider's standard reasoning level.
+    // Set to 'low', 'medium', 'high', or 'extended' to override per-profile.
+    variant: text('variant'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull()
   },

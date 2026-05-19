@@ -803,7 +803,8 @@ function migrateAiProfileColumns() {
   const existing = new Set(columns.map((column) => column.name));
   const additions: Array<[string, string]> = [
     ['proxy_enabled', 'INTEGER NOT NULL DEFAULT 0'],
-    ['proxy_url', 'TEXT']
+    ['proxy_url', 'TEXT'],
+    ['variant', 'TEXT']
   ];
   for (const [name, definition] of additions) {
     if (!existing.has(name))

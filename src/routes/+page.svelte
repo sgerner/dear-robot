@@ -29,6 +29,7 @@
   import MobileQuickActions from '$lib/components/MobileQuickActions.svelte';
   import InboxSidebar from '$lib/components/InboxSidebar.svelte';
   import MessageList from '$lib/components/MessageList.svelte';
+  import MessageDetail from '$lib/components/MessageDetail.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/Card.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
@@ -397,15 +398,17 @@
 
   $effect(() => {
     const currentSelectedMessageId = data.selected?.message?.id ?? null;
-    if (untrack(() => selectedMessageId) !== currentSelectedMessageId) {
+    const previousSelectedMessageId = untrack(() => selectedMessageId);
+    if (previousSelectedMessageId !== currentSelectedMessageId) {
       selectedMessageId = currentSelectedMessageId;
-      if (currentSelectedMessageId) {
-        const next = new Set(untrack(() => openMessageIds));
-        if (!next.has(currentSelectedMessageId)) {
-          next.add(currentSelectedMessageId);
-          openMessageIds = next;
-        }
+      const next = new Set(untrack(() => openMessageIds));
+      if (previousSelectedMessageId) {
+        next.delete(previousSelectedMessageId);
       }
+      if (currentSelectedMessageId) {
+        next.add(currentSelectedMessageId);
+      }
+      openMessageIds = next;
     }
   });
 
@@ -2675,7 +2678,7 @@
 </svelte:head>
 
 <main
-  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground {view === 'settings' || view === 'operations' ? 'md:grid-cols-[60px_minmax(300px,380px)_1fr]' : 'md:grid-cols-[60px_1fr]'} md:pt-0"
+  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground md:grid-cols-[60px_minmax(300px,380px)_1fr] md:pt-0"
 >
   {#if isLoading}
     <div class="fixed left-0 right-0 top-0 z-50 h-0.5 bg-primary/20" transition:fade>
@@ -2922,8 +2925,8 @@
         {recordMessageOutcome}
         {createTaskPlan}
         {approveTask}
-        {rejectTask}
         {executeTask}
+        {isMobileViewport}
       />
     {:else if view === 'operations'}
       <ScrollArea class="flex-1 min-h-0">
@@ -2985,6 +2988,43 @@
       </ScrollArea>
     {/if}
   </section>
+
+  {#if isInboxView(view)}
+    <section
+      class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 hidden md:block"
+    >
+      <MessageDetail
+        selected={data.selected ? { ...data.selected, tasks: data.tasks } : null}
+        {view}
+        {quickActionIds}
+        {quickActionMeta}
+        {runQuickAction}
+        {moveSelected}
+        folders={data.folders}
+        bind:bodyMode
+        bind:draftText
+        bind:regenNote
+        bind:taskNote
+        dictationTargetId={dictationTarget?.id || null}
+        {dictationActive}
+        {dictationUnavailable}
+        {dictationLevel}
+        {toggleDictation}
+        {executeSuggestion}
+        {saveEdit}
+        {rejectSuggestion}
+        {regenerate}
+        {generateSuggestion}
+        {recordMessageOutcome}
+        {createTaskPlan}
+        {selectMessage}
+        {riskClass}
+        {approveTask}
+        {rejectTask}
+        {executeTask}
+      />
+    </section>
+  {/if}
 
   {#if view === 'operations'}
     <section class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0">

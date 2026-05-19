@@ -88,7 +88,7 @@
   }
 </script>
 
-<div class="flex flex-col h-full relative">
+<div class="flex flex-col relative">
   <!-- Account Picker Modal -->
   {#if showAccountPicker}
     <div 

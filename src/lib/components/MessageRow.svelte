@@ -61,7 +61,6 @@
     recordMessageOutcome,
     createTaskPlan,
     approveTask,
-    rejectTask: rejectTaskAction,
     executeTask
   }: {
     message: any;
@@ -97,7 +96,6 @@
     recordMessageOutcome: (type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') => void | Promise<void>;
     createTaskPlan: () => void | Promise<void>;
     approveTask: (id: number, stepId?: number | null) => void | Promise<void>;
-    rejectTask: (id: number) => void | Promise<void>;
     executeTask: (id: number) => void | Promise<void>;
   } = $props();
 
@@ -178,6 +176,7 @@
 </script>
 
 <div
+  data-testid="message-row"
   class="relative overflow-hidden border-b border-border/30 last:border-b-0"
 >
   <!-- Swipe left background (archive) -->
@@ -431,6 +430,7 @@
                     ? 'default'
                     : 'outline'}
                 size="sm"
+                data-testid={`quick-action-${actionId.replace(/_/g, '-')}`}
                 onclick={() => { runQuickAction(actionId, message.id); }}
               >
                 {#if actionId === 'toggle_read'}

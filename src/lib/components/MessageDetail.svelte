@@ -53,6 +53,7 @@
     createTaskPlan,
     selectMessage,
     approveTask,
+    rejectTask,
     executeTask
   }: {
     selected: any;
@@ -486,6 +487,13 @@
                           class="h-7 text-xs px-2"
                           data-testid="approve-task"
                           onclick={() => approveTask(task.run.id)}>Approve</Button
+                        >
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          class="h-7 text-xs px-2"
+                          data-testid="reject-task"
+                          onclick={() => rejectTask(task.run.id)}>Reject</Button
                         >
                         <Button
                           variant="outline"

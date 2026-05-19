@@ -38,8 +38,8 @@
     recordMessageOutcome,
     createTaskPlan,
     approveTask,
-    rejectTask,
-    executeTask
+    executeTask,
+    isMobileViewport = false
   }: {
     messages: any[];
     selectedId: number | null;
@@ -74,8 +74,8 @@
     recordMessageOutcome: (_type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') => void | Promise<void>;
     createTaskPlan: () => void | Promise<void>;
     approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
-    rejectTask: (_id: number) => void | Promise<void>;
     executeTask: (_id: number) => void | Promise<void>;
+    isMobileViewport: boolean;
   } = $props();
 </script>
 
@@ -88,7 +88,7 @@
       <MessageRow
       {message}
       {selectedId}
-      open={openMessageIds.has(message.id)}
+      open={isMobileViewport && openMessageIds.has(message.id)}
       onToggle={onToggleMessage}
       {view}
       {swiping}
@@ -119,7 +119,6 @@
       {recordMessageOutcome}
       {createTaskPlan}
       {approveTask}
-      {rejectTask}
       {executeTask}
     />
     </div>

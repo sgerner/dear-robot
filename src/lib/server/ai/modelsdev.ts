@@ -24,6 +24,7 @@ export type ModelsDevModelRecord = {
   reasoning?: boolean;
   tool_call?: boolean;
   structured_output?: boolean;
+  variants?: Record<string, { id?: string; name?: string }>;
 };
 
 export type ModelsDevProvider = {
@@ -47,6 +48,7 @@ export type ModelsDevModel = {
   reasoning: boolean;
   toolCall: boolean;
   structuredOutput: boolean;
+  variants: Array<{ id: string; label: string }> | null;
 };
 
 export async function fetchModelsDevProviders() {
@@ -72,7 +74,15 @@ export async function fetchModelsDevProviders() {
         outputPrice: modelValue.cost?.output || 0,
         reasoning: !!modelValue.reasoning,
         toolCall: !!modelValue.tool_call,
-        structuredOutput: !!modelValue.structured_output
+        structuredOutput: !!modelValue.structured_output,
+        // Variant ID falls back to the catalog record key (e.g. "low", "medium")
+        // when no explicit id is provided in the models.dev catalog entry.
+        variants: modelValue.variants
+          ? Object.entries(modelValue.variants).map(([key, val]) => ({
+              id: String(val.id || key).trim(),
+              label: String(val.name || key).trim()
+            }))
+          : null
       });
     }
     
