@@ -1,27 +1,49 @@
 <script lang="ts">
-  import { Star, Archive, Trash2 } from 'lucide-svelte';
+  import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
+  import MessageRow from '$lib/components/MessageRow.svelte';
   import { flip } from 'svelte/animate';
   import { slide } from 'svelte/transition';
-  import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
-  import { formatPlainText } from '$lib/utils/format';
 
   let {
     messages = [],
     selectedId = null,
+    openMessageIds = new Set<number>(),
     swiping = null,
     swipeSettings,
-    view: _view = 'inbox',
+    view = 'inbox',
     swipeLabel,
     swipeActionForDelta,
     startSwipe,
     updateSwipe,
     finishSwipe,
     cancelSwipe,
+    onToggleMessage,
+    riskClass,
+    quickActionIds = [],
+    quickActionMeta,
+    runQuickAction,
+    moveSelected,
+    folders = [],
     selectMessage,
-    riskClass: _riskClass
+    dictationTargetId = null,
+    dictationActive = false,
+    dictationUnavailable = false,
+    dictationLevel = 0,
+    toggleDictation,
+    executeSuggestion,
+    saveEdit,
+    rejectSuggestion,
+    regenerate,
+    generateSuggestion,
+    recordMessageOutcome,
+    createTaskPlan,
+    approveTask,
+    rejectTask,
+    executeTask
   }: {
     messages: any[];
     selectedId: number | null;
+    openMessageIds: Set<number>;
     swiping: any;
     swipeSettings: any;
     view: string;
@@ -31,131 +53,75 @@
     updateSwipe: (_e: PointerEvent) => void;
     finishSwipe: (_e: PointerEvent, _id: number) => Promise<void>;
     cancelSwipe: () => void;
-    selectMessage: (_id: number) => Promise<void>;
+    onToggleMessage: (_id: number) => void;
     riskClass: (_risk: string | null | undefined) => string;
+    quickActionIds: string[];
+    quickActionMeta: (_id: any) => any;
+    runQuickAction: (_id: any, _msgId?: number) => void | Promise<void>;
+    moveSelected: (_path: string) => void | Promise<void>;
+    folders: any[];
+    selectMessage: (_id: number) => void | Promise<void>;
+    dictationTargetId: string | null;
+    dictationActive: boolean;
+    dictationUnavailable: boolean;
+    dictationLevel: number;
+    toggleDictation: (_id: string) => void | Promise<void>;
+    executeSuggestion: () => void | Promise<void>;
+    saveEdit: () => void | Promise<void>;
+    rejectSuggestion: () => void | Promise<void>;
+    regenerate: () => void | Promise<void>;
+    generateSuggestion: (_id: number) => void | Promise<void>;
+    recordMessageOutcome: (_type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') => void | Promise<void>;
+    createTaskPlan: () => void | Promise<void>;
+    approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
+    rejectTask: (_id: number) => void | Promise<void>;
+    executeTask: (_id: number) => void | Promise<void>;
   } = $props();
-
-  function formatDate(date: string) {
-    const d = new Date(date);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    const isThisYear = d.getFullYear() === now.getFullYear();
-
-    if (isToday) {
-      return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    }
-    if (isThisYear) {
-      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    }
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
-  }
 </script>
 
 <ScrollArea class="flex-1 min-h-0 scrollbar-thin">
   {#each messages as message (message.id)}
     <div
-      class="relative overflow-hidden border-b border-border/30 last:border-b-0"
       animate:flip={{ duration: 200 }}
       out:slide={{ duration: 200 }}
     >
-      <!-- Swipe left background (archive) -->
-      <div
-        class="absolute inset-y-0 left-0 flex w-28 items-center gap-2 bg-primary/10 px-4 text-xs font-medium text-primary transition-opacity duration-150"
-        style={`opacity: ${swiping?.id === message.id && swiping.deltaX > 0 ? Math.min(1, Math.abs(swiping.deltaX) / 100) : 0}`}
-      >
-        <Archive size={14} />
-        <span
-          >{swipeLabel(
-            swiping?.id === message.id && swiping.deltaX > 0
-              ? swipeActionForDelta(swiping.deltaX)
-              : swipeSettings.rightShort
-          )}</span
-        >
-      </div>
-
-      <!-- Swipe right background (delete/trash) -->
-      <div
-        class="absolute inset-y-0 right-0 flex w-28 items-center justify-end gap-2 bg-destructive/10 px-4 text-xs font-medium text-destructive transition-opacity duration-150"
-        style={`opacity: ${swiping?.id === message.id && swiping.deltaX < 0 ? Math.min(1, Math.abs(swiping.deltaX) / 100) : 0}`}
-      >
-        <span
-          >{swipeLabel(
-            swiping?.id === message.id && swiping.deltaX < 0
-              ? swipeActionForDelta(swiping.deltaX)
-              : swipeSettings.leftShort
-          )}</span
-        >
-        <Trash2 size={14} />
-      </div>
-
-      <!-- Message row -->
-      <button
-        data-testid="message-row"
-        class={`group relative block w-full touch-pan-y text-left transition-all duration-150 ${
-          selectedId === message.id
-            ? 'bg-primary/[0.06] border-l-2 border-l-primary'
-            : 'border-l-2 border-l-transparent hover:bg-muted/30'
-        }`}
-        style={`transform: translateX(${swiping?.id === message.id ? swiping.deltaX : 0}px)`}
-        onpointerdown={(e) => startSwipe(e, message.id)}
-        onpointermove={updateSwipe}
-        onpointerup={(e) => finishSwipe(e, message.id)}
-        onpointercancel={cancelSwipe}
-        onkeydown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            selectMessage(message.id);
-          }
-        }}
-      >
-        <div class="px-3 py-2 min-w-0 space-y-1">
-          <!-- Line 1: From + inline badge + date -->
-          <div class="flex items-center gap-2 min-w-0">
-            <p
-              class={`truncate text-sm flex-1 min-w-0 ${message.isRead ? 'text-muted-foreground font-normal' : 'font-semibold text-foreground'}`}
-            >
-              {#if message.isFlagged}
-                <Star size={12} class="inline fill-primary text-primary mr-1 -mt-0.5" />
-              {/if}
-              {message.from}
-            </p>
-
-            {#if message.suggestionStatus}
-              <span
-                class="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-medium {message.riskLevel ===
-                'high'
-                  ? 'bg-destructive/15 text-destructive'
-                  : message.riskLevel === 'medium'
-                    ? 'bg-muted/50 text-muted-foreground'
-                    : 'bg-primary/15 text-primary'}"
-              >
-                {message.recommendedAction}
-              </span>
-            {/if}
-
-            <time
-              class="shrink-0 text-[11px] tabular-nums tracking-tight {message.isRead
-                ? 'text-muted-foreground/60'
-                : 'text-muted-foreground'}"
-            >
-              {formatDate(message.date)}
-            </time>
-          </div>
-
-          <!-- Line 2: Subject -->
-          <p
-            class={`truncate text-sm leading-tight ${message.isRead ? 'text-muted-foreground' : 'font-medium text-foreground'}`}
-          >
-            {message.subject}
-          </p>
-
-          <!-- Line 3: Snippet -->
-          <div class="truncate text-xs leading-tight text-muted-foreground/70 mt-0.5">
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            {@html formatPlainText(message.snippet)}
-          </div>
-        </div>
-      </button>
+      <MessageRow
+      {message}
+      {selectedId}
+      open={openMessageIds.has(message.id)}
+      onToggle={onToggleMessage}
+      {view}
+      {swiping}
+      {swipeSettings}
+      {swipeLabel}
+      {swipeActionForDelta}
+      {startSwipe}
+      {updateSwipe}
+      {finishSwipe}
+      {cancelSwipe}
+      {riskClass}
+      {quickActionIds}
+      {quickActionMeta}
+      {runQuickAction}
+      {moveSelected}
+      {folders}
+      {selectMessage}
+      {dictationTargetId}
+      {dictationActive}
+      {dictationUnavailable}
+      {dictationLevel}
+      {toggleDictation}
+      {executeSuggestion}
+      {saveEdit}
+      {rejectSuggestion}
+      {regenerate}
+      {generateSuggestion}
+      {recordMessageOutcome}
+      {createTaskPlan}
+      {approveTask}
+      {rejectTask}
+      {executeTask}
+    />
     </div>
   {/each}
 

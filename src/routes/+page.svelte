@@ -29,7 +29,6 @@
   import MobileQuickActions from '$lib/components/MobileQuickActions.svelte';
   import InboxSidebar from '$lib/components/InboxSidebar.svelte';
   import MessageList from '$lib/components/MessageList.svelte';
-  import MessageDetail from '$lib/components/MessageDetail.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/Card.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
@@ -267,6 +266,7 @@
   let searchDebounce: ReturnType<typeof setTimeout> | null = null;
   let mobileMenuOpen = $state(false);
   let selectedMessageId = $state<number | null>(null);
+  let openMessageIds = $state(new Set<number>());
   let contactsImportCsv = $state('');
   let cachePassphrase = $state('');
   let cacheEncrypted = $state(false);
@@ -399,6 +399,13 @@
     const currentSelectedMessageId = data.selected?.message?.id ?? null;
     if (untrack(() => selectedMessageId) !== currentSelectedMessageId) {
       selectedMessageId = currentSelectedMessageId;
+      if (currentSelectedMessageId) {
+        const next = new Set(untrack(() => openMessageIds));
+        if (!next.has(currentSelectedMessageId)) {
+          next.add(currentSelectedMessageId);
+          openMessageIds = next;
+        }
+      }
     }
   });
 
@@ -903,10 +910,22 @@
     }
   }
 
+  function toggleMessage(id: number) {
+    const next = new Set(openMessageIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    openMessageIds = next;
+    void selectMessage(id);
+  }
+
   async function deselectMessage() {
     isLoading = true;
     try {
       showShortcutHelp = false;
+      openMessageIds = new Set();
       const params = new URLSearchParams(location.search);
       params.delete('message');
       await goto(`/?${params.toString()}`);
@@ -2656,7 +2675,7 @@
 </svelte:head>
 
 <main
-  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground md:grid-cols-[60px_minmax(300px,380px)_1fr] md:pt-0"
+  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground {view === 'settings' || view === 'operations' ? 'md:grid-cols-[60px_minmax(300px,380px)_1fr]' : 'md:grid-cols-[60px_1fr]'} md:pt-0"
 >
   {#if isLoading}
     <div class="fixed left-0 right-0 top-0 z-50 h-0.5 bg-primary/20" transition:fade>
@@ -2806,7 +2825,7 @@
   </nav>
 
   <section
-    class={`h-full overflow-hidden border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' || data.query.messageId ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+    class={`h-full overflow-hidden border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
   >
     <div class="flex-none border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
@@ -2838,6 +2857,16 @@
         </div>
       {/if}
 
+      {#if status}
+        <div
+          class="m-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5"
+          transition:slide={{ duration: 200 }}
+        >
+          <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
+          <p class="text-[11px] font-medium text-primary">{status}</p>
+        </div>
+      {/if}
+
       {#if isInboxView(view)}
         <InboxSidebar
           {view}
@@ -2856,22 +2885,13 @@
           {selectFolder}
         />
       {/if}
-
-      {#if status}
-        <div
-          class="m-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5"
-          transition:slide={{ duration: 200 }}
-        >
-          <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
-          <p class="text-[11px] font-medium text-primary">{status}</p>
-        </div>
-      {/if}
     </div>
 
     {#if isInboxView(view)}
       <MessageList
         messages={visibleMessages}
         selectedId={data.selected?.message?.id ?? null}
+        {openMessageIds}
         {swiping}
         {swipeSettings}
         {view}
@@ -2881,8 +2901,29 @@
         {updateSwipe}
         {finishSwipe}
         {cancelSwipe}
+        onToggleMessage={toggleMessage}
         {selectMessage}
         {riskClass}
+        {quickActionIds}
+        {quickActionMeta}
+        {runQuickAction}
+        {moveSelected}
+        folders={data.folders}
+        dictationTargetId={dictationTarget?.id || null}
+        {dictationActive}
+        {dictationUnavailable}
+        {dictationLevel}
+        {toggleDictation}
+        {executeSuggestion}
+        {saveEdit}
+        {rejectSuggestion}
+        {regenerate}
+        {generateSuggestion}
+        {recordMessageOutcome}
+        {createTaskPlan}
+        {approveTask}
+        {rejectTask}
+        {executeTask}
       />
     {:else if view === 'operations'}
       <ScrollArea class="flex-1 min-h-0">
@@ -2945,40 +2986,8 @@
     {/if}
   </section>
 
-  <section
-    class={`min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 ${(data.query.messageId && data.selected) || view === 'operations' || view === 'settings' ? 'block' : 'hidden md:block'}`}
-  >
-    <MessageDetail
-      selected={data.selected ? { ...data.selected, tasks: data.tasks } : null}
-      {view}
-      {quickActionIds}
-      {quickActionMeta}
-      {runQuickAction}
-      {moveSelected}
-      folders={data.folders}
-      bind:bodyMode
-      bind:draftText
-      bind:regenNote
-      bind:taskNote
-      dictationTargetId={dictationTarget?.id || null}
-      {dictationActive}
-      {dictationUnavailable}
-      {dictationLevel}
-      {toggleDictation}
-      {executeSuggestion}
-      {saveEdit}
-      {rejectSuggestion}
-      {regenerate}
-      {generateSuggestion}
-      {recordMessageOutcome}
-      {createTaskPlan}
-      {selectMessage}
-      {riskClass}
-      {approveTask}
-      {rejectTask}
-      {executeTask}
-    />
-    {#if view === 'operations'}
+  {#if view === 'operations'}
+    <section class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0">
       <div class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         <div class="mb-6 flex rounded-lg border border-border/60 bg-muted/30 p-1">
           <button
@@ -3169,7 +3178,9 @@
           </div>
         {/if}
       </div>
-    {:else if view === 'settings'}
+    </section>
+  {:else if view === 'settings'}
+    <section class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0">
       <div class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         {#if isMobileViewport && !mobileSettingsDetailOpen}
           <h2 class="text-2xl font-semibold text-foreground">Settings</h2>
@@ -3317,12 +3328,12 @@
           {/if}
         {/if}
       </div>
-    {/if}
-  </section>
+    </section>
+  {/if}
 
-  {#if data.query?.messageId && data.selected?.message && !['settings', 'operations'].includes(view)}
+  {#if data.query?.messageId && !['settings', 'operations'].includes(view)}
     <MobileQuickActions
-      selectedMessage={data.selected.message}
+      selectedMessage={(data.selected?.message || data.messages.find((m: any) => m.id === data.query?.messageId)) || null}
       visibleActionIds={visibleMobileQuickActions()}
       overflowActionIds={overflowMobileQuickActions()}
       {quickActionButtonClass}
