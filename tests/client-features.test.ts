@@ -132,6 +132,93 @@ describe('Phase 1 email client services', () => {
     ).toBe(1);
   });
 
+  it('deduplicates identical cross-account deliveries into one conversation entry and one thread message', async () => {
+    const { db, nowIso } = await import('../src/lib/server/db');
+    const { accounts, messages } = await import('../src/lib/server/db/schema');
+    const { getMessageDetail, listConversationMessages, listMessages } = await import(
+      '../src/lib/server/services/messages'
+    );
+
+    const seed = listMessages({ limit: 1 })[0];
+    expect(seed).toBeTruthy();
+    const now = nowIso();
+    const secondAccount = db
+      .insert(accounts)
+      .values({
+        email: 'second@example.test',
+        host: 'mock',
+        port: 993,
+        username: 'second@example.test',
+        passwordEncrypted: 'x',
+        smtpHost: 'mock',
+        smtpPort: 465,
+        smtpUsername: 'second@example.test',
+        smtpPasswordEncrypted: 'x',
+        isEnabled: true,
+        syncStatus: 'idle',
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning()
+      .get();
+
+    const duplicatedHeader = `<dup-${Date.now()}@example.test>`;
+    const duplicatedSubject = 'Preliminary Unofficial May 19 Tempe City Council Election Night Results';
+    const duplicatedBody = 'Election update body.';
+    const baseValues = {
+      folderPath: 'INBOX',
+      subject: duplicatedSubject,
+      from: 'Tempe Elections <info@tempe.gov>',
+      cc: null,
+      bcc: null,
+      date: now,
+      bodyText: duplicatedBody,
+      bodyHtml: null,
+      latestSuggestionId: null,
+      isRead: false,
+      isAnswered: false,
+      isFlagged: false,
+      createdAt: now,
+      updatedAt: now,
+      inReplyTo: null,
+      references: null,
+      threadId: null
+    };
+
+    const firstCopy = db
+      .insert(messages)
+      .values({
+        ...baseValues,
+        accountId: seed.accountId,
+        to: 'primary@example.test',
+        providerMessageId: `INBOX:${duplicatedHeader}:1`,
+        messageIdHeader: duplicatedHeader
+      })
+      .returning()
+      .get();
+
+    db.insert(messages)
+      .values({
+        ...baseValues,
+        accountId: secondAccount.id,
+        to: 'secondary@example.test',
+        providerMessageId: `INBOX:${duplicatedHeader}:2`,
+        messageIdHeader: duplicatedHeader
+      })
+      .run();
+
+    const grouped = listConversationMessages({ limit: 200 }).filter((row) =>
+      row.subject.includes(duplicatedSubject)
+    );
+    expect(grouped.length).toBe(1);
+    expect(grouped[0]?.conversationCount).toBe(1);
+    expect(grouped[0]?.conversationMessageIds.length).toBe(1);
+
+    const detail = getMessageDetail(firstCopy.id);
+    expect(detail?.thread.length).toBe(1);
+    expect(detail?.thread[0]?.messageIdHeader).toBe(duplicatedHeader);
+  });
+
   it('saves drafts and sends compose payload with attachments', async () => {
     const { listMessages, sendComposedMessage, upsertDraft, getMessageDetail } =
       await import('../src/lib/server/services/messages');

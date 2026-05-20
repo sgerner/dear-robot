@@ -27,7 +27,8 @@ import { buildUnifiedAgentContext, contextForPrompt } from '../agent/context';
 import { extractAndStoreObligationsForMessage } from '../agent/obligations';
 import {
   buildConversationKeyResolver,
-  buildReplyReferences
+  buildReplyReferences,
+  duplicateDeliveryKey
 } from '../email/threading';
 
 export const MessageQuerySchema = z.object({
@@ -306,21 +307,9 @@ export function listConversationMessages(query: z.infer<typeof MessageQuerySchem
     .from(messages)
     .all();
   const resolveConversationKey = buildConversationKeyResolver(threadMessages);
-  const conversationCounts = new Map<string, number>();
-  const conversationMembers = new Map<string, number[]>();
-  for (const message of threadMessages) {
-    const key = `${message.accountId}::${resolveConversationKey(message)}`;
-    conversationCounts.set(key, (conversationCounts.get(key) || 0) + 1);
-    const members = conversationMembers.get(key);
-    if (members) {
-      members.push(message.id);
-    } else {
-      conversationMembers.set(key, [message.id]);
-    }
-  }
   const groups = new Map<string, MessageListRow[]>();
   for (const row of rows) {
-    const key = `${row.accountId}::${resolveConversationKey(row)}`;
+    const key = resolveConversationKey(row);
     const group = groups.get(key);
     if (group) {
       group.push(row);
@@ -331,22 +320,23 @@ export function listConversationMessages(query: z.infer<typeof MessageQuerySchem
 
   return [...groups.entries()]
     .map(([conversationKey, group]) => {
-      const sorted = [...group].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const latest = sorted[0];
+      const sorted = [...group].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      const deduped = dedupeMessageRows(sorted);
+      const latest = deduped[0];
       return {
         ...latest,
         conversationKey,
-        conversationCount: conversationCounts.get(conversationKey) ?? group.length,
-        conversationMessageIds: [
-          ...(conversationMembers.get(conversationKey) ?? sorted.map((message) => message.id))
-        ].sort((a, b) => a - b),
-        searchText: sorted
+        conversationCount: deduped.length,
+        conversationMessageIds: deduped.map((message) => message.id).sort((a, b) => a - b),
+        searchText: deduped
           .map((message) => `${message.subject} ${message.from} ${message.to} ${message.snippet}`)
           .join(' '),
-        threadSubject: sorted.at(-1)?.subject || latest.subject,
-        isRead: group.every((message) => message.isRead),
-        isAnswered: group.some((message) => message.isAnswered),
-        isFlagged: group.some((message) => message.isFlagged)
+        threadSubject: deduped.at(-1)?.subject || latest.subject,
+        isRead: deduped.every((message) => message.isRead),
+        isAnswered: deduped.some((message) => message.isAnswered),
+        isFlagged: deduped.some((message) => message.isFlagged)
       } satisfies ConversationListRow;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -459,7 +449,7 @@ export function getMessageDetail(id: number) {
     .where(eq(executedActions.messageId, id))
     .orderBy(desc(executedActions.createdAt))
     .all();
-  const accountMessages = db
+  const allMessages = db
     .select({
       id: messages.id,
       accountId: messages.accountId,
@@ -480,13 +470,15 @@ export function getMessageDetail(id: number) {
       isFlagged: messages.isFlagged
     })
     .from(messages)
-    .where(eq(messages.accountId, message.accountId))
     .orderBy(messages.date)
     .all();
-  const resolveConversationKey = buildConversationKeyResolver(accountMessages);
-  const conversationKey = `${message.accountId}::${resolveConversationKey(message)}`;
-  const thread = accountMessages
-    .filter((item) => `${item.accountId}::${resolveConversationKey(item)}` === conversationKey)
+  const resolveConversationKey = buildConversationKeyResolver(allMessages);
+  const conversationKey = resolveConversationKey(message);
+  const thread = dedupeMessageRows(
+    allMessages
+      .filter((item) => resolveConversationKey(item) === conversationKey)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  )
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .map((item) => ({
       ...item,
@@ -505,6 +497,26 @@ export function getMessageDetail(id: number) {
     thread,
     conversationKey
   };
+}
+
+function dedupeMessageRows<
+  T extends {
+    id: number;
+    messageIdHeader?: string | null;
+    subject?: string | null;
+    from?: string | null;
+    bodyText?: string | null;
+  }
+>(rows: T[]) {
+  const byKey = new Map<string, T>();
+  for (const row of rows) {
+    const key = duplicateDeliveryKey(row);
+    const existing = byKey.get(key);
+    if (!existing || row.id > existing.id) {
+      byKey.set(key, row);
+    }
+  }
+  return [...byKey.values()];
 }
 
 function getMessageWithAccount(id: number) {

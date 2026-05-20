@@ -86,6 +86,27 @@ export function fallbackConversationKey(message: ThreadableMessage) {
   return trimThreadValue(message.messageIdHeader) || trimThreadValue(message.threadId) || `message:${message.id}`;
 }
 
+export function duplicateDeliveryKey(message: {
+  messageIdHeader?: string | null;
+  subject?: string | null;
+  from?: string | null;
+  bodyText?: string | null;
+}) {
+  const header = trimThreadValue(message.messageIdHeader);
+  if (header) return `mid:${header.toLowerCase()}`;
+  const subject = normalizeInlineText(message.subject);
+  const sender = normalizeInlineText(message.from);
+  const body = normalizeInlineText((message.bodyText || '').slice(0, 400));
+  return `fallback:${sender}|${subject}|${body}`;
+}
+
 function trimThreadValue(value: string | null | undefined) {
   return value?.trim() || null;
+}
+
+function normalizeInlineText(value: string | null | undefined) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
