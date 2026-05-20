@@ -43,6 +43,95 @@ describe('Phase 1 email client services', () => {
     expect(recordedMockActions().map((action) => action.type)).toContain('set_flagged');
   });
 
+  it('threads replies by headers instead of subject text', async () => {
+    const { db, nowIso } = await import('../src/lib/server/db');
+    const { messages } = await import('../src/lib/server/db/schema');
+    const { getMessageDetail, listConversationMessages, listMessages } = await import(
+      '../src/lib/server/services/messages'
+    );
+
+    const account = listMessages({ limit: 1 })[0];
+    expect(account).toBeTruthy();
+    const folderPath = account.folderPath || 'INBOX';
+    const createdAt = nowIso();
+    const rootMessageId = `<thread-root-${Date.now()}@example.test>`;
+    const replyMessageId = `<thread-reply-${Date.now()}@example.test>`;
+    const unrelatedMessageId = `<thread-independent-${Date.now()}@example.test>`;
+    const baseValues = {
+      accountId: account.accountId,
+      folderPath,
+      subject: 'Threading regression subject',
+      from: 'Sender <sender@example.test>',
+      to: 'Recipient <recipient@example.test>',
+      cc: null,
+      bcc: null,
+      date: createdAt,
+      bodyText: 'Test body',
+      bodyHtml: null,
+      latestSuggestionId: null,
+      isRead: false,
+      isAnswered: false,
+      isFlagged: false,
+      createdAt,
+      updatedAt: createdAt
+    };
+
+    const root = db
+      .insert(messages)
+      .values({
+        ...baseValues,
+        providerMessageId: `INBOX:${rootMessageId}`,
+        messageIdHeader: rootMessageId,
+        inReplyTo: null,
+        references: null,
+        threadId: null
+      })
+      .returning()
+      .get();
+    const reply = db
+      .insert(messages)
+      .values({
+        ...baseValues,
+        providerMessageId: `INBOX:${replyMessageId}`,
+        subject: `Re: ${baseValues.subject}`,
+        messageIdHeader: replyMessageId,
+        inReplyTo: rootMessageId,
+        references: rootMessageId,
+        threadId: null,
+        date: new Date(Date.parse(createdAt) + 60_000).toISOString()
+      })
+      .returning()
+      .get();
+    const unrelated = db
+      .insert(messages)
+      .values({
+        ...baseValues,
+        providerMessageId: `INBOX:${unrelatedMessageId}`,
+        subject: `Re: ${baseValues.subject}`,
+        messageIdHeader: unrelatedMessageId,
+        inReplyTo: null,
+        references: null,
+        threadId: null,
+        date: new Date(Date.parse(createdAt) + 120_000).toISOString()
+      })
+      .returning()
+      .get();
+
+    const detail = getMessageDetail(root.id);
+    expect(detail?.thread.map((item) => item.id)).toContain(root.id);
+    expect(detail?.thread.map((item) => item.id)).toContain(reply.id);
+    expect(detail?.thread.map((item) => item.id)).not.toContain(unrelated.id);
+
+    const grouped = listConversationMessages({ limit: 20 }).filter((row) =>
+      row.searchText.includes('Threading regression subject')
+    );
+    expect(grouped.length).toBe(2);
+    expect(grouped.find((row) => row.conversationMessageIds.includes(root.id))?.conversationCount).toBe(2);
+    expect(
+      grouped.find((row) => row.conversationMessageIds.includes(unrelated.id))?.conversationCount
+    ).toBe(1);
+  });
+
   it('saves drafts and sends compose payload with attachments', async () => {
     const { listMessages, sendComposedMessage, upsertDraft, getMessageDetail } =
       await import('../src/lib/server/services/messages');

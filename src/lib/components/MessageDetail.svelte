@@ -207,6 +207,14 @@
             {selected.message.subject}
           </h2>
 
+          {#if selected.thread?.length > 1}
+            <div class="mt-2">
+              <span class="inline-flex items-center rounded-full border border-border/50 bg-muted/60 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                {selected.thread.length} messages
+              </span>
+            </div>
+          {/if}
+
           <div class="mt-3 flex items-center gap-2 text-sm">
             <time class="text-muted-foreground">{formatDate(selected.message.date)}</time>
           </div>

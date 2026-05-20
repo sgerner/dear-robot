@@ -4,7 +4,7 @@ import {
   listContacts,
   listDrafts,
   listFoldersWithCounts,
-  listMessages
+  listConversationMessages
 } from '$lib/server/services/messages';
 import { listAccounts } from '$lib/server/services/accounts';
 import { readAgentInstructions } from '$lib/server/memory';
@@ -60,7 +60,7 @@ export function load({ url, depends }) {
   const demoMailboxPresent = accounts.some(
     (account) => account.host === 'mock' && account.email === 'mock@example.test'
   );
-  const messages = isInboxView ? listMessages(effectiveQuery) : [];
+  const messages = isInboxView ? listConversationMessages(effectiveQuery) : [];
   const messageParam = url.searchParams.get('message');
   const selectedId = isInboxView ? (messageParam ? Number(messageParam) : messages[0]?.id || 0) : 0;
   const selected = isInboxView && selectedId ? getMessageDetail(selectedId) : null;

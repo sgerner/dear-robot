@@ -7,6 +7,7 @@ import type { MailProvider, ProviderMessage } from './types';
 import type { AddressObject } from 'mailparser';
 import { env } from '../env';
 import { getGoogleAccessToken } from '../oauth/google';
+import { threadKeyCandidateFromHeaders } from './threading';
 
 const mailboxOpChains = new Map<number, Promise<unknown>>();
 
@@ -89,8 +90,7 @@ export const imapEmailProvider: MailProvider = {
             threadId: threadIdFor(
               parsed?.messageId || null,
               parsed?.inReplyTo || null,
-              parsed?.references || null,
-              parsed?.subject || msg.envelope?.subject || ''
+              parsed?.references || null
             ),
             messageIdHeader: parsed?.messageId || null,
             inReplyTo: parsed?.inReplyTo || null,
@@ -142,8 +142,7 @@ export const imapEmailProvider: MailProvider = {
             threadId: threadIdFor(
               parsed?.messageId || null,
               parsed?.inReplyTo || null,
-              parsed?.references || null,
-              parsed?.subject || msg.envelope?.subject || ''
+              parsed?.references || null
             ),
             messageIdHeader: parsed?.messageId || null,
             inReplyTo: parsed?.inReplyTo || null,
@@ -234,8 +233,7 @@ export const imapEmailProvider: MailProvider = {
                   threadId: threadIdFor(
                     parsed?.messageId || null,
                     parsed?.inReplyTo || null,
-                    parsed?.references || null,
-                    parsed?.subject || msg.envelope?.subject || ''
+                    parsed?.references || null
                   ),
                   messageIdHeader: parsed?.messageId || null,
                   inReplyTo: parsed?.inReplyTo || null,
@@ -377,20 +375,16 @@ function addressText(value: AddressObject | AddressObject[] | undefined) {
 function threadIdFor(
   messageId: string | null,
   inReplyTo: string | null,
-  references: string | string[] | null,
-  subject: string
+  references: string | string[] | null
 ) {
-  if (inReplyTo) return inReplyTo;
-  if (Array.isArray(references) && references.length) return references[0];
-  if (typeof references === 'string' && references.trim()) return references.trim().split(/\s+/)[0];
-  return messageId || normalizeSubject(subject);
-}
-
-function normalizeSubject(subject: string) {
-  return subject
-    .toLowerCase()
-    .replace(/^(re|fwd?):\s*/i, '')
-    .trim();
+  return (
+    threadKeyCandidateFromHeaders({
+      messageIdHeader: messageId,
+      inReplyTo,
+      references,
+      threadId: null
+    }) || messageId || null
+  );
 }
 
 function mapAttachments(

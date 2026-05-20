@@ -7,6 +7,7 @@
   let {
     messages = [],
     selectedId = null,
+    selectedConversationKey = null,
     openMessageIds = new Set<number>(),
     swiping = null,
     swipeSettings,
@@ -43,6 +44,7 @@
   }: {
     messages: any[];
     selectedId: number | null;
+    selectedConversationKey: string | null;
     openMessageIds: Set<number>;
     swiping: any;
     swipeSettings: any;
@@ -88,7 +90,8 @@
       <MessageRow
       {message}
       {selectedId}
-      open={isMobileViewport && openMessageIds.has(message.id)}
+      {selectedConversationKey}
+      open={isMobileViewport && (openMessageIds.has(message.id) || selectedConversationKey === message.conversationKey)}
       onToggle={onToggleMessage}
       {view}
       {swiping}

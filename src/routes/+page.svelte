@@ -362,10 +362,8 @@
   let localFilteredMessages = $derived.by(() => {
     if (!search.trim()) return data.messages || [];
     const q = search.toLowerCase();
-    return (data.messages || []).filter((m: any) => 
-      m.subject.toLowerCase().includes(q) || 
-      m.from.toLowerCase().includes(q) || 
-      m.snippet?.toLowerCase().includes(q)
+    return (data.messages || []).filter((m: any) =>
+      `${m.subject} ${m.from} ${m.snippet || ''} ${m.searchText || ''}`.toLowerCase().includes(q)
     );
   });
 
@@ -381,6 +379,10 @@
     
     return [...local, ...uniqueServer].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   });
+
+  let selectedConversationKey = $derived(
+    data.selected?.conversationKey || null
+  );
 
   type DraftView = {
     id: number;
@@ -829,10 +831,17 @@
       }
       if (!isInboxView(view)) return;
       const selectedId = data.selected?.message?.id ?? data.messages[0]?.id;
+      const selectedKey = data.selected?.conversationKey || null;
       const current =
         data.selected?.message ||
-        data.messages.find((message: { id: number }) => message.id === selectedId);
-      const index = data.messages.findIndex((message: { id: number }) => message.id === selectedId);
+        data.messages.find(
+          (message: { id: number; conversationKey?: string }) =>
+            message.id === selectedId || message.conversationKey === selectedKey
+        );
+      const index = data.messages.findIndex(
+        (message: { id: number; conversationKey?: string }) =>
+          message.id === selectedId || message.conversationKey === selectedKey
+      );
       if (event.key === 'j') {
         const next = data.messages[Math.min(index + 1, data.messages.length - 1)];
         if (next) void selectMessage(next.id);
@@ -1058,7 +1067,8 @@
       thread: [fallback],
       account: data.accounts.find((account: { id: number }) => account.id === fallback.accountId) || null,
       attachments: [],
-      suggestion: null
+      suggestion: null,
+      conversationKey: fallback.conversationKey || null
     };
   }
 
@@ -1717,7 +1727,7 @@
       const res = await fetch(`/api/messages?q=${encodeURIComponent(search)}&limit=100`);
       if (res.ok) {
         const results = await res.json();
-        serverSearchResults = results;
+        serverSearchResults = Array.isArray(results) ? results : results.messages || [];
       }
     } catch (e) {
       console.error('Deep search failed', e);
@@ -1931,26 +1941,38 @@
     await moveMessageToFolder(data.selected.message.id, folderPath);
   }
 
-  async function moveMessageToFolder(messageId: number, folderPath: string) {
-    optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
-    try {
-      // 1. Update server
-      await api(`/api/messages/${messageId}/move`, {
-        method: 'POST',
-        body: JSON.stringify({ folderPath })
-      });
-      
-      // 2. Update local cache immediately so syncCache doesn't "restore" it
-      void deleteFromCache('messages', messageId);
-      void deleteFromCache('message_details', messageId);
+  function messageActionIds(messageId: number) {
+    if (data.selected?.message?.id === messageId && Array.isArray(data.selected?.thread)) {
+      const threadIds = data.selected.thread.map((item: { id: number }) => item.id);
+      if (threadIds.length) return threadIds;
+    }
+    const row = messageForAction(messageId) as
+      | { conversationMessageIds?: number[] }
+      | undefined;
+    if (row?.conversationMessageIds?.length) return row.conversationMessageIds;
+    return [messageId];
+  }
 
-      // 3. Refresh and clear selection
-      if (data.selected?.message?.id === messageId) {
+  async function moveMessageToFolder(messageId: number, folderPath: string) {
+    const messageIds = [...new Set(messageActionIds(messageId))];
+    optimisticHiddenMessageIds = [...new Set([...optimisticHiddenMessageIds, ...messageIds])];
+    try {
+      await api('/api/messages', {
+        method: 'POST',
+        body: JSON.stringify({ messageIds, action: 'move', folderPath })
+      });
+
+      for (const id of messageIds) {
+        void deleteFromCache('messages', id);
+        void deleteFromCache('message_details', id);
+      }
+
+      if (data.selected?.message?.id && messageIds.includes(data.selected.message.id)) {
         await deselectMessage();
       }
       await invalidateAll();
     } catch (err) {
-      optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => id !== messageId);
+      optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => !messageIds.includes(id));
       status = err instanceof Error ? err.message : 'Move failed';
     }
   }
@@ -2036,49 +2058,45 @@
   async function toggleRead() {
     if (!data.selected?.message) return;
     const messageId = data.selected.message.id;
+    const messageIds = messageActionIds(messageId);
     const nextRead = !data.selected.message.isRead;
     data = {
       ...data,
       selected: {
         ...data.selected,
-        message: { ...data.selected.message, isRead: nextRead }
+        message: { ...data.selected.message, isRead: nextRead },
+        thread: data.selected.thread?.map((item: any) =>
+          messageIds.includes(item.id) ? { ...item, isRead: nextRead } : item
+        )
       }
     };
     await tick();
-    const result = await api(`/api/messages/${messageId}/read`, {
+    await api('/api/messages', {
       method: 'POST',
-      body: JSON.stringify({ read: nextRead })
+      body: JSON.stringify({ messageIds, action: nextRead ? 'mark_read' : 'mark_unread' })
     });
-    if (result?.message && data.selected) {
-      data = {
-        ...data,
-        selected: {
-          ...data.selected,
-          message: result.message
-        }
-      };
-    }
     await invalidateAll();
   }
 
   async function toggleMessageRead(messageId: number) {
     const row = messageForAction(messageId);
     if (!row) return;
+    const messageIds = messageActionIds(messageId);
     
     // Optimistically update visible state (could be improved further, but avoids full page reload lag)
     if (view === 'unread' && row.isRead === false) {
-       optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
+       optimisticHiddenMessageIds = [...new Set([...optimisticHiddenMessageIds, ...messageIds])];
     }
     
     try {
-      await api(`/api/messages/${messageId}/read`, {
+      await api('/api/messages', {
         method: 'POST',
-        body: JSON.stringify({ read: !row.isRead })
+        body: JSON.stringify({ messageIds, action: row.isRead ? 'mark_unread' : 'mark_read' })
       });
       await invalidateAll();
     } catch (err) {
       if (view === 'unread') {
-        optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter(id => id !== messageId);
+        optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => !messageIds.includes(id));
       }
       status = err instanceof Error ? err.message : 'Toggle failed';
     }
@@ -2087,37 +2105,32 @@
   async function toggleFlagged() {
     if (!data.selected?.message) return;
     const messageId = data.selected.message.id;
+    const messageIds = messageActionIds(messageId);
     const nextFlagged = !data.selected.message.isFlagged;
     data = {
       ...data,
       selected: {
         ...data.selected,
-        message: { ...data.selected.message, isFlagged: nextFlagged }
+        message: { ...data.selected.message, isFlagged: nextFlagged },
+        thread: data.selected.thread?.map((item: any) =>
+          messageIds.includes(item.id) ? { ...item, isFlagged: nextFlagged } : item
+        )
       }
     };
     
     if (view === 'starred' && !nextFlagged) {
-       optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
+       optimisticHiddenMessageIds = [...new Set([...optimisticHiddenMessageIds, ...messageIds])];
     }
 
     try {
-      const result = await api(`/api/messages/${messageId}/flag`, {
+      await api('/api/messages', {
         method: 'POST',
-        body: JSON.stringify({ flagged: nextFlagged })
+        body: JSON.stringify({ messageIds, action: nextFlagged ? 'flag' : 'unflag' })
       });
-      if (result?.message && data.selected) {
-        data = {
-          ...data,
-          selected: {
-            ...data.selected,
-            message: result.message
-          }
-        };
-      }
       await invalidateAll();
     } catch (err) {
        if (view === 'starred') {
-         optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter(id => id !== messageId);
+         optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => !messageIds.includes(id));
        }
        status = err instanceof Error ? err.message : 'Toggle failed';
     }
@@ -2126,20 +2139,21 @@
   async function toggleMessageFlagged(messageId: number) {
     const row = messageForAction(messageId);
     if (!row) return;
+    const messageIds = messageActionIds(messageId);
     
     if (view === 'starred' && row.isFlagged) {
-       optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
+       optimisticHiddenMessageIds = [...new Set([...optimisticHiddenMessageIds, ...messageIds])];
     }
     
     try {
-      await api(`/api/messages/${messageId}/flag`, {
+      await api('/api/messages', {
         method: 'POST',
-        body: JSON.stringify({ flagged: !row.isFlagged })
+        body: JSON.stringify({ messageIds, action: row.isFlagged ? 'unflag' : 'flag' })
       });
       await invalidateAll();
     } catch (err) {
        if (view === 'starred') {
-         optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter(id => id !== messageId);
+         optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => !messageIds.includes(id));
        }
        status = err instanceof Error ? err.message : 'Toggle failed';
     }
@@ -3095,6 +3109,7 @@
       <MessageList
         messages={visibleMessages}
         selectedId={data.selected?.message?.id ?? null}
+        {selectedConversationKey}
         {openMessageIds}
         {swiping}
         {swipeSettings}

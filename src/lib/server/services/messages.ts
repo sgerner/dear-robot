@@ -25,6 +25,10 @@ import { evaluateAttachmentPolicy } from '../attachment-policy';
 import { promptHash, recordAiObservation } from '../agent/observability';
 import { buildUnifiedAgentContext, contextForPrompt } from '../agent/context';
 import { extractAndStoreObligationsForMessage } from '../agent/obligations';
+import {
+  buildConversationKeyResolver,
+  buildReplyReferences
+} from '../email/threading';
 
 export const MessageQuerySchema = z.object({
   q: z.string().optional(),
@@ -133,6 +137,38 @@ export const RegenerateSchema = z.object({
   note: z.string().max(1000).nullable().optional()
 });
 
+type MessageListRow = {
+  id: number;
+  accountId: number;
+  accountEmail: string;
+  folderPath: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
+  snippet: string;
+  isRead: boolean;
+  isAnswered: boolean;
+  isFlagged: boolean;
+  latestSuggestionId: number | null;
+  category: string | null;
+  recommendedAction: string | null;
+  riskLevel: string | null;
+  suggestionStatus: string | null;
+  messageIdHeader: string | null;
+  inReplyTo: string | null;
+  references: string | null;
+  threadId: string | null;
+};
+
+type ConversationListRow = MessageListRow & {
+  conversationKey: string;
+  conversationCount: number;
+  conversationMessageIds: number[];
+  searchText: string;
+  threadSubject: string;
+};
+
 export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   const where = [];
   if (query.accountId) where.push(eq(messages.accountId, query.accountId));
@@ -181,7 +217,11 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
         category: aiSuggestions.category,
         recommendedAction: aiSuggestions.recommendedAction,
         riskLevel: aiSuggestions.riskLevel,
-        suggestionStatus: aiSuggestions.status
+        suggestionStatus: aiSuggestions.status,
+        messageIdHeader: messages.messageIdHeader,
+        inReplyTo: messages.inReplyTo,
+        references: messages.references,
+        threadId: messages.threadId
       })
       .from(messages)
       .innerJoin(accounts, eq(accounts.id, messages.accountId))
@@ -235,7 +275,11 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
         category: aiSuggestions.category,
         recommendedAction: aiSuggestions.recommendedAction,
         riskLevel: aiSuggestions.riskLevel,
-        suggestionStatus: aiSuggestions.status
+        suggestionStatus: aiSuggestions.status,
+        messageIdHeader: messages.messageIdHeader,
+        inReplyTo: messages.inReplyTo,
+        references: messages.references,
+        threadId: messages.threadId
       })
       .from(messages)
       .innerJoin(accounts, eq(accounts.id, messages.accountId))
@@ -245,6 +289,67 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
       .limit(query.limit)
       .all();
   }
+}
+
+export function listConversationMessages(query: z.infer<typeof MessageQuerySchema>) {
+  const rows = listMessages(query) as MessageListRow[];
+  if (!rows.length) return [];
+  const threadMessages = db
+    .select({
+      id: messages.id,
+      accountId: messages.accountId,
+      messageIdHeader: messages.messageIdHeader,
+      inReplyTo: messages.inReplyTo,
+      references: messages.references,
+      threadId: messages.threadId
+    })
+    .from(messages)
+    .all();
+  const resolveConversationKey = buildConversationKeyResolver(threadMessages);
+  const conversationCounts = new Map<string, number>();
+  const conversationMembers = new Map<string, number[]>();
+  for (const message of threadMessages) {
+    const key = `${message.accountId}::${resolveConversationKey(message)}`;
+    conversationCounts.set(key, (conversationCounts.get(key) || 0) + 1);
+    const members = conversationMembers.get(key);
+    if (members) {
+      members.push(message.id);
+    } else {
+      conversationMembers.set(key, [message.id]);
+    }
+  }
+  const groups = new Map<string, MessageListRow[]>();
+  for (const row of rows) {
+    const key = `${row.accountId}::${resolveConversationKey(row)}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(row);
+    } else {
+      groups.set(key, [row]);
+    }
+  }
+
+  return [...groups.entries()]
+    .map(([conversationKey, group]) => {
+      const sorted = [...group].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const latest = sorted[0];
+      return {
+        ...latest,
+        conversationKey,
+        conversationCount: conversationCounts.get(conversationKey) ?? group.length,
+        conversationMessageIds: [
+          ...(conversationMembers.get(conversationKey) ?? sorted.map((message) => message.id))
+        ].sort((a, b) => a - b),
+        searchText: sorted
+          .map((message) => `${message.subject} ${message.from} ${message.to} ${message.snippet}`)
+          .join(' '),
+        threadSubject: sorted.at(-1)?.subject || latest.subject,
+        isRead: group.every((message) => message.isRead),
+        isAnswered: group.some((message) => message.isAnswered),
+        isFlagged: group.some((message) => message.isFlagged)
+      } satisfies ConversationListRow;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
 export function searchRelatedEmailsForAgent(input: {
@@ -354,13 +459,15 @@ export function getMessageDetail(id: number) {
     .where(eq(executedActions.messageId, id))
     .orderBy(desc(executedActions.createdAt))
     .all();
-  const threadKey = message.threadId || normalizedSubject(message.subject);
-  const thread = db
+  const accountMessages = db
     .select({
       id: messages.id,
       accountId: messages.accountId,
       providerMessageId: messages.providerMessageId,
       threadId: messages.threadId,
+      messageIdHeader: messages.messageIdHeader,
+      inReplyTo: messages.inReplyTo,
+      references: messages.references,
       folderPath: messages.folderPath,
       subject: messages.subject,
       from: messages.from,
@@ -373,18 +480,14 @@ export function getMessageDetail(id: number) {
       isFlagged: messages.isFlagged
     })
     .from(messages)
-    .where(
-      and(
-        eq(messages.accountId, message.accountId),
-        or(
-          eq(messages.threadId, threadKey),
-          like(messages.subject, `%${normalizedSubject(message.subject)}%`)
-        )
-      )
-    )
+    .where(eq(messages.accountId, message.accountId))
     .orderBy(messages.date)
-    .limit(50)
-    .all()
+    .all();
+  const resolveConversationKey = buildConversationKeyResolver(accountMessages);
+  const conversationKey = `${message.accountId}::${resolveConversationKey(message)}`;
+  const thread = accountMessages
+    .filter((item) => `${item.accountId}::${resolveConversationKey(item)}` === conversationKey)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .map((item) => ({
       ...item,
       safeBodyHtml: sanitizeEmailHtml(item.bodyHtml)
@@ -399,7 +502,8 @@ export function getMessageDetail(id: number) {
     suggestion: suggestions[0] ?? null,
     suggestions,
     executed,
-    thread
+    thread,
+    conversationKey
   };
 }
 
@@ -776,7 +880,11 @@ export async function sendComposedMessage(input: z.infer<typeof ComposeSendSchem
     text: input.body,
     html: input.bodyHtml || null,
     inReplyTo: source?.messageIdHeader || source?.threadId || null,
-    references: source?.references || source?.messageIdHeader || null,
+    references: buildReplyReferences({
+      references: source?.references,
+      messageIdHeader: source?.messageIdHeader,
+      threadId: source?.threadId
+    }),
     attachments: input.attachments || []
   });
   if (source && ['reply', 'reply_all'].includes(input.mode)) {
@@ -981,7 +1089,12 @@ export async function executeSuggestion(id: number) {
       to: message.from,
       subject: `Re: ${message.subject}`,
       text: suggestion.draftReply,
-      inReplyTo: message.threadId
+      inReplyTo: message.messageIdHeader || message.threadId || null,
+      references: buildReplyReferences({
+        references: message.references,
+        messageIdHeader: message.messageIdHeader,
+        threadId: message.threadId
+      })
     });
     await provider.markAnswered(account, message);
     db.update(messages)
@@ -1110,13 +1223,6 @@ function toFtsQuery(input: string) {
     .filter(Boolean);
   if (!tokens.length) return '';
   return tokens.map((token) => `${token}*`).join(' AND ');
-}
-
-function normalizedSubject(subject: string) {
-  return subject
-    .toLowerCase()
-    .replace(/^(re|fwd?):\s*/i, '')
-    .trim();
 }
 
 function upsertContactsFromAddressList(accountId: number, values: string[], seenAt: string) {

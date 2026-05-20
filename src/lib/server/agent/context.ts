@@ -45,12 +45,24 @@ export function buildUnifiedAgentContext(
         .where(and(eq(contacts.accountId, message.accountId), eq(contacts.email, senderEmail)))
         .get()
     : null;
-  const threadKey = message.threadId || normalizeSubject(message.subject);
+  const threadKey = detail.conversationKey || message.threadId || normalizeSubject(message.subject);
+  const legacyThreadKey = message.threadId || normalizeSubject(message.subject);
   const threadSummary = db
     .select()
     .from(threadSummaries)
     .where(and(eq(threadSummaries.accountId, message.accountId), eq(threadSummaries.threadKey, threadKey)))
     .get();
+  const threadSummaryFallback =
+    threadSummary ||
+    (legacyThreadKey !== threadKey
+      ? db
+          .select()
+          .from(threadSummaries)
+          .where(
+            and(eq(threadSummaries.accountId, message.accountId), eq(threadSummaries.threadKey, legacyThreadKey))
+          )
+          .get()
+      : null);
   const openFollowUps = db
     .select()
     .from(followUpReminders)
@@ -100,7 +112,7 @@ export function buildUnifiedAgentContext(
       note: options.note || null
     }).text,
     contact,
-    threadSummary,
+    threadSummary: threadSummaryFallback,
     relatedEmails: related,
     openFollowUps,
     openObligations,

@@ -455,7 +455,7 @@ export function upsertThreadSummaryForMessage(messageId: number) {
   const detail = getMessageDetail(messageId);
   if (!detail?.message) return null;
   const thread = detail.thread || [detail.message];
-  const threadKey = detail.message.threadId || normalizeSubject(detail.message.subject);
+  const threadKey = detail.conversationKey || detail.message.threadId || normalizeSubject(detail.message.subject);
   const openQuestions = extractQuestions(thread.map((item) => item.bodyText).join('\n'));
   const commitments = extractCommitments(thread.map((item) => item.bodyText).join('\n'));
   const latest = thread[thread.length - 1] || detail.message;

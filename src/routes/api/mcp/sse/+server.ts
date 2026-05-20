@@ -9,7 +9,7 @@ import {
   executeSuggestion,
   getMessageDetail,
   listFoldersWithCounts,
-  listMessages,
+  listConversationMessages,
   moveMessage,
   regenerateSuggestion,
   setMessageFlagged,
@@ -92,7 +92,7 @@ async function toolResponse(payload: unknown) {
   const call = ToolCallSchema.parse(payload);
   if (call.tool === 'search_emails') {
     const query = String(call.args.query || '');
-    const messages = listMessages(MessageQuerySchema.parse({ q: query, limit: 20 })).map(
+    const messages = listConversationMessages(MessageQuerySchema.parse({ q: query, limit: 20 })).map(
       (message) => ({
         id: message.id,
         subject: message.subject,

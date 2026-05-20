@@ -25,6 +25,7 @@
   let {
     message,
     selectedId,
+    selectedConversationKey = null,
     open = false,
     onToggle,
     view: _view = 'inbox',
@@ -60,6 +61,7 @@
   }: {
     message: any;
     selectedId: number | null;
+    selectedConversationKey: string | null;
     open: boolean;
     onToggle: (_id: number) => void;
     view: string;
@@ -219,7 +221,7 @@
   <div
     data-row-click
     class={`block w-full text-left transition-all duration-150 ${
-      selectedId === message.id
+      selectedConversationKey === message.conversationKey || selectedId === message.id
         ? 'bg-primary/[0.06] border-l-2 border-l-primary'
         : 'border-l-2 border-l-transparent hover:bg-muted/30'
     }`}
@@ -333,6 +335,11 @@
         class={`truncate text-sm leading-tight ${message.isRead ? 'text-muted-foreground' : 'font-medium text-foreground'}`}
       >
         {message.subject}
+        {#if message.conversationCount > 1}
+          <span class="ml-2 inline-flex items-center rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            {message.conversationCount} msgs
+          </span>
+        {/if}
       </p>
 
       <!-- Line 3: Snippet (hidden when open) -->

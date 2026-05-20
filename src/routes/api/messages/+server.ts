@@ -3,7 +3,7 @@ import {
   BulkMessageActionSchema,
   MessageQuerySchema,
   bulkMessageAction,
-  listMessages
+  listConversationMessages
 } from '$lib/server/services/messages';
 
 export function GET({ url }) {
@@ -14,7 +14,7 @@ export function GET({ url }) {
     folder: url.searchParams.get('folder') || undefined,
     limit: url.searchParams.get('limit') || 50
   });
-  return json({ messages: listMessages(query) });
+  return json({ messages: listConversationMessages(query) });
 }
 
 export async function POST({ request }) {
