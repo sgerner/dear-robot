@@ -16,6 +16,7 @@
   import type { ModelsDevProvider } from '$lib/server/ai/modelsdev';
   import {
     cacheEncryptionEnabled,
+    deleteFromCache,
     deleteOutbox,
     enqueueOutbox,
     getCache,
@@ -642,8 +643,15 @@
       // Reconnects automatically
     };
 
+    // Refresh data when user returns to the tab
+    const onWindowFocus = () => {
+      void invalidateAll();
+    };
+    window.addEventListener('focus', onWindowFocus);
+
     return () => {
       media.removeEventListener('change', applyViewport);
+      window.removeEventListener('focus', onWindowFocus);
       eventSource.close();
     };
   });
@@ -1842,10 +1850,20 @@
   async function moveMessageToFolder(messageId: number, folderPath: string) {
     optimisticHiddenMessageIds = [...optimisticHiddenMessageIds, messageId];
     try {
+      // 1. Update server
       await api(`/api/messages/${messageId}/move`, {
         method: 'POST',
         body: JSON.stringify({ folderPath })
       });
+      
+      // 2. Update local cache immediately so syncCache doesn't "restore" it
+      void deleteFromCache('messages', messageId);
+      void deleteFromCache('message_details', messageId);
+
+      // 3. Refresh and clear selection
+      if (data.selected?.message?.id === messageId) {
+        await deselectMessage();
+      }
       await invalidateAll();
     } catch (err) {
       optimisticHiddenMessageIds = optimisticHiddenMessageIds.filter((id) => id !== messageId);
