@@ -595,13 +595,23 @@
           <Sparkles size={16} class="text-primary" />
           <h3 class="font-bold text-sm text-foreground uppercase tracking-wider">{selected.suggestion.category}</h3>
         </div>
-        <div class="flex gap-1">
-          <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-primary/20 text-primary border border-primary/20 rounded">
-            {selected.suggestion.recommendedAction}
-          </span>
-          <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 {selected.suggestion.riskLevel === 'high' ? 'bg-destructive/20 text-destructive border-destructive/20' : 'bg-muted text-muted-foreground border-border'} border rounded">
-            {selected.suggestion.riskLevel}
-          </span>
+        <div class="flex items-center gap-2">
+          <div class="flex border border-border/60 rounded-md p-0.5 bg-background/40 shrink-0 mr-1">
+            <button class="p-1 hover:text-primary transition-colors" onclick={() => recordMessageOutcome('resolved')} title="Perfect Outcome">
+              <ThumbsUp size={12} />
+            </button>
+            <button class="p-1 hover:text-destructive transition-colors" onclick={() => recordMessageOutcome('bad_draft')} title="Needs Improvement">
+              <ThumbsDown size={12} />
+            </button>
+          </div>
+          <div class="flex gap-1">
+            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-primary/20 text-primary border border-primary/20 rounded">
+              {selected.suggestion.recommendedAction}
+            </span>
+            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 {selected.suggestion.riskLevel === 'high' ? 'bg-destructive/20 text-destructive border-destructive/20' : 'bg-muted text-muted-foreground border-border'} border rounded">
+              {selected.suggestion.riskLevel}
+            </span>
+          </div>
         </div>
       </div>
       <div class="text-xs text-muted-foreground leading-relaxed italic">
@@ -632,7 +642,7 @@
           </div>
         </div>
 
-        <!-- Compressed Action & Feedback Row -->
+        <!-- Compressed Action Row -->
         <div class="mt-4 flex flex-col gap-3">
           <!-- Main Actions -->
           <div class="flex items-center gap-2">
@@ -652,38 +662,21 @@
             </Button>
           </div>
 
-          <!-- Tweak & Feedback Combined -->
-          <div class="flex items-center gap-2">
-            <div class="relative flex-1">
-              <input
-                id="regen-note"
-                class="w-full h-8 bg-background/40 border border-border/60 px-3 pr-8 text-xs outline-none focus:border-primary/50 rounded-md"
-                placeholder="Tweak prompt..."
-                bind:value={regenNote}
-              />
-              <button 
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-                onclick={regenerate}
-                title="Regenerate"
-              >
-                <RefreshCw size={12} class={isGenerating ? "animate-spin" : ""} />
-              </button>
-            </div>
-            
-            <div class="flex border border-border/60 rounded-md p-0.5 bg-background/40 shrink-0">
-              <button class="p-1 hover:text-primary transition-colors" onclick={() => recordMessageOutcome('resolved')} title="Perfect Outcome">
-                <ThumbsUp size={14} />
-              </button>
-              <button class="p-1 hover:text-primary transition-colors" onclick={() => recordMessageOutcome('needs_followup')} title="Needs Follow-up">
-                <RotateCcw size={14} />
-              </button>
-              <button class="p-1 hover:text-destructive transition-colors" onclick={() => recordMessageOutcome('bad_draft')} title="Bad Draft/Response">
-                <ThumbsDown size={14} />
-              </button>
-              <button class="p-1 hover:text-destructive transition-colors" onclick={() => recordMessageOutcome('wrong_action')} title="Wrong Strategy">
-                <AlertCircle size={14} />
-              </button>
-            </div>
+          <!-- Tweak Input -->
+          <div class="relative">
+            <input
+              id="regen-note"
+              class="w-full h-8 bg-background/40 border border-border/60 px-3 pr-8 text-xs outline-none focus:border-primary/50 rounded-md"
+              placeholder="Tweak prompt..."
+              bind:value={regenNote}
+            />
+            <button 
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+              onclick={regenerate}
+              title="Regenerate"
+            >
+              <RefreshCw size={12} class={isGenerating ? "animate-spin" : ""} />
+            </button>
           </div>
         </div>
       </div>
