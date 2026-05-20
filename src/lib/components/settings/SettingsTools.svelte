@@ -205,7 +205,7 @@
               class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
               onclick={() => persistToolSkills(tool)}>Save skills.md</button
             >
-            <span class="text-[11px] text-zinc-500"
+            <span class="text-xs text-zinc-500"
               >Stored at <code>/data/tool-skills/{tool.id}.md</code></span
             >
           </div>
@@ -249,7 +249,7 @@
               class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
               onclick={() => persistToolConfig(tool)}>Save config</button
             >
-            <span class="text-[11px] text-zinc-500"
+            <span class="text-xs text-zinc-500"
               >Use this instead of SSH for OAuth values the CLI exposes as env vars.</span
             >
           </div>
@@ -403,7 +403,7 @@
         External agents can connect to this mailbox over the built-in MCP-compatible endpoint.
       </p>
     </div>
-    <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-400"
+    <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-400"
       >Bearer auth required</span
     >
   </div>

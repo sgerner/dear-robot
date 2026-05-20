@@ -50,7 +50,7 @@ export function formatPlainText(text: string | null | undefined): string {
   formatted = formatted.replace(/~~(.*?)~~/g, '<del>$1</del>');
 
   // Inline Code: `text`
-  formatted = formatted.replace(/`(.*?)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground/90 border border-border/20">$1</code>');
+  formatted = formatted.replace(/`(.*?)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground border border-border/20">$1</code>');
 
   return formatted;
 }

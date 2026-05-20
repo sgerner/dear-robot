@@ -148,7 +148,7 @@
   <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
     <div class="flex items-center gap-2">
       <h3 class="font-medium">Mobile Swipe Gestures</h3>
-      <div class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">Mobile Only</div>
+      <div class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">Mobile Only</div>
     </div>
     <p class="mt-1 text-sm text-zinc-400">
       Configure actions triggered by swiping messages. Previews show the background color and depth.

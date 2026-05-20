@@ -273,7 +273,7 @@
             <div class="flex flex-wrap items-center justify-end gap-2">
               {#if profile?.isEnabled}
                 <span
-                  class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary"
+                  class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold uppercase tracking-widest text-primary"
                 >
                   <span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
                   Active
@@ -286,7 +286,7 @@
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-8 text-[11px] text-muted-foreground hover:text-foreground"
+                  class="h-8 text-xs text-muted-foreground hover:text-foreground"
                   onclick={() => collapseProfile(profileKey)}
                 >
                   <ChevronDown size={13} class="mr-1.5" />
@@ -296,7 +296,7 @@
                 <Button
                   variant="outline"
                   size="sm"
-                  class="h-8 text-[11px] border-border/60 hover:bg-muted"
+                  class="h-8 text-xs border-border/60 hover:bg-muted"
                   onclick={() => expandProfile(profileKey)}
                 >
                   <PenLine size={13} class="mr-1.5" />
@@ -312,14 +312,14 @@
                 <div
                   class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
                 ></div>
-                <span class="font-medium text-foreground/90">Encrypted credentials saved</span>
+                <span class="font-medium text-foreground">Encrypted credentials saved</span>
                 <span class="text-border">•</span>
                 <span>Click Edit to modify this credential.</span>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                class="h-8 text-[11px] border-border/60 hover:bg-muted"
+                class="h-8 text-xs border-border/60 hover:bg-muted"
                 onclick={() => expandProfile(profileKey)}
               >
                 <PenLine size={13} class="mr-1.5" />
@@ -358,19 +358,19 @@
                   <div class="space-y-4">
                     <div class="relative">
                       <span
-                        class="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2"
+                        class="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2"
                         >Search Model Registry</span
                       >
                       <div class="relative group">
                         <input
                           type="text"
-                          class="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                          class="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                           placeholder="e.g. gpt-4o, claude-3.5-sonnet, deepseek-v3..."
                           bind:value={searchQueries[profileKey]}
                           onfocus={loadModelsDevCatalog}
                         />
                         <div
-                          class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-focus-within:text-muted-foreground transition-colors"
+                          class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-muted-foreground transition-colors"
                         >
                           <Search size={16} />
                         </div>
@@ -398,12 +398,12 @@
                                 <div class="text-sm font-semibold text-foreground truncate">
                                   {m.label}
                                 </div>
-                                <div class="text-[10px] text-muted-foreground truncate">
+                                <div class="text-xs text-muted-foreground truncate">
                                   {m.provider.name} • {m.id}
                                 </div>
                               </div>
                               <div class="text-right shrink-0">
-                                <span class="text-[10px] font-mono text-muted-foreground/60"
+                                <span class="text-xs font-mono text-muted-foreground"
                                   >{Math.round(m.contextWindow / 1000)}k ctx</span
                                 >
                               </div>
@@ -420,20 +420,20 @@
                       >
                         <Badge
                           variant="outline"
-                          class="text-[10px] uppercase tracking-tighter border-border/60 text-muted-foreground"
+                          class="text-xs uppercase tracking-tighter border-border/60 text-muted-foreground"
                           >{currentModel.contextWindow.toLocaleString()} tokens</Badge
                         >
                         {#if currentModel.reasoning}<Badge
                             variant="outline"
-                            class="text-[10px] uppercase tracking-tighter border-primary/30 text-primary bg-primary/5"
+                            class="text-xs uppercase tracking-tighter border-primary/30 text-primary bg-primary/5"
                             >Reasoning</Badge
                           >{/if}
                         {#if currentModel.toolCall}<Badge
                             variant="outline"
-                            class="text-[10px] uppercase tracking-tighter border-secondary/30 text-secondary-foreground"
+                            class="text-xs uppercase tracking-tighter border-secondary/30 text-secondary-foreground"
                             >Tool Use</Badge
                           >{/if}
-                        <span class="text-[10px] text-muted-foreground/60 ml-auto font-mono"
+                        <span class="text-xs text-muted-foreground ml-auto font-mono"
                           >${currentModel.inputPrice}/1M tokens</span
                         >
                       </div>
@@ -443,22 +443,22 @@
                       <div class="grid gap-4 md:grid-cols-2">
                         <label class="block">
                           <span
-                            class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                            class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                             >Base URL</span
                           >
                           <input
-                            class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                            class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                             placeholder={currentProvider?.api || 'https://...'}
                             bind:value={profile.baseUrl}
                           />
                         </label>
                         <label class="block">
                           <span
-                            class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                            class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                             >Model Identifier</span
                           >
                           <input
-                            class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                            class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                             placeholder="e.g. gpt-4"
                             bind:value={profile.model}
                           />
@@ -467,19 +467,19 @@
 
                       <div class="space-y-3">
                         <span
-                          class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block"
+                          class="text-xs font-bold text-muted-foreground uppercase tracking-wider block"
                           >Authentication Credentials</span
                         >
                         <div class="grid gap-3">
                           {#each requiredEnvVars(profileKey) as envKey (envKey)}
                             <label class="relative">
                               <span
-                                class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-muted-foreground/50 pointer-events-none uppercase"
+                                class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground pointer-events-none uppercase"
                                 >{envKey}</span
                               >
                               {#if profileEnvValues[profileKey]}
                                 <input
-                                  class="w-full rounded-lg border border-input bg-background pl-24 pr-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                                  class="w-full rounded-lg border border-input bg-background pl-24 pr-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                                   placeholder="Required"
                                   type="password"
                                   bind:value={profileEnvValues[profileKey][envKey]}
@@ -488,7 +488,7 @@
                             </label>
                           {/each}
                           {#if requiredEnvVars(profileKey).length === 0}
-                            <p class="text-xs italic text-muted-foreground/60">
+                            <p class="text-xs italic text-muted-foreground">
                               No specific environment variables required for this provider.
                             </p>
                           {/if}
@@ -503,7 +503,7 @@
                             <span class="text-xs font-bold text-foreground"
                               >Cloudflare Worker Proxy</span
                             >
-                            <p class="text-[10px] text-muted-foreground">
+                            <p class="text-xs text-muted-foreground">
                               Relay requests to bypass IP blocking (e.g. for Gemini on VPS)
                             </p>
                           </div>
@@ -513,11 +513,11 @@
                           <div class="mt-3" in:fly={{ y: -8, duration: 200 }}>
                             <label class="block">
                               <span
-                                class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                                class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                                 >Proxy URL</span
                               >
                               <input
-                                class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                                class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                                 placeholder="https://your-worker.your-subdomain.workers.dev"
                                 bind:value={profile.proxyUrl}
                               />
@@ -531,44 +531,44 @@
                   <div class="grid gap-4 md:grid-cols-2">
                     <label class="block">
                       <span
-                        class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                        class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                         >Provider Label</span
                       >
                       <input
-                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                         placeholder="Custom Provider"
                         bind:value={profile.provider}
                       />
                     </label>
                     <label class="block">
                       <span
-                        class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                        class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                         >Base URL</span
                       >
                       <input
-                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                         placeholder="https://api.example.com/v1"
                         bind:value={profile.baseUrl}
                       />
                     </label>
                     <label class="block">
                       <span
-                        class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                        class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                         >Model ID</span
                       >
                       <input
-                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                         placeholder="model-x"
                         bind:value={profile.model}
                       />
                     </label>
                     <label class="block">
                       <span
-                        class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                        class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                         >API Key</span
                       >
                       <input
-                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                        class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                         placeholder="sk-..."
                         type="password"
                         bind:value={profile.apiKey}
@@ -582,7 +582,7 @@
                           <span class="text-xs font-bold text-foreground"
                             >Cloudflare Worker Proxy</span
                           >
-                          <p class="text-[10px] text-muted-foreground">
+                          <p class="text-xs text-muted-foreground">
                             Relay requests to bypass IP blocking (e.g. for Gemini on VPS)
                           </p>
                         </div>
@@ -592,11 +592,11 @@
                         <div class="mt-3" in:fly={{ y: -8, duration: 200 }}>
                           <label class="block">
                             <span
-                              class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                              class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                               >Proxy URL</span
                             >
                             <input
-                              class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                              class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                               placeholder="https://your-worker.your-subdomain.workers.dev"
                               bind:value={profile.proxyUrl}
                             />
@@ -625,7 +625,7 @@
                       <Button
                         variant="outline"
                         size="sm"
-                        class="h-8 text-[11px] border-border/60 hover:bg-muted min-w-[8rem]"
+                        class="h-8 text-xs border-border/60 hover:bg-muted min-w-[8rem]"
                         onclick={() => handleTest(profileKey)}
                         disabled={(testStates[profileKey] ?? 'idle') === 'loading'}
                       >
@@ -645,7 +645,7 @@
                       <Button
                         variant="glow"
                         size="sm"
-                        class="h-8 text-[11px] font-bold px-4 min-w-[7rem]"
+                        class="h-8 text-xs font-bold px-4 min-w-[7rem]"
                         onclick={() => handleSave(profileKey)}
                         disabled={(saveStates[profileKey] ?? 'idle') === 'loading'}
                       >
@@ -664,7 +664,7 @@
                       (saveStates[profileKey] ?? 'idle') === 'error') &&
                       testErrors[profileKey]}
                       <p
-                        class="text-[10px] text-destructive font-medium animate-in fade-in slide-in-from-top-1 max-w-[240px] text-right leading-tight"
+                        class="text-xs text-destructive font-medium animate-in fade-in slide-in-from-top-1 max-w-[240px] text-right leading-tight"
                         transition:fade
                       >
                         {testErrors[profileKey]}
@@ -696,20 +696,20 @@
               <p class="text-sm font-bold uppercase tracking-widest text-foreground">
                 Dictation Provider
               </p>
-              <p class="text-[11px] text-muted-foreground mt-0.5">
+              <p class="text-xs text-muted-foreground mt-0.5">
                 {audioProvider()?.label || audioProviderId} · {audioModelId}
               </p>
             </div>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="secondary" class="text-[10px] font-bold uppercase tracking-widest"
+            <Badge variant="secondary" class="text-xs font-bold uppercase tracking-widest"
               >Audio Profile</Badge
             >
             {#if hasSavedAudioKey() && isAudioExpanded()}
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-8 text-[11px] text-muted-foreground hover:text-foreground"
+                class="h-8 text-xs text-muted-foreground hover:text-foreground"
                 onclick={collapseAudio}
               >
                 <ChevronDown size={13} class="mr-1.5" />
@@ -719,7 +719,7 @@
               <Button
                 variant="outline"
                 size="sm"
-                class="h-8 text-[11px] border-border/60 hover:bg-muted"
+                class="h-8 text-xs border-border/60 hover:bg-muted"
                 onclick={expandAudio}
               >
                 <PenLine size={13} class="mr-1.5" />
@@ -735,14 +735,14 @@
               <div
                 class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
               ></div>
-              <span class="font-medium text-foreground/90">Encrypted credential saved</span>
+              <span class="font-medium text-foreground">Encrypted credential saved</span>
               <span class="text-border">•</span>
               <span>Click Edit to modify this credential.</span>
             </div>
             <Button
               variant="outline"
               size="sm"
-              class="h-8 text-[11px] border-border/60 hover:bg-muted"
+              class="h-8 text-xs border-border/60 hover:bg-muted"
               onclick={expandAudio}
             >
               <PenLine size={13} class="mr-1.5" />
@@ -754,7 +754,7 @@
             <div class="grid gap-4 md:grid-cols-2">
               <label class="block">
                 <span
-                  class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                  class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                   >STT Engine</span
                 >
                 <select
@@ -772,7 +772,7 @@
               </label>
               <label class="block">
                 <span
-                  class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                  class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                   >Acoustic Model</span
                 >
                 <select
@@ -793,7 +793,7 @@
                 (model: { id: string; label: string; blurb?: string }) => model.id === audioModelId
               )?.blurb || 'Select a model to view details.'}
               {#if audioProvider()?.docsUrl || audioProvider()?.signupUrl}
-                <div class="mt-3 flex flex-wrap gap-2 text-[10px] uppercase font-bold tracking-widest">
+                <div class="mt-3 flex flex-wrap gap-2 text-xs uppercase font-bold tracking-widest">
                   {#if audioProvider()?.docsUrl}
                     <a
                       class="rounded-md border border-border/60 px-3 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -817,18 +817,18 @@
             {#if audioProvider()?.authType !== 'none'}
               <div>
                 <span
-                  class="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
+                  class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block"
                   >API Key</span
                 >
                 <input
-                  class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground/60"
+                  class="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground transition-all focus:border-ring focus:ring-1 focus:ring-ring outline-none placeholder:text-muted-foreground"
                   type="password"
                   placeholder="Leave blank to keep current key"
                   bind:value={audioApiKey}
                 />
               </div>
             {:else}
-              <div class="rounded-lg bg-primary/5 border border-primary/10 p-3 text-xs text-primary/80">
+              <div class="rounded-lg bg-primary/5 border border-primary/10 p-3 text-xs text-primary">
                 Native browser fallback requires no authentication key.
               </div>
             {/if}
@@ -838,7 +838,7 @@
                 <Button
                   variant="outline"
                   size="sm"
-                  class="h-9 text-[11px] border-border/60 hover:bg-muted min-w-[8.5rem]"
+                  class="h-9 text-xs border-border/60 hover:bg-muted min-w-[8.5rem]"
                   onclick={handleAudioTest}
                   disabled={audioTestState === 'loading'}
                 >
@@ -858,7 +858,7 @@
                 <Button
                   variant="glow"
                   size="sm"
-                  class="h-9 text-[11px] font-bold px-4 min-w-[8rem]"
+                  class="h-9 text-xs font-bold px-4 min-w-[8rem]"
                   onclick={handleAudioSave}
                   disabled={audioSaveState === 'loading'}
                 >
@@ -875,7 +875,7 @@
               </div>
               {#if (audioTestState === 'error' || audioSaveState === 'error') && audioTestError}
                 <p
-                  class="text-[10px] text-destructive font-medium animate-in fade-in slide-in-from-top-1 max-w-[400px] leading-tight"
+                  class="text-xs text-destructive font-medium animate-in fade-in slide-in-from-top-1 max-w-[400px] leading-tight"
                   transition:fade
                 >
                   {audioTestError}

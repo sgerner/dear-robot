@@ -27,12 +27,12 @@
 	}: Props = $props();
 
 	const variantClasses = {
-		default: "bg-primary text-primary-foreground hover:bg-primary/90",
-		destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-		outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-		secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-		ghost: "hover:bg-accent hover:text-accent-foreground",
-		link: "text-primary underline-offset-4 hover:underline",
+		default: "bg-primary text-primary-foreground hover:bg-primary hover:brightness-125 hover:shadow-[0_0_20px_oklch(from_var(--primary)_l_c_h_/_0.4)]",
+		destructive: "bg-destructive text-destructive-foreground hover:bg-destructive hover:brightness-125 hover:shadow-[0_0_20px_oklch(from_var(--destructive)_l_c_h_/_0.4)]",
+		outline: "border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground hover:border-primary",
+		secondary: "bg-secondary text-secondary-foreground hover:bg-secondary hover:brightness-150 hover:shadow-[0_0_15px_oklch(from_var(--secondary)_l_c_h_/_0.3)]",
+		ghost: "hover:bg-accent hover:text-accent-foreground hover:scale-105",
+		link: "text-primary underline-offset-4 hover:underline hover:brightness-125",
 		glow: "btn-cinematic text-primary-foreground"
 	};
 

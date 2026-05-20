@@ -76,7 +76,7 @@
       <Sparkles size={15} class="text-primary" />
       <h2 class="text-sm font-semibold text-foreground">{getModeLabel(composeMode)}</h2>
       {#if compose.draftId}
-        <span class="text-[10px] text-muted-foreground">#{compose.draftId}</span>
+        <span class="text-xs text-muted-foreground">#{compose.draftId}</span>
       {/if}
     </div>
     <button
@@ -109,11 +109,11 @@
         </select>
         <div class="relative flex-1 min-w-0">
           <span
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
             >To</span
           >
           <input
-            class="h-8 w-full bg-transparent pl-8 pr-20 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            class="h-8 w-full bg-transparent pl-8 pr-20 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             list="contact-options"
             placeholder="recipient@..."
             bind:value={compose.to}
@@ -121,7 +121,7 @@
           <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
               type="button"
-              class="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showCc
+              class="text-xs font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showCc
                 ? 'text-primary'
                 : ''}"
               onclick={() => (showCc = !showCc)}
@@ -130,7 +130,7 @@
             </button>
             <button
               type="button"
-              class="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showBcc
+              class="text-xs font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showBcc
                 ? 'text-primary'
                 : ''}"
               onclick={() => (showBcc = !showBcc)}
@@ -145,11 +145,11 @@
       {#if showCc}
         <div class="relative border-b border-border" transition:slide={{ duration: 150 }}>
           <span
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
             >Cc</span
           >
           <input
-            class="h-8 w-full bg-transparent pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            class="h-8 w-full bg-transparent pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             list="contact-options"
             placeholder="Add cc..."
             bind:value={compose.cc}
@@ -161,11 +161,11 @@
       {#if showBcc}
         <div class="relative border-b border-border" transition:slide={{ duration: 150 }}>
           <span
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+            class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
             >Bcc</span
           >
           <input
-            class="h-8 w-full bg-transparent pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            class="h-8 w-full bg-transparent pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             placeholder="Add bcc..."
             bind:value={compose.bcc}
           />
@@ -175,7 +175,7 @@
       <!-- Subject -->
       <div class="relative">
         <input
-          class="h-8 w-full bg-transparent px-3 text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/50 placeholder:font-normal"
+          class="h-8 w-full bg-transparent px-3 text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground placeholder:font-normal"
           placeholder="Subject"
           bind:value={compose.subject}
         />
@@ -194,7 +194,7 @@
       <div class="flex border border-border p-0.5">
         <button
           type="button"
-          class={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
+          class={`px-2 py-0.5 text-xs font-medium transition-colors ${
             composeEditorMode === 'plain'
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -205,7 +205,7 @@
         </button>
         <button
           type="button"
-          class={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
+          class={`px-2 py-0.5 text-xs font-medium transition-colors ${
             composeEditorMode === 'rich'
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -217,7 +217,7 @@
       </div>
 
       <label
-        class="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+        class="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
       >
         <Paperclip size={12} />
         <span>Attach</span>
@@ -225,7 +225,7 @@
       </label>
 
       {#if compose.attachments.length}
-        <span class="text-[10px] text-muted-foreground">{compose.attachments.length} attached</span>
+        <span class="text-xs text-muted-foreground">{compose.attachments.length} attached</span>
       {/if}
     </div>
 
@@ -238,7 +238,7 @@
         {#each compose.attachments as attachment, idx (`${attachment.filename}-${idx}`)}
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 bg-background border border-border px-2 py-0.5 text-[11px] text-foreground hover:border-destructive/50 group transition-colors"
+            class="inline-flex items-center gap-1.5 bg-background border border-border px-2 py-0.5 text-xs text-foreground hover:border-destructive/50 group transition-colors"
             aria-label={`${attachment.filename} Remove`}
             onclick={() => removeAttachment(idx)}
           >
@@ -260,7 +260,7 @@
           <Bot size={13} class="text-primary shrink-0" />
           <input
             id="compose-ai-prompt"
-            class="min-w-0 flex-1 h-7 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+            class="min-w-0 flex-1 h-7 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             placeholder="Ask AI to write..."
             bind:value={composeAiPrompt}
             onkeydown={(event) =>
@@ -279,7 +279,7 @@
         />
         <button
           type="button"
-          class="flex items-center gap-1 bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+          class="flex items-center gap-1 bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
           onclick={generateComposeBody}
           disabled={isGeneratingCompose || !composeAiPrompt.trim()}
         >
@@ -298,14 +298,14 @@
       {#if composeEditorMode === 'rich'}
         <textarea
           id="compose-html-body"
-          class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
+          class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
           placeholder="Write your message..."
           bind:value={composeHtml}
         ></textarea>
       {:else}
         <textarea
           id="compose-body"
-          class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
+          class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
           placeholder="Write your message..."
           bind:value={compose.body}
         ></textarea>
@@ -326,7 +326,7 @@
     <footer
       class="flex items-center justify-between gap-2 border-t border-border px-3 py-2 shrink-0"
     >
-      <p class="text-[10px] text-muted-foreground">Autosaves · Offline queue</p>
+      <p class="text-xs text-muted-foreground">Autosaves · Offline queue</p>
       <div class="flex gap-2">
         <Button
           variant="outline"

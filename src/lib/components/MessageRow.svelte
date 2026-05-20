@@ -253,7 +253,7 @@
 
         {#if message.suggestionStatus}
           <span
-            class="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-medium {message.riskLevel ===
+            class="shrink-0 text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {message.riskLevel ===
             'high'
               ? 'bg-destructive/15 text-destructive'
               : message.riskLevel === 'medium'
@@ -292,7 +292,7 @@
               </button>
             </div>
             <!-- HTML/Plain toggle -->
-            <div class="flex border border-border/40 p-0.5 bg-background text-[11px]">
+            <div class="flex border border-border/40 p-0.5 bg-background text-xs">
               <button
                 class={`px-1.5 py-0.5 transition-all duration-150 ${
                   bodyMode === 'html'
@@ -318,8 +318,8 @@
         {/if}
 
         <time
-          class="shrink-0 text-[11px] tabular-nums tracking-tight {message.isRead
-            ? 'text-muted-foreground/60'
+          class="shrink-0 text-xs tabular-nums tracking-tight {message.isRead
+            ? 'text-muted-foreground'
             : 'text-muted-foreground'}"
         >
           {open && detail?.message?.date
@@ -337,7 +337,7 @@
 
       <!-- Line 3: Snippet (hidden when open) -->
       {#if !open}
-        <div class="truncate text-xs leading-tight text-muted-foreground/70 mt-0.5">
+        <div class="truncate text-xs leading-tight text-muted-foreground mt-0.5">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html formatPlainText(message.snippet)}        </div>
       {/if}
@@ -371,7 +371,7 @@
                 <summary class="flex cursor-pointer list-none items-center gap-2 text-xs text-foreground">
                   <Paperclip size={13} class="text-muted-foreground" />
                   <span class="font-medium">Attachments</span>
-                  <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-muted text-muted-foreground">
+                  <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 bg-muted text-muted-foreground">
                     {detail.attachments.length}
                   </span>
                   <ChevronDown size={12} class="text-muted-foreground transition-transform group-open:rotate-180" />
@@ -409,14 +409,14 @@
                   >
                     <div class="flex items-center justify-between gap-2 mb-0.5">
                       <p class="truncate text-xs font-medium text-foreground">{item.from}</p>
-                      <time class="shrink-0 text-[10px] text-muted-foreground">{formatDate(item.date)}</time>
+                      <time class="shrink-0 text-xs text-muted-foreground">{formatDate(item.date)}</time>
                     </div>
-                    <p class="truncate text-[11px] text-muted-foreground">{item.subject}</p>
+                    <p class="truncate text-xs text-muted-foreground">{item.subject}</p>
                   </button>
                 {/each}
                 {#if detail.thread.length > visibleThreadLimit}
                   <button
-                    class="w-full py-2 text-center text-xs text-primary hover:text-primary/80 transition-colors"
+                    class="w-full py-2 text-center text-xs text-primary hover:text-primary transition-colors"
                     onclick={() => { visibleThreadLimit += 5; }}
                   >
                     + More ({detail.thread.length - visibleThreadLimit} remaining)
@@ -446,14 +446,14 @@
                 {:else if Icon}
                   <Icon size={13} />
                 {/if}
-                <span class="ml-1 text-[11px]">{meta?.label || actionId}</span>
+                <span class="ml-1 text-xs">{meta?.label || actionId}</span>
               </Button>
             {/each}
 
             <div class="h-5 w-px bg-border mx-0.5"></div>
 
             <select
-              class="h-7 rounded-md border border-input bg-background px-2 text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+              class="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
               onchange={(e) => { moveSelected(e.currentTarget.value); }}
             >
               <option value="">Move to...</option>
@@ -473,10 +473,10 @@
                     <h3 class="font-semibold text-sm text-foreground">{detail.suggestion.category}</h3>
                   </div>
                   <div class="flex gap-1.5 shrink-0">
-                    <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-medium bg-primary/15 text-primary">
+                    <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium bg-primary/15 text-primary">
                       {detail.suggestion.recommendedAction}
                     </span>
-                    <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 font-medium {detail.suggestion.riskLevel === 'high' ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground'}">
+                    <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {detail.suggestion.riskLevel === 'high' ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground'}">
                       {detail.suggestion.riskLevel}
                     </span>
                   </div>
@@ -487,7 +487,7 @@
                 </div>
 
                 {#if detail.suggestion.targetFolder || detail.suggestion.delegateInstructions}
-                  <div class="mt-1.5 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                  <div class="mt-1.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     {#if detail.suggestion.targetFolder}
                       <span>&rarr; {detail.suggestion.targetFolder}</span>
                     {/if}
@@ -504,7 +504,7 @@
                   <div class="relative">
                     <textarea
                       id={`draft-reply-${message.id}`}
-                      class="min-h-24 w-full resize-y bg-muted border border-border/40 p-2.5 pr-10 text-xs leading-relaxed outline-none placeholder:text-muted-foreground/60 focus:border-primary/40 transition-all"
+                      class="min-h-24 w-full resize-y bg-muted border border-border/40 p-2.5 pr-10 text-xs leading-relaxed outline-none placeholder:text-muted-foreground focus:border-primary/40 transition-all"
                       placeholder="Draft reply..."
                       bind:value={draftText}
                     ></textarea>

@@ -168,12 +168,12 @@
       <!-- Row 1: Account Filter & Search & Help -->
       <div class="flex items-center gap-1.5">
         <button
-          class="flex h-8 min-w-[70px] max-w-[100px] items-center justify-between gap-1.5 rounded-md border border-input bg-muted/30 px-2 text-[11px] font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground active:scale-95"
+          class="flex h-8 min-w-[70px] max-w-[100px] items-center justify-between gap-1.5 rounded-md border border-input bg-muted/30 px-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground active:scale-95"
           onclick={() => (showAccountPicker = true)}
           title="Switch Account"
         >
           <span class="truncate">{currentAccountLabel}</span>
-          <ChevronDown size={10} class="shrink-0 text-muted-foreground/60" />
+          <ChevronDown size={10} class="shrink-0 text-muted-foreground" />
         </button>
 
         <div class="relative flex-1">
@@ -195,7 +195,7 @@
                 <CircleDashed size={12} />
               </div>
             {:else if searchState === 'complete' && search}
-              <div class="text-primary/60" title="Deep search complete">
+              <div class="text-primary" title="Deep search complete">
                 <Database size={11} />
               </div>
             {/if}
@@ -231,7 +231,7 @@
             {@const Icon = v.icon}
             <button
               class={`
-                flex flex-1 items-center justify-center gap-1.5 rounded-md py-1 px-1.5 text-[10px] font-medium
+                flex flex-1 items-center justify-center gap-1.5 rounded-md py-1 px-1.5 text-xs font-medium
                 transition-all duration-200
                 ${
                   view === v.id
@@ -249,7 +249,7 @@
 
         <button
           class={`
-            flex h-7 items-center gap-1.5 rounded-md border border-border/60 px-2 text-[10px] font-medium transition-all
+            flex h-7 items-center gap-1.5 rounded-md border border-border/60 px-2 text-xs font-medium transition-all
             ${foldersExpanded ? 'bg-primary/10 text-primary border-primary/20' : 'bg-muted/10 text-muted-foreground hover:bg-muted/30'}
           `}
           onclick={() => (foldersExpanded = !foldersExpanded)}
@@ -257,7 +257,7 @@
           <FolderOpen size={12} />
           <span class="hidden sm:inline">Folders</span>
           {#if !foldersExpanded}
-            <Badge variant="outline" class="text-[9px] h-3.5 px-1 min-w-0 border-current/20">{folders.length}</Badge>
+            <Badge variant="outline" class="text-xs h-3.5 px-1 min-w-0 border-current/20">{folders.length}</Badge>
           {/if}
           <ChevronDown
             size={12}
@@ -276,39 +276,39 @@
     >
       <div class="flex items-center gap-2 text-foreground mb-1.5">
         <Keyboard size={13} class="text-primary" />
-        <span class="font-semibold text-[11px]">Keyboard Shortcuts</span>
+        <span class="font-semibold text-xs">Keyboard Shortcuts</span>
       </div>
-      <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">/</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">/</kbd>
           <span class="text-muted-foreground">Search</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">c</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">c</kbd>
           <span class="text-muted-foreground">Compose</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">j</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">j</kbd>
           <span class="text-muted-foreground">Next</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">k</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">k</kbd>
           <span class="text-muted-foreground">Prev</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">r</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">r</kbd>
           <span class="text-muted-foreground">Reply</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">a</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">a</kbd>
           <span class="text-muted-foreground">Archive</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">s</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">s</kbd>
           <span class="text-muted-foreground">Star</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-[9px]">del</kbd>
+          <kbd class="rounded border border-border bg-background px-1 py-0.5 font-mono text-xs">del</kbd>
           <span class="text-muted-foreground">Trash</span>
         </div>
       </div>
@@ -322,14 +322,14 @@
         <div class="space-y-1.5">
           {#each folderGroups() as group (group.accountId)}
             <div class="rounded-lg border border-border/60 bg-muted/10 p-1.5">
-              <p class="truncate px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+              <p class="truncate px-1.5 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {group.accountEmail}
               </p>
               <div class="mt-1 space-y-0.5">
                 {#each group.folders as folder (folder.id)}
                   <button
                     class={`
-                      flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[11px]
+                      flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs
                       transition-colors duration-150
                       ${
                         query?.folder === folder.path &&
@@ -341,12 +341,12 @@
                     onclick={() => selectFolder(folder.accountId, folder.path)}
                   >
                     <span class="truncate">{folder.path}</span>
-                    <span class="shrink-0 text-[10px] tabular-nums">
+                    <span class="shrink-0 text-xs tabular-nums">
                       {#if folder.unread}
                         <span class="text-primary font-medium">{folder.unread}</span>
-                        <span class="text-muted-foreground/40">/{folder.total}</span>
+                        <span class="text-muted-foreground">/{folder.total}</span>
                       {:else}
-                        <span class="text-muted-foreground/40">{folder.total}</span>
+                        <span class="text-muted-foreground">{folder.total}</span>
                       {/if}
                     </span>
                   </button>

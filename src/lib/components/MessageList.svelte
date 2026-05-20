@@ -128,7 +128,7 @@
     <div class="flex h-48 flex-col items-center justify-center gap-2 text-muted-foreground">
       <div class="h-10 w-10 bg-muted/30 flex items-center justify-center">
         <svg
-          class="h-5 w-5 text-muted-foreground/40"
+          class="h-5 w-5 text-muted-foreground"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

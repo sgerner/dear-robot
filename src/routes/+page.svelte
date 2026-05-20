@@ -2982,7 +2982,7 @@
           transition:slide={{ duration: 200 }}
         >
           <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
-          <p class="text-[11px] font-medium text-primary">{status}</p>
+          <p class="text-xs font-medium text-primary">{status}</p>
         </div>
       {/if}
 
@@ -3098,7 +3098,7 @@
               onclick={() => openSettingsCategory(category.key)}
             >
               <p class="text-sm font-medium">{category.label}</p>
-              <p class="mt-0.5 text-xs text-muted-foreground/80">{category.detail}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground">{category.detail}</p>
             </button>
           {/each}
         </div>
@@ -3108,7 +3108,7 @@
 
   {#if isInboxView(view)}
     <section
-      class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0 hidden md:block"
+      class="hidden flex-1 min-w-0 bg-background/60 backdrop-cinematic md:block"
     >
       <MessageDetail
         selected={data.selected ? { ...data.selected, tasks: data.tasks } : null}

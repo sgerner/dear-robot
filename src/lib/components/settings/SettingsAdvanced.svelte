@@ -91,7 +91,7 @@
         >
           <p class="text-xs text-zinc-300">{new Date(backup.createdAt).toLocaleString()}</p>
           <button
-            class="rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-300"
+            class="rounded border border-white/10 px-2 py-1 text-xs text-zinc-300"
             onclick={() => restoreBackupNow(backup.id)}>Restore</button
           >
         </div>

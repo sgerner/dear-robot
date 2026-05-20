@@ -90,7 +90,7 @@
         {:else if Icon}
           <Icon size={20} />
         {/if}
-        <span class="text-[10px] font-medium truncate max-w-full">{meta?.label}</span>
+        <span class="text-xs font-medium truncate max-w-full">{meta?.label}</span>
       </button>
     {/each}
 
@@ -111,7 +111,7 @@
           {:else}
             <MoreHorizontal size={20} />
           {/if}
-          <span class="text-[10px] font-medium">More</span>
+          <span class="text-xs font-medium">More</span>
         </button>
 
         <!-- Overflow Menu -->
@@ -130,7 +130,7 @@
                     transition-colors duration-150
                     ${
                       meta?.tone === 'danger'
-                        ? 'text-destructive/50 hover:bg-destructive/10'
+                        ? 'text-destructive hover:bg-destructive/10'
                         : 'text-foreground hover:bg-muted'
                     }
                   `}

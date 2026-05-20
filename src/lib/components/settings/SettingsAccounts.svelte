@@ -136,18 +136,18 @@
       {#if expandedAccounts[account.id]}
         <div class="mt-3 space-y-2 border-t border-white/5 pt-3">
           <div class="flex items-center justify-between">
-            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Folder Role Mapping</h4>
-            <p class="text-[10px] text-zinc-600 italic">Overrides IMAP discovery</p>
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Folder Role Mapping</h4>
+            <p class="text-xs text-zinc-600 italic">Overrides IMAP discovery</p>
           </div>
           <div class="grid gap-2 sm:grid-cols-2">
             {#each data.folders.filter((f: any) => f.accountId === account.id) as folder (folder.id)}
               <div class="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-black/10 px-2 py-1.5">
                 <div class="min-w-0">
-                  <span class="block truncate text-[11px] font-medium text-zinc-300">{folder.path}</span>
-                  <span class="text-[10px] text-zinc-500">{folder.total} messages</span>
+                  <span class="block truncate text-xs font-medium text-zinc-300">{folder.path}</span>
+                  <span class="text-xs text-zinc-500">{folder.total} messages</span>
                 </div>
                 <select
-                  class="w-28 rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
+                  class="w-28 rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
                   value={folder.role || ''}
                   onchange={(event) =>
                     saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value)}
@@ -211,17 +211,17 @@
           </button>
         </div>
         {#if accountTestState === 'error' && accountTestError}
-          <p class="text-[10px] text-red-400 font-medium max-w-[240px] text-right leading-tight" transition:fade>{accountTestError}</p>
+          <p class="text-xs text-red-400 font-medium max-w-[240px] text-right leading-tight" transition:fade>{accountTestError}</p>
         {/if}
         {#if accountAddState === 'error' && accountAddError}
-          <p class="text-[10px] text-red-400 font-medium max-w-[240px] text-right leading-tight" transition:fade>{accountAddError}</p>
+          <p class="text-xs text-red-400 font-medium max-w-[240px] text-right leading-tight" transition:fade>{accountAddError}</p>
         {/if}
       </div>
     </div>
 
     <div class="space-y-3">
       <div>
-        <label class="mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-500" for="account-email">
+        <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-zinc-500" for="account-email">
           Account Email
         </label>
         <div class="flex gap-2">
@@ -254,14 +254,14 @@
           </button>
         </div>
         {#if accountDiscoverState === 'error' && accountDiscoverError}
-          <p class="text-[10px] text-red-400 font-medium leading-tight" transition:fade>{accountDiscoverError}</p>
+          <p class="text-xs text-red-400 font-medium leading-tight" transition:fade>{accountDiscoverError}</p>
         {/if}
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">
         <!-- IMAP Section -->
         <div class="space-y-2 rounded-md border border-white/5 bg-black/20 p-3">
-          <h4 class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">IMAP (Incoming)</h4>
+          <h4 class="text-xs font-bold uppercase tracking-widest text-zinc-400">IMAP (Incoming)</h4>
           <div class="space-y-2">
             <div class="grid grid-cols-4 gap-2">
               <div class="col-span-3">
@@ -294,7 +294,7 @@
 
         <!-- SMTP Section -->
         <div class="space-y-2 rounded-md border border-white/5 bg-black/20 p-3">
-          <h4 class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">SMTP (Outgoing)</h4>
+          <h4 class="text-xs font-bold uppercase tracking-widest text-zinc-400">SMTP (Outgoing)</h4>
           <div class="space-y-2">
             <div class="grid grid-cols-4 gap-2">
               <div class="col-span-3">
@@ -377,12 +377,12 @@
         <li>
           Add this redirect URI to the OAuth client:
           <div class="mt-1 flex items-center gap-2 rounded border border-sky-400/15 bg-black/20 px-2 py-1">
-            <code class="min-w-0 flex-1 break-all font-mono text-[11px] text-sky-100">
+            <code class="min-w-0 flex-1 break-all font-mono text-xs text-sky-100">
               {googleOauthSettings.redirectUri}
             </code>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
               onclick={() => copyToClipboard(googleOauthSettings.redirectUri, 'Redirect URI')}
               disabled={!googleOauthSettings.redirectUri}
               aria-label="Copy redirect URI"
@@ -395,12 +395,12 @@
         <li>
           <span class="font-medium text-sky-100">Optional (for Realtime Sync):</span> Set up a Google Cloud Pub/Sub Topic and Push Subscription pointing to:
           <div class="mt-1 flex items-center gap-2 rounded border border-sky-400/15 bg-black/20 px-2 py-1">
-            <code class="min-w-0 flex-1 break-all font-mono text-[11px] text-sky-100">
+            <code class="min-w-0 flex-1 break-all font-mono text-xs text-sky-100">
               {googleOauthSettings.redirectUri ? googleOauthSettings.redirectUri.replace('/api/accounts/google/callback', '/api/webhooks/google') : ''}
             </code>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
               onclick={() => copyToClipboard(googleOauthSettings.redirectUri ? googleOauthSettings.redirectUri.replace('/api/accounts/google/callback', '/api/webhooks/google') : '', 'Webhook URL')}
               disabled={!googleOauthSettings.redirectUri}
               aria-label="Copy Webhook URL"
@@ -409,22 +409,22 @@
               Copy
             </button>
           </div>
-          <p class="mt-1 text-[10px] text-zinc-400">
+          <p class="mt-1 text-xs text-zinc-400">
             Grant <code>gmail-api-push@system.gserviceaccount.com</code> the Publisher role on your Topic. Then configure your Gmail account to watch this Topic using the Gmail API. <br>
             <a href="https://developers.google.com/gmail/api/guides/push" target="_blank" class="text-sky-300 hover:text-sky-200 underline">Read the full guide here</a>. Without this, Gmail falls back to a 5-minute poll.
           </p>
         </li>
       </ol>
-      <p class="text-[11px] text-zinc-400">
+      <p class="text-xs text-zinc-400">
         Use a <span class="font-medium text-zinc-200">Web application</span> OAuth client. If the
         app is still in testing, add your Google account as a test user in the consent screen.
       </p>
-      <p class="text-[11px] text-zinc-400">
+      <p class="text-xs text-zinc-400">
         The Gmail scopes are fixed by the app; you do not need to enter them manually.
       </p>
     </div>
     <div class="space-y-1">
-      <label class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+      <label class="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-zinc-500">
         Client ID
         {#if googleOauthSettings.clientId}
           <span class="flex items-center gap-1 normal-case tracking-normal text-emerald-400/80">
@@ -440,7 +440,7 @@
     </div>
 
     <div class="space-y-1">
-      <label class="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+      <label class="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-zinc-500">
         Client Secret
         {#if googleOauthHasSecret}
           <span class="flex items-center gap-1 normal-case tracking-normal text-emerald-400/80">

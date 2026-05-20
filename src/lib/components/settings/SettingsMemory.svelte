@@ -113,7 +113,7 @@
           into prompts.
         </p>
       </div>
-      <span class="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-500"
+      <span class="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-500"
         >/data/skills.md</span
       >
     </div>
@@ -181,11 +181,11 @@
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               {@html formatPlainText(rule.ruleText)}
             </div>
-            <p class="mt-1 text-[11px] text-zinc-500">
+            <p class="mt-1 text-xs text-zinc-500">
               {rule.scope} · conf {Number(rule.confidence).toFixed(2)} · used {rule.usageCount}x
             </p>
             <button
-              class="mt-2 rounded border border-white/10 px-2 py-1 text-[11px] text-zinc-400"
+              class="mt-2 rounded border border-white/10 px-2 py-1 text-xs text-zinc-400"
               onclick={() => removeMemoryRule(rule.id)}>Disable</button
             >
           </article>
@@ -198,7 +198,7 @@
         {#each data.memoryOverview?.events || [] as event (event.id)}
           <article class="rounded-md border border-white/10 bg-black/20 p-2">
             <p class="text-xs text-zinc-300">{event.eventType}</p>
-            <p class="mt-1 text-[11px] text-zinc-500">
+            <p class="mt-1 text-xs text-zinc-500">
               {new Date(event.createdAt).toLocaleString()}
             </p>
           </article>
@@ -211,7 +211,7 @@
     <div class="mt-3 space-y-2">
       {#each data.memoryOverview?.examples || [] as example (example.id)}
         <article class="rounded-md border border-white/10 bg-black/20 p-2">
-          <p class="text-[11px] text-zinc-500">
+          <p class="text-xs text-zinc-500">
             {example.scope} · score {Number(example.score).toFixed(2)}
           </p>
           <div class="mt-1 text-xs text-zinc-400 line-clamp-2">
