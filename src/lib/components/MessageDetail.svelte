@@ -135,7 +135,7 @@
   function getMessageBodyMode(id: number): 'text' | 'html' {
     if (perMessageBodyMode[id]) return perMessageBodyMode[id];
     const item = getThreadItem(id);
-    if (item?.bodyHtml) return 'html';
+    if (item?.safeBodyHtml || item?.bodyHtml) return 'html';
     return 'text';
   }
 
@@ -305,7 +305,7 @@
                 {#if isMessageOpen(item.id)}
                   <div class="px-3 pb-3" transition:slide={{ duration: 200 }}>
                     <!-- Toggles bar -->
-                    {#if item.bodyHtml}
+                    {#if item.safeBodyHtml || item.bodyHtml}
                       <div class="flex items-center justify-end gap-1 mb-2">
                         <div class="flex border border-border/40 p-0.5 bg-background">
                           <button
@@ -357,7 +357,7 @@
                     {/if}
 
                     <!-- Body content -->
-                    {#if getMessageBodyMode(item.id) === 'html' && item.bodyHtml}
+                    {#if getMessageBodyMode(item.id) === 'html' && (item.safeBodyHtml || item.bodyHtml)}
                       <div class="overflow-x-auto w-full {getMessageEmailTheme(item.id) === 'dark' ? 'email-dark' : ''}">
                         <article class="email-html text-sm leading-7 text-foreground max-w-none w-full">
                           <!-- eslint-disable-next-line svelte/no-at-html-tags -->

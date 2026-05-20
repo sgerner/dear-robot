@@ -366,7 +366,8 @@ export function getMessageDetail(id: number) {
       from: messages.from,
       to: messages.to,
       date: messages.date,
-      bodyText: sql<string>`substr(${messages.bodyText}, 1, 500)`,
+      bodyText: messages.bodyText,
+      bodyHtml: messages.bodyHtml,
       isRead: messages.isRead,
       isAnswered: messages.isAnswered,
       isFlagged: messages.isFlagged
@@ -383,7 +384,11 @@ export function getMessageDetail(id: number) {
     )
     .orderBy(messages.date)
     .limit(50)
-    .all();
+    .all()
+    .map((item) => ({
+      ...item,
+      safeBodyHtml: sanitizeEmailHtml(item.bodyHtml)
+    }));
   return {
     message: {
       ...message,
