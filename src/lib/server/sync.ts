@@ -263,6 +263,7 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
       return;
     } catch (error) {
       if (!signal.aborted) {
+        console.error(`[dear-robot] Sync engine watch loop failed for account ${accountId}:`, error);
         db.update(accounts)
           .set({
             syncStatus: 'error',
@@ -271,7 +272,8 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
           })
           .where(eq(accounts.id, accountId))
           .run();
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        // Increase delay on error to 30 seconds to prevent CPU pinning
+        await new Promise((resolve) => setTimeout(resolve, 30000));
       }
     }
   }

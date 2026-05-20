@@ -209,13 +209,21 @@ export const imapEmailProvider: MailProvider = {
     while (!signal.aborted) {
       const client = await clientFor(account);
       try {
+        console.log(`[dear-robot] IMAP watch starting for ${account.email}`);
         await client.connect();
         const lock = await client.getMailboxLock('INBOX');
         try {
           let known =
             client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.exists : 0;
           while (!signal.aborted) {
+            const idleStartTime = Date.now();
             await client.idle();
+            
+            // If idle returned in less than 1 second, it might be a tight loop
+            if (Date.now() - idleStartTime < 1000) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
             const current =
               client.mailbox && typeof client.mailbox === 'object' ? client.mailbox.exists : known;
             if (current > known) {
@@ -261,13 +269,15 @@ export const imapEmailProvider: MailProvider = {
           lock.release();
         }
       } catch (error) {
-        if (!signal.aborted)
+        if (!signal.aborted) {
+          console.error(`[dear-robot] IMAP watch error for ${account.email}:`, error);
           handlers.onError(error instanceof Error ? error : new Error(String(error)));
+        }
       } finally {
         await client.logout().catch(() => undefined);
       }
       if (!signal.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 10000));
       }
     }
   },
