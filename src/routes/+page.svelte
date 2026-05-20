@@ -265,6 +265,7 @@
   let searchDebounce: ReturnType<typeof setTimeout> | null = null;
   let mobileMenuOpen = $state(false);
   let selectedMessageId = $state<number | null>(null);
+  let messageDetailCache = $state<Record<number, any>>({});
   let openMessageIds = $state(new Set<number>());
   let contactsImportCsv = $state('');
   let cachePassphrase = $state('');
@@ -626,6 +627,9 @@
   onMount(() => {
     loadUiPreferences();
     if (typeof window === 'undefined') return;
+    if (data.selected?.message?.id) {
+      messageDetailCache = { ...messageDetailCache, [data.selected.message.id]: data.selected };
+    }
     const media = window.matchMedia('(max-width: 767px)');
     const applyViewport = () => {
       isMobileViewport = media.matches;
@@ -647,11 +651,30 @@
     const onWindowFocus = () => {
       void invalidateAll();
     };
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const messageParam = params.get('message');
+      if (!messageParam) {
+        selectedMessageId = null;
+        data = { ...data, selected: null, query: { ...data.query, messageId: null } };
+        return;
+      }
+      const id = Number(messageParam);
+      if (!Number.isFinite(id) || id <= 0) return;
+      selectedMessageId = id;
+      const fastDetail = getFastMessageDetail(id);
+      if (fastDetail) {
+        data = { ...data, selected: fastDetail, query: { ...data.query, messageId: id } };
+      }
+      void hydrateMessageDetail(id);
+    };
     window.addEventListener('focus', onWindowFocus);
+    window.addEventListener('popstate', onPopState);
 
     return () => {
       media.removeEventListener('change', applyViewport);
       window.removeEventListener('focus', onWindowFocus);
+      window.removeEventListener('popstate', onPopState);
       eventSource.close();
     };
   });
@@ -960,19 +983,36 @@
   }
 
   async function selectMessage(id: number) {
-    isLoading = true;
-    try {
-      showShortcutHelp = false;
+    showShortcutHelp = false;
+    selectedMessageId = id;
+    const next = new Set(openMessageIds);
+    next.add(id);
+    openMessageIds = next;
+
+    const fastDetail = getFastMessageDetail(id);
+    if (fastDetail) {
+      data = {
+        ...data,
+        selected: fastDetail,
+        query: {
+          ...data.query,
+          messageId: id
+        }
+      };
+    }
+
+    if (typeof window !== 'undefined') {
       const params = new URLSearchParams(location.search);
       params.set('message', String(id));
       if (view !== 'inbox') params.set('view', view);
       if (search) params.set('q', search);
       if (accountFilter) params.set('accountId', accountFilter);
       if (data.query?.folder) params.set('folder', data.query.folder);
-      await goto(`/?${params.toString()}`, { keepFocus: true });
-    } finally {
-      isLoading = false;
+      const nextUrl = `/?${params.toString()}`;
+      window.history.pushState(window.history.state, '', nextUrl);
     }
+
+    void hydrateMessageDetail(id);
   }
 
   function toggleMessage(id: number) {
@@ -987,15 +1027,59 @@
   }
 
   async function deselectMessage() {
-    isLoading = true;
-    try {
-      showShortcutHelp = false;
-      openMessageIds = new Set();
+    showShortcutHelp = false;
+    selectedMessageId = null;
+    openMessageIds = new Set();
+    data = {
+      ...data,
+      selected: null,
+      query: {
+        ...data.query,
+        messageId: null
+      }
+    };
+    if (typeof window !== 'undefined') {
       const params = new URLSearchParams(location.search);
       params.delete('message');
-      await goto(`/?${params.toString()}`);
-    } finally {
-      isLoading = false;
+      const nextUrl = `/?${params.toString()}`;
+      window.history.pushState(window.history.state, '', nextUrl);
+    }
+  }
+
+  function getFastMessageDetail(id: number) {
+    if (data.selected?.message?.id === id) return data.selected;
+    if (messageDetailCache[id]) return messageDetailCache[id];
+    const fallback =
+      data.messages.find((message: { id: number }) => message.id === id) ||
+      serverSearchResults.find((message: { id: number }) => message.id === id);
+    if (!fallback) return null;
+    return {
+      message: fallback,
+      thread: [fallback],
+      account: data.accounts.find((account: { id: number }) => account.id === fallback.accountId) || null,
+      attachments: [],
+      suggestion: null
+    };
+  }
+
+  async function hydrateMessageDetail(id: number) {
+    try {
+      const cached = messageDetailCache[id];
+      if (cached) {
+        if (selectedMessageId === id) {
+          data = { ...data, selected: cached, query: { ...data.query, messageId: id } };
+        }
+        return;
+      }
+      const res = await fetch(`/api/messages/${id}`);
+      if (!res.ok) return;
+      const detail = await res.json();
+      messageDetailCache = { ...messageDetailCache, [id]: detail };
+      if (selectedMessageId === id) {
+        data = { ...data, selected: detail, query: { ...data.query, messageId: id } };
+      }
+    } catch {
+      // Keep optimistic selection if hydration fails.
     }
   }
 
