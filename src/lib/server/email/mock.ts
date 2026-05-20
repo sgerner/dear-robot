@@ -4,6 +4,7 @@ import type { Account, Message } from '../db/schema';
 import type { MailProvider, ProviderMessage } from './types';
 
 const mockActions: Array<Record<string, unknown>> = [];
+const movedMessageIds = new Map<string, string>(); // messageId -> folderPath
 
 export function recordedMockActions() {
   return mockActions;
@@ -11,6 +12,7 @@ export function recordedMockActions() {
 
 export function clearMockActions() {
   mockActions.length = 0;
+  movedMessageIds.clear();
 }
 
 export const mockEmailProvider: MailProvider = {
@@ -28,8 +30,11 @@ export const mockEmailProvider: MailProvider = {
     ];
   },
   async backfill(_account, limit = 100, folderPath = 'INBOX') {
-    if (folderPath !== 'INBOX') return [];
     return readFixtureEmails()
+      .filter((email) => {
+        const currentFolder = movedMessageIds.get(email.id) || 'INBOX';
+        return currentFolder === folderPath;
+      })
       .slice(0, limit)
       .map(
         (email): ProviderMessage => ({
@@ -64,8 +69,11 @@ export const mockEmailProvider: MailProvider = {
       );
   },
   async fetchSinceUid(_account, folderPath, sinceUidExclusive, limit = 100) {
-    if (folderPath !== 'INBOX') return [];
-    const emails = readFixtureEmails();
+    const emails = readFixtureEmails()
+      .filter((email) => {
+        const currentFolder = movedMessageIds.get(email.id) || 'INBOX';
+        return currentFolder === folderPath;
+      });
     return emails
       .map((email, index) => ({ email, uid: index + 1 }))
       .filter((row) => row.uid > sinceUidExclusive)
@@ -103,8 +111,11 @@ export const mockEmailProvider: MailProvider = {
       );
   },
   async folderState(_account, folderPath) {
-    if (folderPath !== 'INBOX') return { uidValidity: 'mock-static', highestUid: 0 };
-    return { uidValidity: 'mock-static', highestUid: readFixtureEmails().length };
+    const count = readFixtureEmails().filter((email) => {
+      const currentFolder = movedMessageIds.get(email.id) || 'INBOX';
+      return currentFolder === folderPath;
+    }).length;
+    return { uidValidity: 'mock-static', highestUid: count };
   },
   async watchInbox(_account, _handlers, signal) {
     while (!signal.aborted) {
@@ -112,6 +123,8 @@ export const mockEmailProvider: MailProvider = {
     }
   },
   async move(account: Account, message: Message, folderPath: string) {
+    const id = message.providerMessageId.split(':').at(-1);
+    if (id) movedMessageIds.set(id, folderPath);
     mockActions.push({ type: 'move', accountId: account.id, messageId: message.id, folderPath });
   },
   async markAnswered(account: Account, message: Message) {

@@ -1,5 +1,5 @@
 const DB_NAME = 'dear-robot-client-cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const CACHE_KEY_STORAGE = 'dear-robot-cache-passphrase';
 
 type StoreName = 'messages' | 'folders' | 'contacts' | 'meta' | 'outbox' | 'draft_local' | 'message_details';

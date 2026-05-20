@@ -624,9 +624,24 @@ export async function moveMessage(id: number, folderPath: string) {
   if (!context?.message || !context.account) throw new Error('Message not found');
   const provider = providerForAccount(context.account);
   await provider.move(context.account, context.message, folderPath);
+
+  // Update providerMessageId to reflect the new folder. 
+  // Note: The UID might change on the server, but the sync engine will 
+  // reconcile it when it discovers the new UID in the target folder.
+  // By changing the prefix now, we prevent the old folder's sync from 
+  // accidentally "restoring" it if there's a race.
+  const oldProviderId = context.message.providerMessageId;
+  const uid = oldProviderId.includes(':') ? oldProviderId.split(':').at(-1) : oldProviderId;
+  const newProviderId = `${folderPath}:${uid}`;
+
   return db
     .update(messages)
-    .set({ folderPath, updatedAt: nowIso() })
+    .set({
+      folderPath,
+      providerMessageId: newProviderId,
+      latestSuggestionId: null, // Suggestions might be stale after a move
+      updatedAt: nowIso()
+    })
     .where(eq(messages.id, id))
     .returning()
     .get();
@@ -662,8 +677,18 @@ export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionS
     if (input.action === 'move') {
       const folderPath = input.folderPath || 'INBOX';
       await provider.move(row.account, msgContext, folderPath);
+      
+      const oldProviderId = msgContext.providerMessageId;
+      const uid = oldProviderId.includes(':') ? oldProviderId.split(':').at(-1) : oldProviderId;
+      const newProviderId = `${folderPath}:${uid}`;
+
       db.update(messages)
-        .set({ folderPath, updatedAt: nowIso() })
+        .set({ 
+          folderPath, 
+          providerMessageId: newProviderId,
+          latestSuggestionId: null,
+          updatedAt: nowIso() 
+        })
         .where(eq(messages.id, row.message.id))
         .run();
     }
@@ -971,8 +996,18 @@ export async function executeSuggestion(id: number) {
     const target = resolveTargetFolder(message.accountId, suggestion);
     if (target) {
       await provider.move(account, message, target);
+      
+      const oldProviderId = message.providerMessageId;
+      const uid = oldProviderId.includes(':') ? oldProviderId.split(':').at(-1) : oldProviderId;
+      const newProviderId = `${target}:${uid}`;
+
       db.update(messages)
-        .set({ folderPath: target, updatedAt: now })
+        .set({ 
+          folderPath: target, 
+          providerMessageId: newProviderId,
+          latestSuggestionId: null,
+          updatedAt: now 
+        })
         .where(eq(messages.id, message.id))
         .run();
       details = { targetFolder: target };

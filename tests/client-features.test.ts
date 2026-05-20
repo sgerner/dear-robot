@@ -310,4 +310,35 @@ describe('Phase 1 email client services', () => {
     expect(html).toContain('style="padding:16px;color:#ff5500"');
     expect(html).not.toContain('<script>');
   });
+
+  it('ensures moved messages do not reappear in the inbox after a sync', async () => {
+    const { listMessages, moveMessage } = await import('../src/lib/server/services/messages');
+    const { syncAccount } = await import('../src/lib/server/sync');
+    const { listAccounts } = await import('../src/lib/server/services/accounts');
+
+    // 1. Get initial inbox count
+    const initialMessages = listMessages({ folder: 'INBOX' });
+    const messageToMove = initialMessages[0];
+    expect(messageToMove).toBeTruthy();
+
+    // 2. Move message to Archive
+    await moveMessage(messageToMove.id, 'Archive');
+
+    // 3. Verify it's gone from Inbox locally
+    const afterMoveMessages = listMessages({ folder: 'INBOX' });
+    expect(afterMoveMessages.some((m) => m.id === messageToMove.id)).toBe(false);
+
+    // 4. Trigger a sync (this is where it used to reappear)
+    const account = listAccounts().find((a) => a.id === messageToMove.accountId);
+    expect(account).toBeTruthy();
+    await syncAccount(account!.id);
+
+    // 5. Verify it's STILL gone from Inbox after sync
+    const afterSyncMessages = listMessages({ folder: 'INBOX' });
+    expect(afterSyncMessages.some((m) => m.id === messageToMove.id)).toBe(false);
+
+    // 6. Verify it's present in Archive
+    const archiveMessages = listMessages({ folder: 'Archive' });
+    expect(archiveMessages.some((m) => m.subject === messageToMove.subject)).toBe(true);
+  });
 });
