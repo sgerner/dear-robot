@@ -39,6 +39,9 @@ ${input.agentInstructions}
 Memory context:
 ${input.memoryContext || 'None'}
 
+Related context:
+${input.relatedContext || 'None'}
+
 Email:
 Subject: ${input.subject}
 Sender: ${input.sender}

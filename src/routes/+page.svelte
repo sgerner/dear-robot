@@ -1427,6 +1427,13 @@
     await invalidateAll();
   }
 
+  async function refreshBriefing() {
+    status = 'Refreshing briefing...';
+    const briefing = await api('/api/agent/briefing', { method: 'POST', body: '{}' });
+    data = { ...data, briefing };
+    status = 'Briefing refreshed';
+  }
+
   async function saveAutopilotPolicy() {
     await api('/api/autopilot', {
       method: 'POST',
@@ -1625,22 +1632,6 @@
     } finally {
       searchState = 'complete';
     }
-  }
-
-  function onSearchInput(e: Event) {
-    const val = (e.currentTarget as HTMLInputElement).value;
-    search = val;
-    if (searchDebounce) clearTimeout(searchDebounce);
-    
-    if (!val.trim()) {
-      searchState = 'idle';
-      serverSearchResults = [];
-      return;
-    }
-
-    searchDebounce = setTimeout(() => {
-      void performSearch();
-    }, 400);
   }
 
   async function toggleDictation(targetId: string) {
@@ -2293,7 +2284,6 @@
       form.baseUrl = form.baseUrl.replace('api.model.dev', 'model.dev');
       aiProfileForms = { ...aiProfileForms, [profile]: { ...form } };
     }
-    const isCoreProfile = coreAiProfileKeys.includes(profile as (typeof coreAiProfileKeys)[number]);
     
     try {
       if (profileMode[profile] === 'catalog') {
@@ -3168,6 +3158,40 @@
                 <p class="mt-1 text-xs text-muted-foreground">{stat.label}</p>
               </Card>
             {/each}
+          </section>
+
+          <section class="mt-6">
+            <Card class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 class="font-medium text-foreground">Daily Briefing</h3>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    {data.briefing?.recommendedFocus || 'No briefing generated yet.'}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onclick={refreshBriefing}>Refresh</Button>
+                <div class="grid grid-cols-2 gap-2 text-right text-xs md:grid-cols-4">
+                  {#each [{ value: data.briefing?.stats?.importantUnread || 0, label: 'Important' }, { value: data.briefing?.stats?.openObligations || 0, label: 'Obligations' }, { value: data.briefing?.stats?.dueFollowUps || 0, label: 'Follow-ups' }, { value: data.briefing?.stats?.pendingApprovals || 0, label: 'Approvals' }] as stat, i (i)}
+                    <div class="rounded border border-border/60 bg-background/40 px-3 py-2">
+                      <p class="text-base font-semibold text-foreground">{stat.value}</p>
+                      <p class="text-muted-foreground">{stat.label}</p>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+              {#if data.briefing?.obligations?.length}
+                <div class="mt-4 space-y-2">
+                  {#each data.briefing.obligations.slice(0, 4) as obligation (obligation.id)}
+                    <div class="rounded border border-border/60 bg-muted/20 p-3">
+                      <p class="truncate text-sm font-medium text-foreground">{obligation.title}</p>
+                      <p class="mt-1 text-xs text-muted-foreground">
+                        {obligation.sender} · {obligation.dueAt ? new Date(obligation.dueAt).toLocaleDateString() : 'No due date'}
+                      </p>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </Card>
           </section>
 
           <section class="mt-6">

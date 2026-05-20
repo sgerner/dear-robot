@@ -277,6 +277,21 @@ CREATE TABLE IF NOT EXISTS follow_up_reminders (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_obligations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  owner TEXT NOT NULL DEFAULT 'user',
+  kind TEXT NOT NULL DEFAULT 'follow_up',
+  title TEXT NOT NULL,
+  evidence TEXT NOT NULL,
+  due_at TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  source TEXT NOT NULL DEFAULT 'heuristic',
+  confidence REAL NOT NULL DEFAULT 0.6,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS outcome_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -469,6 +484,8 @@ CREATE INDEX IF NOT EXISTS executed_actions_message_created_idx ON executed_acti
 CREATE INDEX IF NOT EXISTS agent_action_queue_status_created_idx ON agent_action_queue(status, created_at);
 CREATE INDEX IF NOT EXISTS agent_action_queue_suggestion_id_idx ON agent_action_queue(suggestion_id);
 CREATE INDEX IF NOT EXISTS follow_up_reminders_status_due_idx ON follow_up_reminders(status, due_at);
+CREATE INDEX IF NOT EXISTS agent_obligations_status_due_idx ON agent_obligations(status, due_at);
+CREATE INDEX IF NOT EXISTS agent_obligations_message_idx ON agent_obligations(message_id);
 CREATE INDEX IF NOT EXISTS ai_observability_created_idx ON ai_observability(created_at);
 CREATE INDEX IF NOT EXISTS task_runs_message_created_idx ON task_runs(message_id, created_at);
 CREATE INDEX IF NOT EXISTS task_steps_run_step_idx ON task_steps(task_run_id, step_index);
@@ -894,6 +911,7 @@ export function resetForTests() {
     sqlite.exec(`
 DELETE FROM executed_actions;
 DELETE FROM outcome_events;
+DELETE FROM agent_obligations;
 DELETE FROM follow_up_reminders;
 DELETE FROM thread_summaries;
 DELETE FROM ai_observability;

@@ -4,13 +4,15 @@ import { type EmailSuggestion } from '../ai/schema';
 import { db, nowIso } from '../db';
 import { aiSuggestions, automationPolicies, messages, taskRuns, taskSteps } from '../db/schema';
 import { readAgentInstructions } from '../memory';
-import { buildMemoryPromptContext } from '../memory-learning';
 import {
   getMessageDetail,
   listFoldersWithCounts,
   moveMessage,
   searchRelatedEmailsForAgent
 } from '../services/messages';
+import { buildUnifiedAgentContext } from './context';
+import { extractAndStoreObligationsForMessage } from './obligations';
+import { assessAgentAction } from './policy';
 import { buildAgentPlanMessages } from './prompts';
 import { AgentPlanSchema, TaskApproveSchema, TaskPlanInputSchema, type AgentPlan } from './schema';
 import {
@@ -123,7 +125,11 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     (folder) => folder.path
   );
   const tools = listAvailableAgentTools().filter((tool) => tool.isEnabled);
-  const relatedEmails = loadRelatedEmailContext(messageId, detail.message.subject, detail.message.from);
+  const unifiedContext = buildUnifiedAgentContext(messageId, {
+    note: parsed.note || null,
+    includeBody: false,
+    relatedLimit: 10
+  });
   const complexity = classifyComplexity(
     detail.message.subject,
     detail.message.bodyText,
@@ -131,11 +137,7 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
   );
   const messagesPrompt = buildAgentPlanMessages({
     agentInstructions: readAgentInstructions(),
-    memoryContext: buildMemoryPromptContext({
-      subject: detail.message.subject,
-      bodyText: detail.message.bodyText,
-      note: parsed.note || null
-    }).text,
+    memoryContext: unifiedContext?.memoryContext || '',
     subject: detail.message.subject,
     sender: detail.message.from,
     recipients: detail.message.to,
@@ -145,7 +147,10 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     availableFolders: accountFolders,
     existingSuggestion: suggestion,
     note: parsed.note || null,
-    relatedEmailContext: relatedEmails,
+    relatedEmailContext: unifiedContext?.relatedEmails || [],
+    obligations: unifiedContext?.openObligations || [],
+    recentOutcomes: unifiedContext?.recentOutcomes || [],
+    threadSummary: unifiedContext?.threadSummary || null,
     tools: [BUILTIN_MAILBOX_SEARCH_TOOL, ...tools].map((tool) => ({
       name: tool.name,
       description: tool.description || 'No description',
@@ -164,6 +169,7 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
   const policy = getAutomationPolicy();
   const now = nowIso();
   const normalized = normalizePlanWithPolicy(AgentPlanSchema.parse(planned.object), policy, tools);
+  extractAndStoreObligationsForMessage(messageId);
   const run = db
     .insert(taskRuns)
     .values({
@@ -479,14 +485,34 @@ function normalizePlanWithPolicy(
   const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
   const steps = plan.steps.map((step) => {
     let requiresApproval = step.requires_approval || policy.alwaysRequireApproval;
-    if (isNonDestructiveInternalStep(step.kind)) requiresApproval = false;
+    const decision = assessAgentAction({
+      action: step.kind === 'tool_call' ? 'tool_call' : step.kind,
+      subject: step.title,
+      bodyText: step.details,
+      toolReadOnly: step.tool_name ? toolMap.get(step.tool_name)?.readOnly ?? true : true
+    });
+    const riskLevel = highestRisk(step.risk_level, decision.riskLevel);
+    if (decision.requiresApproval) requiresApproval = true;
+    if (isNonDestructiveInternalStep(step.kind) && !decision.requiresApproval) {
+      requiresApproval = false;
+    }
     if (step.kind === 'tool_call' && step.tool_name && policy.autoApproveReadOnlyToolCalls) {
       const tool = toolMap.get(step.tool_name);
-      if (tool?.readOnly || tool?.requireApprovalForWrite === false) requiresApproval = false;
+      if ((tool?.readOnly || tool?.requireApprovalForWrite === false) && !decision.requiresApproval) {
+        requiresApproval = false;
+      }
     }
-    return { ...step, requires_approval: requiresApproval };
+    return { ...step, risk_level: riskLevel, requires_approval: requiresApproval };
   });
   return { ...plan, requires_user_approval: steps.some((step) => step.requires_approval), steps };
+}
+
+function highestRisk(
+  a: AgentPlan['steps'][number]['risk_level'],
+  b: AgentPlan['steps'][number]['risk_level']
+) {
+  const order = { low: 1, medium: 2, high: 3 };
+  return order[a] >= order[b] ? a : b;
 }
 
 function getAutomationPolicy() {
@@ -518,52 +544,4 @@ function inferFolderFromDetails(details: string) {
 function summarizeOutputs(outputs: Array<Record<string, unknown>>) {
   if (!outputs.length) return 'No executable steps completed.';
   return `Completed ${outputs.length} step(s).`;
-}
-
-function loadRelatedEmailContext(messageId: number, subject: string, sender: string) {
-  const senderEmail = extractEmail(sender);
-  const normalizedSubject = normalizeSubjectForSearch(subject);
-  const subjectMatches = normalizedSubject
-    ? searchRelatedEmailsForAgent({
-        messageId,
-        subject: normalizedSubject,
-        query: normalizedSubject,
-        limit: 6
-      })
-    : [];
-  const senderMatches = senderEmail
-    ? searchRelatedEmailsForAgent({ messageId, sender: senderEmail, limit: 6 })
-    : [];
-  const merged = [...subjectMatches, ...senderMatches]
-    .filter((row, idx, all) => all.findIndex((candidate) => candidate.id === row.id) === idx)
-    .slice(0, 10);
-  return merged.map((row) => ({
-    id: row.id,
-    date: row.date,
-    from: row.from,
-    subject: row.subject,
-    folderPath: row.folderPath,
-    snippet: row.snippet
-  }));
-}
-
-function extractEmail(value: string) {
-  const match = value.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
-  return match?.[1]?.toLowerCase() || null;
-}
-
-function normalizeSubjectForSearch(subject: string) {
-  const normalized = subject
-    .toLowerCase()
-    .replace(/^(re|fwd?):\s*/i, '')
-    .replace(/\[[^\]]+\]/g, ' ')
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!normalized) return '';
-  const tokens = normalized
-    .split(' ')
-    .filter((token) => token.length > 2)
-    .slice(0, 8);
-  return tokens.join(' ');
 }

@@ -18,6 +18,7 @@ import { getMemoryOverview, memoryOnboardingState } from '$lib/server/memory-lea
 import { defaultGlobalSkillsMarkdown, readGlobalSkillsMarkdown } from '$lib/server/skills';
 import { getGoogleOauthSettings } from '$lib/server/oauth/google';
 import { listAutopilotDashboard } from '$lib/server/agent/autopilot';
+import { buildDailyBriefing } from '$lib/server/agent/briefing';
 import { env } from '$lib/server/env';
 import { speechToTextProviders } from '$lib/speech/providers';
 import { getAudioDictationSettings } from '$lib/server/ai/settings';
@@ -122,6 +123,7 @@ export function load({ url, depends }) {
         : 'Authorization: Bearer <MCP_AUTH_TOKEN>'
     },
     autopilot: isOperationsView ? listAutopilotDashboard() : null,
+    briefing: isOperationsView ? buildDailyBriefing() : null,
     memoryOnboarding: isSettingsView ? memoryOnboardingState() : null,
     executed: isOperationsView
       ? db

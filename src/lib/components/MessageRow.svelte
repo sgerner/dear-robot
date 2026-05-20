@@ -7,14 +7,9 @@
     Eye,
     EyeOff,
     Send,
-    RefreshCw,
-    Bot,
     Paperclip,
     ChevronDown,
-    MessageSquare,
     Sparkles,
-    FileText,
-    ThumbsUp,
     Sun,
     Moon,
     Reply,
@@ -22,7 +17,6 @@
     Forward
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
-  import { flip } from 'svelte/animate';
   import Button from '$lib/components/ui/Button.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import { formatPlainText } from '$lib/utils/format';
@@ -33,7 +27,7 @@
     selectedId,
     open = false,
     onToggle,
-    view = 'inbox',
+    view: _view = 'inbox',
     swiping,
     swipeSettings,
     swipeLabel,
@@ -57,47 +51,47 @@
     executeSuggestion,
     saveEdit,
     rejectSuggestion,
-    regenerate,
+    regenerate: _regenerate,
     generateSuggestion,
-    recordMessageOutcome,
-    createTaskPlan,
-    approveTask,
-    executeTask
+    recordMessageOutcome: _recordMessageOutcome,
+    createTaskPlan: _createTaskPlan,
+    approveTask: _approveTask,
+    executeTask: _executeTask
   }: {
     message: any;
     selectedId: number | null;
     open: boolean;
-    onToggle: (id: number) => void;
+    onToggle: (_id: number) => void;
     view: string;
     swiping: any;
     swipeSettings: any;
-    swipeLabel: (id: any) => string;
-    swipeActionForDelta: (delta: number) => any;
-    startSwipe: (e: PointerEvent, id: number) => void;
-    updateSwipe: (e: PointerEvent) => void;
-    finishSwipe: (e: PointerEvent, id: number) => Promise<void>;
+    swipeLabel: (_id: any) => string;
+    swipeActionForDelta: (_delta: number) => any;
+    startSwipe: (_e: PointerEvent, _id: number) => void;
+    updateSwipe: (_e: PointerEvent) => void;
+    finishSwipe: (_e: PointerEvent, _id: number) => Promise<void>;
     cancelSwipe: () => void;
-    riskClass: (risk: string | null | undefined) => string;
+    riskClass: (_risk: string | null | undefined) => string;
     quickActionIds: string[];
-    quickActionMeta: (id: any) => any;
-    runQuickAction: (id: any, msgId?: number) => void | Promise<void>;
-    moveSelected: (path: string) => void | Promise<void>;
+    quickActionMeta: (_id: any) => any;
+    runQuickAction: (_id: any, _msgId?: number) => void | Promise<void>;
+    moveSelected: (_path: string) => void | Promise<void>;
     folders: any[];
-    selectMessage: (id: number) => void | Promise<void>;
+    selectMessage: (_id: number) => void | Promise<void>;
     dictationTargetId: string | null;
     dictationActive: boolean;
     dictationUnavailable: boolean;
     dictationLevel: number;
-    toggleDictation: (id: string) => void | Promise<void>;
+    toggleDictation: (_id: string) => void | Promise<void>;
     executeSuggestion: () => void | Promise<void>;
     saveEdit: () => void | Promise<void>;
     rejectSuggestion: () => void | Promise<void>;
     regenerate: () => void | Promise<void>;
-    generateSuggestion: (id: number) => void | Promise<void>;
-    recordMessageOutcome: (type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') => void | Promise<void>;
+    generateSuggestion: (_id: number) => void | Promise<void>;
+    recordMessageOutcome: (_type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') => void | Promise<void>;
     createTaskPlan: () => void | Promise<void>;
-    approveTask: (id: number, stepId?: number | null) => void | Promise<void>;
-    executeTask: (id: number) => void | Promise<void>;
+    approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
+    executeTask: (_id: number) => void | Promise<void>;
   } = $props();
 
   let detail = $state<any>(null);
@@ -105,8 +99,6 @@
   let bodyMode = $state<'text' | 'html'>('text');
   let emailTheme = $state<'light' | 'dark'>('dark');
   let draftText = $state('');
-  let regenNote = $state('');
-  let taskNote = $state('');
   let visibleThreadLimit = $state(5);
 
   const actionIcons: Record<string, any> = {
@@ -346,8 +338,8 @@
       <!-- Line 3: Snippet (hidden when open) -->
       {#if !open}
         <div class="truncate text-xs leading-tight text-muted-foreground/70 mt-0.5">
-          {@html formatPlainText(message.snippet)}
-        </div>
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html formatPlainText(message.snippet)}        </div>
       {/if}
     </div>
 
@@ -361,11 +353,13 @@
           {#if bodyMode === 'html' && detail.message?.safeBodyHtml}
             <div class="overflow-x-auto w-full {emailTheme === 'dark' ? 'email-dark' : ''}">
               <article class="email-html text-sm leading-7 text-foreground max-w-none w-full pb-3">
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                 {@html detail.message.safeBodyHtml}
               </article>
             </div>
           {:else}
             <div class="whitespace-pre-wrap font-sans text-sm leading-7 text-foreground pb-3">
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               {@html formatPlainText(detail.message?.bodyText || '')}
             </div>
           {/if}
@@ -488,6 +482,7 @@
                   </div>
                 </div>
                 <div class="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                   {@html formatPlainText(detail.suggestion.reasoningSummary)}
                 </div>
 

@@ -393,6 +393,37 @@ export const followUpReminders = sqliteTable(
   })
 );
 
+export const agentObligations = sqliteTable(
+  'agent_obligations',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    owner: text('owner', { enum: ['user', 'sender', 'other'] }).notNull().default('user'),
+    kind: text('kind', {
+      enum: ['reply', 'follow_up', 'send', 'review', 'pay', 'schedule', 'other']
+    })
+      .notNull()
+      .default('follow_up'),
+    title: text('title').notNull(),
+    evidence: text('evidence').notNull(),
+    dueAt: text('due_at'),
+    status: text('status', { enum: ['open', 'done', 'dismissed'] }).notNull().default('open'),
+    source: text('source').notNull().default('heuristic'),
+    confidence: real('confidence').notNull().default(0.6),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    statusDueIdx: index('agent_obligations_status_due_idx').on(table.status, table.dueAt),
+    messageIdx: index('agent_obligations_message_idx').on(table.messageId)
+  })
+);
+
 export const outcomeEvents = sqliteTable('outcome_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   messageId: integer('message_id')
@@ -681,3 +712,4 @@ export type MemoryProfile = typeof memoryProfile.$inferSelect;
 export type AgentActionQueue = typeof agentActionQueue.$inferSelect;
 export type AutopilotRun = typeof autopilotRuns.$inferSelect;
 export type ThreadSummary = typeof threadSummaries.$inferSelect;
+export type AgentObligation = typeof agentObligations.$inferSelect;

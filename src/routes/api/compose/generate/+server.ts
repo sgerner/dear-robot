@@ -6,6 +6,7 @@ import { getMessageDetail } from '$lib/server/services/messages';
 import { readAgentInstructions } from '$lib/server/memory';
 import { readGlobalSkillsMarkdown, truncateMarkdown } from '$lib/server/skills';
 import { endpointFor, type ProviderConfig } from '$lib/server/ai/provider';
+import { buildUnifiedAgentContext, contextForPrompt } from '$lib/server/agent/context';
 
 const GenerateComposeSchema = z.object({
   prompt: z.string().min(1),
@@ -71,8 +72,9 @@ export async function POST({ request }) {
   let contextText = '';
   if (context?.messageId) {
     const detail = getMessageDetail(context.messageId);
+    const unified = buildUnifiedAgentContext(context.messageId, { includeBody: false });
     if (detail?.message) {
-      contextText = `\n\nOriginal message context:\nFrom: ${detail.message.from}\nSubject: ${detail.message.subject}\nBody: ${(detail.message.bodyText || '').slice(0, 1200)}`;
+      contextText = `\n\nOriginal message context:\nFrom: ${detail.message.from}\nSubject: ${detail.message.subject}\nBody: ${(detail.message.bodyText || '').slice(0, 1200)}\n\nRelated agent context:\n${unified ? contextForPrompt(unified) : 'None'}`;
     }
   }
   const systemPrompt = `You are an email assistant. Write professional, concise emails based on the user's request.

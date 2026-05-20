@@ -10,7 +10,8 @@ import {
   feedbackLog,
   folders,
   messageAttachments,
-  messages
+  messages,
+  type Message
 } from '../db/schema';
 import { readAgentInstructions } from '../memory';
 import { buildMemoryPromptContext, recordMemoryEvent } from '../memory-learning';
@@ -22,6 +23,8 @@ import { webhookSubscriptions } from '../db/schema';
 import { sanitizeEmailHtml } from '../html';
 import { evaluateAttachmentPolicy } from '../attachment-policy';
 import { promptHash, recordAiObservation } from '../agent/observability';
+import { buildUnifiedAgentContext, contextForPrompt } from '../agent/context';
+import { extractAndStoreObligationsForMessage } from '../agent/obligations';
 
 export const MessageQuerySchema = z.object({
   q: z.string().optional(),
@@ -655,7 +658,7 @@ export async function bulkMessageAction(input: z.infer<typeof BulkMessageActionS
   let processed = 0;
   for (const row of rows) {
     const provider = providerForAccount(row.account);
-    const msgContext = row.message as any;
+    const msgContext = row.message as Message;
     if (input.action === 'move') {
       const folderPath = input.folderPath || 'INBOX';
       await provider.move(row.account, msgContext, folderPath);
@@ -781,13 +784,20 @@ export async function suggestForMessage(
     .from(folders)
     .where(eq(folders.accountId, message.accountId))
     .all();
+  const unifiedContext = buildUnifiedAgentContext(id, {
+    note: options.note || null,
+    includeBody: false
+  });
   const input = {
     agentInstructions: readAgentInstructions(),
-    memoryContext: buildMemoryPromptContext({
-      subject: message.subject,
-      bodyText: message.bodyText,
-      note: options.note || null
-    }).text,
+    memoryContext:
+      unifiedContext?.memoryContext ||
+      buildMemoryPromptContext({
+        subject: message.subject,
+        bodyText: message.bodyText,
+        note: options.note || null
+      }).text,
+    relatedContext: unifiedContext ? contextForPrompt(unifiedContext) : 'None',
     subject: message.subject,
     sender: message.from,
     recipients: message.to,
@@ -826,6 +836,7 @@ export async function suggestForMessage(
     .set({ latestSuggestionId: saved.id, updatedAt: nowIso() })
     .where(eq(messages.id, id))
     .run();
+  extractAndStoreObligationsForMessage(id);
   recordAiObservation({
     messageId: id,
     suggestionId: saved.id,

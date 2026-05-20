@@ -14,7 +14,6 @@
     Bot,
     Paperclip,
     ChevronDown,
-    MessageSquare,
     Sparkles,
     FileText,
     ThumbsUp,

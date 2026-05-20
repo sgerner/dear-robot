@@ -35,6 +35,7 @@ export const EmailSuggestionInputSchema = z.object({
   bodyText: z.string(),
   availableFolders: z.array(z.string()),
   memoryContext: z.string().optional(),
+  relatedContext: z.string().optional(),
   existingSuggestion: EmailSuggestionSchema.nullable().optional(),
   regenerationNote: z.string().nullable().optional()
 });

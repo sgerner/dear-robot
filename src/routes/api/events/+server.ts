@@ -1,7 +1,7 @@
 import { appEvents } from '$lib/server/events';
 
 export function GET() {
-  let controller: ReadableStreamDefaultController<any>;
+  let controller: ReadableStreamDefaultController<string>;
 
   const stream = new ReadableStream({
     start(c) {
@@ -20,7 +20,7 @@ export function GET() {
       const interval = setInterval(() => {
         try {
           controller.enqueue(`event: ping\ndata: ${JSON.stringify({ time: Date.now() })}\n\n`);
-        } catch (e) {
+        } catch (_e) {
           // stream closed
         }
       }, 30000);

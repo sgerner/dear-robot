@@ -21,6 +21,26 @@ export function buildAgentPlanMessages(input: {
     folderPath: string;
     snippet: string;
   }>;
+  obligations: Array<{
+    id: number;
+    title: string;
+    evidence: string;
+    dueAt: string | null;
+    kind: string;
+    owner: string;
+  }>;
+  recentOutcomes: Array<{
+    outcomeType: string;
+    notes: string | null;
+    createdAt: string;
+  }>;
+  threadSummary: {
+    summary: string;
+    openQuestions: string;
+    commitments: string;
+    nextAction: string;
+    urgency: string;
+  } | null;
   tools: Array<{
     name: string;
     description: string;
@@ -108,6 +128,15 @@ ${input.existingSuggestion ? JSON.stringify(input.existingSuggestion, null, 2) :
 
 Related emails outside current thread:
 ${input.relatedEmailContext.length ? JSON.stringify(input.relatedEmailContext, null, 2) : 'None'}
+
+Known obligations:
+${input.obligations.length ? JSON.stringify(input.obligations, null, 2) : 'None'}
+
+Thread intelligence:
+${input.threadSummary ? JSON.stringify(input.threadSummary, null, 2) : 'None'}
+
+Recent outcomes:
+${input.recentOutcomes.length ? JSON.stringify(input.recentOutcomes, null, 2) : 'None'}
 
 User note:
 ${input.note || 'None'}
