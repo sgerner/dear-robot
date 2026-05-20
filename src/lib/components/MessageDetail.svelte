@@ -107,6 +107,7 @@
 
   let visibleThreadLimit = $state(5);
   let openMessageIds = $state(new Set<number>());
+  let lastConversationKey = $state<string | null>(null);
 
   const perMessageBodyMode = $state<Record<number, 'text' | 'html'>>({});
   const perMessageEmailTheme = $state<Record<number, 'light' | 'dark'>>({});
@@ -169,6 +170,20 @@
   function isMessageOpen(id: number) {
     return openMessageIds.has(id);
   }
+
+  $effect(() => {
+    const conversationKey = selected?.conversationKey || null;
+    if (conversationKey === lastConversationKey) return;
+    lastConversationKey = conversationKey;
+
+    if (!selected?.thread?.length || selected.thread.length <= 1) {
+      openMessageIds = new Set();
+      return;
+    }
+
+    const rootId = selected.thread[0]?.id;
+    openMessageIds = rootId ? new Set([rootId]) : new Set();
+  });
 </script>
 
 {#if selected && !['settings', 'operations'].includes(view)}
