@@ -115,7 +115,7 @@ export const mockEmailProvider: MailProvider = {
       const currentFolder = movedMessageIds.get(email.id) || 'INBOX';
       return currentFolder === folderPath;
     }).length;
-    return { uidValidity: 'mock-static', highestUid: count };
+    return { uidValidity: 'mock-static', highestUid: count, messageCount: count };
   },
   async watchInbox(_account, _handlers, signal) {
     while (!signal.aborted) {

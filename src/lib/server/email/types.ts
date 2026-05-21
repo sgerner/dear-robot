@@ -62,6 +62,7 @@ export type MailProvider = {
   ): Promise<{
     uidValidity: string | null;
     highestUid: number;
+    messageCount: number;
   }>;
   fetchAllUids?(
     account: Account,
@@ -71,6 +72,11 @@ export type MailProvider = {
     account: Account,
     handlers: {
       onMessage: (message: ProviderMessage) => Promise<void>;
+      onMailboxChanged?: (change: {
+        folderPath: string;
+        previousCount: number;
+        currentCount: number;
+      }) => Promise<void> | void;
       onError: (error: Error) => void;
     },
     signal: AbortSignal

@@ -184,7 +184,8 @@ export const imapEmailProvider: MailProvider = {
       });
       return {
         uidValidity: status.uidValidity ? String(status.uidValidity) : null,
-        highestUid: Math.max(0, Number(status.uidNext || 1) - 1)
+        highestUid: Math.max(0, Number(status.uidNext || 1) - 1),
+        messageCount: Math.max(0, Number(status.messages || 0))
       };
     } finally {
       await client.logout().catch(() => undefined);
@@ -218,10 +219,10 @@ export const imapEmailProvider: MailProvider = {
           while (!signal.aborted) {
             const idleStartTime = Date.now();
             await client.idle();
-            
+
             // If idle returned in less than 1 second, it might be a tight loop
             if (Date.now() - idleStartTime < 1000) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              await new Promise((resolve) => setTimeout(resolve, 1000));
             }
 
             const current =
@@ -263,6 +264,14 @@ export const imapEmailProvider: MailProvider = {
                   isFlagged: msg.flags?.has('\\Flagged') ?? false
                 });
               }
+            } else if (current < known) {
+              const previousCount = known;
+              known = current;
+              await handlers.onMailboxChanged?.({
+                folderPath: 'INBOX',
+                previousCount,
+                currentCount: current
+              });
             }
           }
         } finally {

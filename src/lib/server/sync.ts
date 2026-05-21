@@ -12,6 +12,7 @@ type WorkerState = {
 
 const workers = new Map<number, WorkerState>();
 const syncInFlight = new Set<number>();
+const observedFolderCounts = new Map<number, Map<string, number>>();
 let initialized = false;
 
 export function startSyncEngine() {
@@ -25,6 +26,7 @@ export function startSyncWorkerForAccount(accountId: number, options?: { runInit
   if (workers.has(accountId)) return;
   const abortController = new AbortController();
   void runWatchLoop(accountId, abortController.signal);
+  void runFolderReconciliationLoop(accountId, abortController.signal);
   if (options?.runInitialSync !== false) {
     void syncAccount(accountId);
   }
@@ -39,6 +41,7 @@ export function stopSyncWorkerForAccount(accountId: number) {
     clearInterval(worker.pollTimer);
   }
   workers.delete(accountId);
+  observedFolderCounts.delete(accountId);
 }
 
 export async function syncAccount(accountId: number) {
@@ -90,6 +93,9 @@ export async function syncAccount(accountId: number) {
       const remoteState = provider.folderState
         ? await provider.folderState(account, folder.path)
         : null;
+      if (remoteState?.messageCount !== undefined) {
+        rememberObservedFolderCount(accountId, folder.path, remoteState.messageCount);
+      }
       const uidValidityChanged =
         Boolean(priorState?.uidValidity && remoteState?.uidValidity) &&
         priorState?.uidValidity !== remoteState?.uidValidity;
@@ -197,6 +203,59 @@ export async function syncAccount(accountId: number) {
   }
 }
 
+async function runFolderReconciliationLoop(accountId: number, signal: AbortSignal) {
+  while (!signal.aborted) {
+    try {
+      await syncFoldersWhenRemoteCountsChange(accountId);
+    } catch (error) {
+      if (!signal.aborted) {
+        console.error(
+          `[dear-robot] Folder reconciliation loop failed for account ${accountId}:`,
+          error
+        );
+      }
+    }
+    if (!signal.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, 30_000));
+    }
+  }
+}
+
+async function syncFoldersWhenRemoteCountsChange(accountId: number) {
+  const changed = await detectRemoteFolderChanges(accountId);
+  if (changed) await syncAccount(accountId);
+}
+
+export async function detectRemoteFolderChanges(accountId: number) {
+  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  if (!account || !account.isEnabled) return false;
+  const provider = providerForAccount(account);
+  if (!provider.folderState) return false;
+  const folderRows = db
+    .select({ path: folders.path })
+    .from(folders)
+    .where(eq(folders.accountId, accountId))
+    .all();
+  const knownCounts = observedFolderCounts.get(accountId) || new Map<string, number>();
+  let changed = false;
+  for (const folder of folderRows) {
+    const state = await provider.folderState(account, folder.path);
+    const previousCount = knownCounts.get(folder.path);
+    if (previousCount !== undefined && previousCount !== state.messageCount) {
+      changed = true;
+    }
+    knownCounts.set(folder.path, state.messageCount);
+  }
+  observedFolderCounts.set(accountId, knownCounts);
+  return changed;
+}
+
+function rememberObservedFolderCount(accountId: number, folderPath: string, messageCount: number) {
+  const knownCounts = observedFolderCounts.get(accountId) || new Map<string, number>();
+  knownCounts.set(folderPath, messageCount);
+  observedFolderCounts.set(accountId, knownCounts);
+}
+
 async function runWatchLoop(accountId: number, signal: AbortSignal) {
   while (!signal.aborted) {
     const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
@@ -250,6 +309,9 @@ async function runWatchLoop(accountId: number, signal: AbortSignal) {
                 .run();
               appEvents.emit('sync_complete', { accountId });
             }
+          },
+          onMailboxChanged: async () => {
+            await syncAccount(accountId);
           },
           onError: (error) => {
             db.update(accounts)
