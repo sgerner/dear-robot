@@ -84,6 +84,7 @@
 <ScrollArea class="flex-1 min-h-0 scrollbar-thin">
   {#each messages as message (message.id)}
     <div
+      class="mx-2 border-b border-border/25 py-0.5 last:border-b-0"
       animate:flip={{ duration: 200 }}
       out:slide={{ duration: 200 }}
     >

@@ -185,7 +185,7 @@
 
 <div
   data-testid="message-row"
-  class="relative overflow-hidden border-b border-border/30 last:border-b-0"
+  class="relative overflow-hidden rounded-md"
 >
   <!-- Swipe left background (archive) -->
   <div

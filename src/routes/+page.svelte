@@ -10,7 +10,7 @@
     Sparkles,
     X
   } from 'lucide-svelte';
-  import { goto, invalidate } from '$app/navigation';
+  import { goto, invalidate, pushState } from '$app/navigation';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { fade, fly, slide } from 'svelte/transition';
   import type { ModelsDevProvider } from '$lib/server/ai/modelsdev';
@@ -1018,7 +1018,7 @@
       if (accountFilter) params.set('accountId', accountFilter);
       if (data.query?.folder) params.set('folder', data.query.folder);
       const nextUrl = `/?${params.toString()}`;
-      window.history.pushState(window.history.state, '', nextUrl);
+      pushState(nextUrl, {});
     }
 
     void hydrateMessageDetail(id);
@@ -1051,7 +1051,7 @@
       const params = new URLSearchParams(location.search);
       params.delete('message');
       const nextUrl = `/?${params.toString()}`;
-      window.history.pushState(window.history.state, '', nextUrl);
+      pushState(nextUrl, {});
     }
   }
 
