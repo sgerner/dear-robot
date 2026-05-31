@@ -1,5 +1,7 @@
 # Dear Robot
 
+![Dear Robot screenshot](static/projects/dear-robot.png)
+
 Dear Robot is a self-hosted, AI-first email client built for people who want fast mail handling without giving up control. It keeps the core mechanics inspectable: SQLite for state, SvelteKit for the app, server-side secrets for credentials, and explicit review before anything destructive or external happens.
 
 At a glance, Dear Robot gives you:
