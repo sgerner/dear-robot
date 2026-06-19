@@ -26,6 +26,19 @@ export const AccountInputSchema = z.object({
   smtpPassword: z.string().min(1)
 });
 
+const optionalSecretSchema = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().min(1).optional()
+);
+
+export const AccountUpdateSchema = AccountInputSchema.omit({
+  password: true,
+  smtpPassword: true
+}).extend({
+  password: optionalSecretSchema,
+  smtpPassword: optionalSecretSchema
+});
+
 export function publicAccount(account: typeof accounts.$inferSelect) {
   return {
     id: account.id,
@@ -84,6 +97,34 @@ export async function createAccount(input: z.infer<typeof AccountInputSchema>) {
     await syncNewAccount(created.id);
   }
   return publicAccount(created);
+}
+
+export async function updateAccount(id: number, input: z.infer<typeof AccountUpdateSchema>) {
+  const existing = getAccount(id);
+  if (!existing) return null;
+  const now = nowIso();
+  const updated = db
+    .update(accounts)
+    .set({
+      email: input.email,
+      host: input.host,
+      port: input.port,
+      username: input.username,
+      passwordEncrypted: input.password ? encryptSecret(input.password) : existing.passwordEncrypted,
+      smtpHost: input.smtpHost,
+      smtpPort: input.smtpPort,
+      smtpUsername: input.smtpUsername,
+      smtpPasswordEncrypted: input.smtpPassword
+        ? encryptSecret(input.smtpPassword)
+        : existing.smtpPasswordEncrypted,
+      syncStatus: existing.isEnabled ? 'idle' : 'disabled',
+      syncError: null,
+      updatedAt: now
+    })
+    .where(eq(accounts.id, id))
+    .returning()
+    .get();
+  return updated ? publicAccount(updated) : null;
 }
 
 async function syncNewAccount(accountId: number) {

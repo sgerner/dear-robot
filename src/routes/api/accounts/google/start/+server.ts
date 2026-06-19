@@ -4,7 +4,10 @@ import { beginGoogleOauth } from '$lib/server/oauth/google';
 export function GET({ url, cookies }) {
   let authUrl: string;
   try {
-    const { url: nextUrl, state, verifier } = beginGoogleOauth(url.origin);
+    const { url: nextUrl, state, verifier } = beginGoogleOauth(
+      url.origin,
+      url.searchParams.get('email')
+    );
     authUrl = nextUrl;
     cookies.set('google_oauth_state', state, {
       path: '/',

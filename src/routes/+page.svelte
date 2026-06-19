@@ -1586,8 +1586,10 @@
     await invalidateAll();
   }
 
-  function startGoogleConnect() {
-    window.location.href = '/api/accounts/google/start';
+  function startGoogleConnect(email?: string) {
+    window.location.href = email
+      ? `/api/accounts/google/start?email=${encodeURIComponent(email)}`
+      : '/api/accounts/google/start';
   }
 
   async function accountAction(id: number, action: 'test' | 'enable' | 'disable' | 'delete') {
@@ -1595,6 +1597,29 @@
     if (action === 'delete') await api(`/api/accounts/${id}`, { method: 'DELETE' });
     else await api(`/api/accounts/${id}/${action}`, { method: 'POST', body: '{}' });
     status = `Account ${action} complete`;
+    await invalidateAll();
+  }
+
+  async function saveExistingAccount(
+    id: number,
+    input: {
+      email: string;
+      host: string;
+      port: number;
+      username: string;
+      password: string;
+      smtpHost: string;
+      smtpPort: number;
+      smtpUsername: string;
+      smtpPassword: string;
+    }
+  ) {
+    status = 'Saving account...';
+    await api(`/api/accounts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input)
+    });
+    status = 'Account updated';
     await invalidateAll();
   }
 
@@ -3502,6 +3527,7 @@
                 {folderRoleOptions}
                 {saveFolderRole}
                 {accountAction}
+                {saveExistingAccount}
                 {addAccount}
                 {testNewAccount}
                 {discoverAccountSettings}

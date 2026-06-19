@@ -78,7 +78,7 @@ function settingsForRuntime() {
   };
 }
 
-export function beginGoogleOauth(origin: string) {
+export function beginGoogleOauth(origin: string, loginHint?: string | null) {
   const config = settingsForRuntime();
   const state = crypto.randomBytes(24).toString('hex');
   const verifier = crypto.randomBytes(32).toString('base64url');
@@ -94,7 +94,9 @@ export function beginGoogleOauth(origin: string) {
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
   url.searchParams.set('include_granted_scopes', 'true');
-  url.searchParams.set('login_hint', '');
+  if (loginHint) {
+    url.searchParams.set('login_hint', loginHint);
+  }
   url.searchParams.set('origin', origin);
   return { url: url.toString(), state, verifier };
 }

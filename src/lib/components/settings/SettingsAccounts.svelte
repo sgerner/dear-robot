@@ -5,6 +5,7 @@
     ChevronDown,
     ChevronRight,
     Folder,
+    PencilLine,
     Sparkles,
     Loader2,
     Check,
@@ -23,6 +24,7 @@
     folderRoleOptions,
     saveFolderRole,
     accountAction,
+    saveExistingAccount,
     addAccount,
     testNewAccount,
     discoverAccountSettings,
@@ -62,11 +64,25 @@
       _id: number,
       _action: 'test' | 'enable' | 'disable' | 'delete'
     ) => void | Promise<void>;
+    saveExistingAccount: (
+      _id: number,
+      _input: {
+        email: string;
+        host: string;
+        port: number;
+        username: string;
+        password: string;
+        smtpHost: string;
+        smtpPort: number;
+        smtpUsername: string;
+        smtpPassword: string;
+      }
+    ) => void | Promise<void>;
     addAccount: () => void | Promise<void>;
     testNewAccount: () => void | Promise<void>;
     discoverAccountSettings: () => void | Promise<void>;
     saveGoogleOauthSettings: () => void | Promise<void>;
-    startGoogleConnect: () => void;
+    startGoogleConnect: (_email?: string) => void;
     accountAddState?: 'idle' | 'loading' | 'success' | 'error';
     accountAddError?: string;
     accountTestState?: 'idle' | 'loading' | 'success' | 'error';
@@ -76,9 +92,71 @@
   }>();
 
   let expandedAccounts = $state<Record<number, boolean>>({});
+  let editingAccountId = $state<number | null>(null);
+  let accountEditForms = $state<
+    Record<
+      number,
+      {
+        email: string;
+        host: string;
+        port: number;
+        username: string;
+        password: string;
+        smtpHost: string;
+        smtpPort: number;
+        smtpUsername: string;
+        smtpPassword: string;
+      }
+    >
+  >({});
+  let accountEditState = $state<Record<number, 'idle' | 'loading' | 'success' | 'error'>>({});
+  let accountEditError = $state<Record<number, string>>({});
 
   function toggleAccountFolders(accountId: number) {
     expandedAccounts[accountId] = !expandedAccounts[accountId];
+  }
+
+  function seedAccountEditForm(account: (typeof data.accounts)[number]) {
+    return {
+      email: account.email,
+      host: account.host,
+      port: account.port,
+      username: account.username,
+      password: '',
+      smtpHost: account.smtpHost,
+      smtpPort: account.smtpPort,
+      smtpUsername: account.smtpUsername,
+      smtpPassword: ''
+    };
+  }
+
+  function startEditing(account: (typeof data.accounts)[number]) {
+    accountEditForms[account.id] = seedAccountEditForm(account);
+    accountEditState[account.id] = 'idle';
+    accountEditError[account.id] = '';
+    editingAccountId = account.id;
+  }
+
+  function cancelEditing(accountId: number) {
+    delete accountEditForms[accountId];
+    accountEditState[accountId] = 'idle';
+    accountEditError[accountId] = '';
+    if (editingAccountId === accountId) editingAccountId = null;
+  }
+
+  async function submitAccountEdit(account: (typeof data.accounts)[number]) {
+    const form = accountEditForms[account.id];
+    if (!form) return;
+    accountEditState[account.id] = 'loading';
+    accountEditError[account.id] = '';
+    try {
+      await saveExistingAccount(account.id, form);
+      accountEditState[account.id] = 'success';
+      cancelEditing(account.id);
+    } catch (error) {
+      accountEditState[account.id] = 'error';
+      accountEditError[account.id] = error instanceof Error ? error.message : 'Failed to update account';
+    }
   }
 </script>
 
@@ -108,6 +186,21 @@
             class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
             onclick={() => accountAction(account.id, 'test')}>Test</button
           >
+          {#if account.authType === 'oauth_gmail'}
+            <button
+              class="rounded-md border border-sky-400/30 px-2 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-400/10"
+              onclick={() => startGoogleConnect(account.email)}
+            >
+              Reconnect Gmail
+            </button>
+          {/if}
+          <button
+            class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
+            onclick={() => startEditing(account)}
+          >
+            <PencilLine size={12} />
+            Edit
+          </button>
           <button
             class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
             onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}
@@ -132,6 +225,133 @@
           {/if}
         </button>
       </div>
+
+      {#if editingAccountId === account.id && accountEditForms[account.id]}
+        <form
+          class="mt-3 space-y-3 rounded-md border border-white/5 bg-black/10 p-3"
+          in:fade={{ duration: 120 }}
+          onsubmit={(event) => {
+            event.preventDefault();
+            submitAccountEdit(account);
+          }}
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium text-zinc-100">Edit account</p>
+              <p class="mt-0.5 text-xs text-zinc-400">
+                Leave password fields blank to keep the currently saved secrets.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+              onclick={() => cancelEditing(account.id)}
+            >
+              Cancel
+            </button>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">Account Email</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                bind:value={accountEditForms[account.id].email}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">IMAP Host</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                bind:value={accountEditForms[account.id].host}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">IMAP Port</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                type="number"
+                bind:value={accountEditForms[account.id].port}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">IMAP Username</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                bind:value={accountEditForms[account.id].username}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400 sm:col-span-2">
+              <span class="uppercase tracking-wider">IMAP Password</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                placeholder="Leave blank to keep the current password"
+                type="password"
+                bind:value={accountEditForms[account.id].password}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">SMTP Host</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                bind:value={accountEditForms[account.id].smtpHost}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">SMTP Port</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                type="number"
+                bind:value={accountEditForms[account.id].smtpPort}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">SMTP Username</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                bind:value={accountEditForms[account.id].smtpUsername}
+              />
+            </label>
+            <label class="space-y-1 text-xs text-zinc-400">
+              <span class="uppercase tracking-wider">SMTP Password</span>
+              <input
+                class="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-accent/50"
+                placeholder="Leave blank to keep the current password"
+                type="password"
+                bind:value={accountEditForms[account.id].smtpPassword}
+              />
+            </label>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs text-zinc-500">
+              Password changes are optional. Other credential changes take effect after the next sync.
+            </p>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="rounded-md border border-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
+                onclick={() => startEditing(account)}
+                disabled={accountEditState[account.id] === 'loading'}
+              >
+                Reset
+              </button>
+              <button
+                type="submit"
+                class="btn-cinematic rounded-md px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                disabled={accountEditState[account.id] === 'loading'}
+              >
+                {#if accountEditState[account.id] === 'loading'}
+                  Saving...
+                {:else}
+                  Save changes
+                {/if}
+              </button>
+            </div>
+          </div>
+          {#if accountEditState[account.id] === 'error' && accountEditError[account.id]}
+            <p class="text-xs font-medium text-red-400" transition:fade>{accountEditError[account.id]}</p>
+          {/if}
+        </form>
+      {/if}
 
       {#if expandedAccounts[account.id]}
         <div class="mt-3 space-y-2 border-t border-white/5 pt-3">
