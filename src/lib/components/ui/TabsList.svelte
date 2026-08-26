@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from "$lib/utils/cn";
+	import { Tabs as SkeletonTabs } from '@skeletonlabs/skeleton-svelte';
 
 	let {
 		class: className = $bindable(""),
@@ -10,8 +10,8 @@
 	} = $props();
 </script>
 
-<div class={cn("inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground", className)}>
+<SkeletonTabs.List class={`inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground ${className}`}>
 	{#if children}
 		{@render children()}
 	{/if}
-</div>
+</SkeletonTabs.List>

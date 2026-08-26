@@ -12,6 +12,7 @@ const EnvSchema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: z.coerce.number().default(3000),
   DATA_DIR: z.string().default('/data'),
+  DB_PATH: z.string().optional(),
   APP_SESSION_SECRET: z.string().optional(),
   APP_PASSWORD: z.string().optional(),
   ENCRYPTION_KEY: z.string().optional(),
@@ -21,6 +22,7 @@ const EnvSchema = z.object({
   AI_BASE_URL: z.string().default('https://api.deepseek.com'),
   AI_PROXY_URL: z.string().optional(),
   AI_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
   AI_FALLBACK_PROVIDER: z.string().default('gemini'),
   AI_FALLBACK_MODEL: z.string().optional(),
   AI_FALLBACK_BASE_URL: z
@@ -63,7 +65,9 @@ const EnvSchema = z.object({
 });
 
 const parsed = EnvSchema.parse(process.env);
-const derivedDbPath = isBuildProcess ? ':memory:' : path.join(parsed.DATA_DIR, 'dear-robot.db');
+const derivedDbPath = isBuildProcess
+  ? ':memory:'
+  : parsed.DB_PATH || path.join(parsed.DATA_DIR, 'dear-robot.db');
 
 if (parsed.DEBUG_AI) {
   console.log('[dear-robot] AI debugging is ENABLED');

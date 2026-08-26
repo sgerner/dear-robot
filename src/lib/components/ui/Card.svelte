@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { cn } from "$lib/utils/cn";
-
-	let { 
-		class: className = $bindable(""), 
+	let {
+		class: className = $bindable(''),
 		children,
 		hover = false,
 		glass = true
@@ -14,13 +12,7 @@
 	} = $props();
 </script>
 
-<div class={cn(
-	"rounded-md text-card-foreground overflow-hidden transition-all duration-200",
-	glass && "bg-card border border-border shadow-sm",
-	!glass && "bg-card border border-border shadow-sm",
-	hover && "hover:shadow-md cursor-pointer",
-	className
-)}>
+<div class={`card overflow-hidden text-card-foreground transition-all duration-200 ${glass ? 'bg-card/80 backdrop-blur-xl' : 'bg-card'} border border-border shadow-sm ${hover ? 'cursor-pointer hover:shadow-md' : ''} ${className}`}>
 	{#if children}
 		{@render children()}
 	{/if}

@@ -29,7 +29,9 @@
     audioProvider,
     audioModels,
     selectAudioProvider,
-    saveAudioDictationProfile
+    saveAudioDictationProfile,
+    startOpenAiLogin,
+    getOpenAiLoginStatus
   } = $props<{
     data: any;
     coreAiProfileKeys: readonly string[];
@@ -54,6 +56,8 @@
     audioModels: () => Array<{ id: string; label: string; blurb?: string }>;
     selectAudioProvider: (_providerId: string) => void;
     saveAudioDictationProfile: () => void | Promise<void>;
+    startOpenAiLogin: (_profile: 'primary' | 'fallback' | 'advanced') => Promise<any>;
+    getOpenAiLoginStatus: (_profile: 'primary' | 'fallback' | 'advanced') => Promise<any>;
   }>();
 
   let searchQueries = $state<Record<string, string>>({});
@@ -67,6 +71,7 @@
   let audioTestState = $state<ButtonState>('idle');
   let audioTestError = $state<string>('');
   let audioSaveState = $state<ButtonState>('idle');
+  let openAiLoginStates = $state<Record<string, any>>({});
 
   const allModels = $derived(
     modelsDevProviders.flatMap((p: ModelsDevProvider) =>
@@ -210,6 +215,32 @@
       if (audioSaveState === 'success' || audioSaveState === 'error') {
         setTimeout(() => { audioSaveState = 'idle'; }, 3000);
       }
+    }
+  }
+
+  async function handleOpenAiLogin(profileKey: 'primary' | 'fallback' | 'advanced') {
+    openAiLoginStates[profileKey] = { status: 'loading' };
+    try {
+      let state = await startOpenAiLogin(profileKey);
+      openAiLoginStates[profileKey] = state;
+      if (state.status !== 'pending') return;
+      const deadline = Date.now() + 15 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        state = await getOpenAiLoginStatus(profileKey);
+        openAiLoginStates[profileKey] = state;
+        if (state.status === 'connected' || state.status === 'error') return;
+      }
+      openAiLoginStates[profileKey] = {
+        ...state,
+        status: 'error',
+        error: 'OpenAI login timed out. Start the flow again to retry.'
+      };
+    } catch (err: any) {
+      openAiLoginStates[profileKey] = {
+        status: 'error',
+        error: err.message || 'Unable to start OpenAI login'
+      };
     }
   }
 </script>
@@ -470,6 +501,62 @@
                           class="text-xs font-bold text-muted-foreground uppercase tracking-wider block"
                           >Authentication Credentials</span
                         >
+                        {#if profile?.provider?.toLowerCase() === 'openai'}
+                          <p class="text-xs text-muted-foreground">
+                            Use a ChatGPT subscription through OpenAI's Codex device login, or use
+                            a server-side API key for standard OpenAI API billing.
+                            <a
+                              class="text-primary underline underline-offset-2"
+                              href="https://platform.openai.com/api-keys"
+                              target="_blank"
+                              rel="noreferrer">Create an API key</a
+                            >.
+                          </p>
+                          <div class="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p class="text-xs font-bold text-foreground">Login with OpenAI</p>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                  Authorize this server with your ChatGPT account for Codex models.
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 text-xs"
+                                disabled={openAiLoginStates[profileKey]?.status === 'loading' || openAiLoginStates[profileKey]?.status === 'pending'}
+                                onclick={() => handleOpenAiLogin(profileKey as 'primary' | 'fallback' | 'advanced')}
+                              >
+                                {#if openAiLoginStates[profileKey]?.status === 'loading'}
+                                  <Loader2 size={13} class="mr-1.5 animate-spin" /> Starting…
+                                {:else if openAiLoginStates[profileKey]?.status === 'pending'}
+                                  Waiting for authorization…
+                                {:else if openAiLoginStates[profileKey]?.status === 'connected'}
+                                  Connected
+                                {:else}
+                                  Login with OpenAI
+                                {/if}
+                              </Button>
+                            </div>
+                            {#if openAiLoginStates[profileKey]?.status === 'pending'}
+                              <div class="mt-3 space-y-1 text-xs text-muted-foreground">
+                                <a
+                                  class="text-primary underline underline-offset-2"
+                                  href={openAiLoginStates[profileKey].authorizationUrl}
+                                  target="_blank"
+                                  rel="noreferrer">Open OpenAI authorization</a
+                                >
+                                <p>
+                                  Enter code <code class="font-mono text-foreground">{openAiLoginStates[profileKey].code}</code> when prompted.
+                                </p>
+                              </div>
+                            {:else if openAiLoginStates[profileKey]?.status === 'error'}
+                              <p class="mt-2 text-xs text-destructive">{openAiLoginStates[profileKey].error}</p>
+                            {:else if openAiLoginStates[profileKey]?.status === 'connected'}
+                              <p class="mt-2 text-xs text-emerald-400">OpenAI OAuth credentials are encrypted and stored server-side.</p>
+                            {/if}
+                          </div>
+                        {/if}
                         <div class="grid gap-3">
                           {#each requiredEnvVars(profileKey) as envKey (envKey)}
                             <label class="relative">

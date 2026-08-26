@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from "$lib/utils/cn";
+	import { Tabs as SkeletonTabs } from '@skeletonlabs/skeleton-svelte';
 
 	let {
 		value,
@@ -12,8 +12,11 @@
 	} = $props();
 </script>
 
-<div data-value={value} data-state="active" class={cn("mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", className)}>
+<SkeletonTabs.Content
+	{value}
+	class={`mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${className}`}
+>
 	{#if children}
 		{@render children()}
 	{/if}
-</div>
+</SkeletonTabs.Content>

@@ -12,6 +12,7 @@ export const accounts = sqliteTable('accounts', {
   smtpPort: integer('smtp_port').notNull(),
   smtpUsername: text('smtp_username').notNull(),
   smtpPasswordEncrypted: text('smtp_password_encrypted').notNull(),
+  signature: text('signature'),
   authType: text('auth_type', { enum: ['password', 'oauth_gmail'] })
     .notNull()
     .default('password'),

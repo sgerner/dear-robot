@@ -3,11 +3,13 @@ import { buildSuggestionMessages } from './prompts';
 import { buildRepairMessages, extractJson, parseSuggestion } from './repair';
 import type { EmailSuggestion, EmailSuggestionInput, EmailSuggestionResult } from './schema';
 import { getAiConfigForRuntime } from './settings';
+import { completeWithOpenAiOAuth, isOpenAiOAuthConfig } from './openai-codex';
 import { z } from 'zod';
 
 type ChatMessage = { role: string; content: string };
 
 export type ProviderConfig = {
+  profile?: 'primary' | 'fallback' | 'advanced' | 'audio';
   provider: string;
   model: string;
   baseUrl: string;
@@ -17,6 +19,31 @@ export type ProviderConfig = {
   envValues?: Record<string, string>;
   transport: 'openai_compatible' | 'anthropic';
 };
+
+const OPENAI_API_BASE_URL = 'https://api.openai.com/v1';
+
+export function isOpenAiProvider(provider: string) {
+  const normalized = provider.trim().toLowerCase();
+  return normalized === 'openai' || normalized === 'openai-api';
+}
+
+/**
+ * Resolve the standard API endpoint for a provider when the user has not
+ * supplied a custom endpoint. OpenAI is intentionally API-key based here;
+ * ChatGPT account sessions are not interchangeable with API credentials.
+ */
+export function defaultBaseUrlForProvider(provider: string, fallback = '') {
+  return isOpenAiProvider(provider) ? OPENAI_API_BASE_URL : fallback;
+}
+
+export function defaultApiKeyForProvider(provider: string, configured?: string) {
+  if (configured) return configured;
+  return isOpenAiProvider(provider) ? env.OPENAI_API_KEY || undefined : undefined;
+}
+
+export function defaultModelForProvider(provider: string, fallback: string) {
+  return isOpenAiProvider(provider) ? 'gpt-5.6-luna' : fallback;
+}
 
 class ProviderError extends Error {}
 
@@ -162,53 +189,65 @@ async function anthropicComplete(config: ProviderConfig, messages: ChatMessage[]
 }
 
 async function completeChat(config: ProviderConfig, messages: ChatMessage[]) {
+  if (isOpenAiOAuthConfig(config)) return completeWithOpenAiOAuth(config, messages);
   return config.transport === 'anthropic'
     ? anthropicComplete(config, messages)
     : openAiCompatibleComplete(config, messages);
 }
 
 function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig {
+  const primaryProvider = env.AI_PROVIDER || 'deepseek';
+  const fallbackProvider = env.AI_FALLBACK_PROVIDER || 'gemini';
+  const advancedProvider = env.AI_ADVANCED_PROVIDER || primaryProvider;
   const defaults = {
     primary: {
       profile: 'primary' as const,
       label: 'Primary',
-      provider: env.AI_PROVIDER || 'deepseek',
+      provider: primaryProvider,
       transport: 'openai_compatible' as const,
-      model: env.AI_MODEL || 'deepseek-v4-flash',
-      baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
+      model: env.AI_MODEL || defaultModelForProvider(primaryProvider, 'deepseek-v4-flash'),
+      baseUrl:
+        env.AI_BASE_URL || defaultBaseUrlForProvider(primaryProvider, 'https://api.deepseek.com'),
       proxyEnabled: !!env.AI_PROXY_URL,
       proxyUrl: env.AI_PROXY_URL || null,
-      apiKey: env.AI_API_KEY || undefined,
-      preset: env.AI_PROVIDER || 'deepseek',
+      apiKey: defaultApiKeyForProvider(primaryProvider, env.AI_API_KEY),
+      preset: primaryProvider,
       isEnabled: true,
       notes: null
     },
     fallback: {
       profile: 'fallback' as const,
       label: 'Fallback',
-      provider: env.AI_FALLBACK_PROVIDER || 'gemini',
+      provider: fallbackProvider,
       transport: 'openai_compatible' as const,
-      model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
+      model: env.AI_FALLBACK_MODEL || defaultModelForProvider(fallbackProvider, 'gemini-2.5-flash'),
       baseUrl:
-        env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        env.AI_FALLBACK_BASE_URL ||
+        defaultBaseUrlForProvider(
+          fallbackProvider,
+          'https://generativelanguage.googleapis.com/v1beta/openai/'
+        ),
       proxyEnabled: !!env.AI_FALLBACK_PROXY_URL,
       proxyUrl: env.AI_FALLBACK_PROXY_URL || null,
-      apiKey: env.AI_FALLBACK_API_KEY || undefined,
-      preset: env.AI_FALLBACK_PROVIDER || 'gemini',
+      apiKey: defaultApiKeyForProvider(fallbackProvider, env.AI_FALLBACK_API_KEY),
+      preset: fallbackProvider,
       isEnabled: true,
       notes: null
     },
     advanced: {
       profile: 'advanced' as const,
       label: 'Advanced Planner',
-      provider: env.AI_ADVANCED_PROVIDER || env.AI_PROVIDER || 'deepseek',
+      provider: advancedProvider,
       transport: 'openai_compatible' as const,
-      model: env.AI_ADVANCED_MODEL || 'deepseek-v4-pro',
-      baseUrl: env.AI_ADVANCED_BASE_URL || env.AI_BASE_URL || 'https://api.deepseek.com',
+      model: env.AI_ADVANCED_MODEL || defaultModelForProvider(advancedProvider, 'deepseek-v4-pro'),
+      baseUrl:
+        env.AI_ADVANCED_BASE_URL ||
+        env.AI_BASE_URL ||
+        defaultBaseUrlForProvider(advancedProvider, 'https://api.deepseek.com'),
       proxyEnabled: !!env.AI_ADVANCED_PROXY_URL,
       proxyUrl: env.AI_ADVANCED_PROXY_URL || null,
-      apiKey: env.AI_ADVANCED_API_KEY || env.AI_API_KEY || undefined,
-      preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
+      apiKey: defaultApiKeyForProvider(advancedProvider, env.AI_ADVANCED_API_KEY || env.AI_API_KEY),
+      preset: advancedProvider,
       isEnabled: true,
       notes: null
     }

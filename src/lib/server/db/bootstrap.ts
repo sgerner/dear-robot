@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   smtp_port INTEGER NOT NULL,
   smtp_username TEXT NOT NULL,
   smtp_password_encrypted TEXT NOT NULL,
+  signature TEXT,
   auth_type TEXT NOT NULL DEFAULT 'password',
   oauth_provider TEXT,
   oauth_access_token_encrypted TEXT,
@@ -460,6 +461,7 @@ CREATE TABLE IF NOT EXISTS memory_examples (
 `);
   migrateMessageClientColumns();
   migrateAccountAuthColumns();
+  migrateAccountSignatureColumn();
   migrateAutomationPolicyColumns();
   migrateAiProfileColumns();
   ensurePerformanceIndexes();
@@ -683,17 +685,25 @@ function seedAiDefaults() {
   const existing = db.select({ value: count() }).from(aiProfiles).get()?.value ?? 0;
   if (existing > 0) return;
   const now = nowIso();
+  const primaryProvider = env.AI_PROVIDER || 'deepseek';
+  const fallbackProvider = env.AI_FALLBACK_PROVIDER || 'gemini';
+  const advancedProvider = env.AI_ADVANCED_PROVIDER || primaryProvider;
+  const isOpenAi = (provider: string) => provider.trim().toLowerCase() === 'openai';
   db.insert(aiProfiles)
     .values([
       {
         profile: 'primary',
         label: 'Primary',
-        provider: env.AI_PROVIDER || 'deepseek',
+        provider: primaryProvider,
         transport: 'openai_compatible',
-        model: env.AI_MODEL || 'deepseek-v4-flash',
-        baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
-        apiKeyEncrypted: env.AI_API_KEY ? encryptSecret(env.AI_API_KEY) : null,
-        preset: env.AI_PROVIDER || 'deepseek',
+        model: env.AI_MODEL || (isOpenAi(primaryProvider) ? 'gpt-5.6-luna' : 'deepseek-v4-flash'),
+        baseUrl:
+          env.AI_BASE_URL || (isOpenAi(primaryProvider) ? 'https://api.openai.com/v1' : 'https://api.deepseek.com'),
+        apiKeyEncrypted:
+          env.AI_API_KEY || (isOpenAi(primaryProvider) ? env.OPENAI_API_KEY : undefined)
+            ? encryptSecret(env.AI_API_KEY || env.OPENAI_API_KEY || '')
+            : null,
+        preset: primaryProvider,
         isEnabled: true,
         notes: 'Fast default dear-robot model.',
         createdAt: now,
@@ -702,13 +712,19 @@ function seedAiDefaults() {
       {
         profile: 'fallback',
         label: 'Fallback',
-        provider: env.AI_FALLBACK_PROVIDER || 'gemini',
+        provider: fallbackProvider,
         transport: 'openai_compatible',
-        model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
+        model: env.AI_FALLBACK_MODEL || (isOpenAi(fallbackProvider) ? 'gpt-5.6-luna' : 'gemini-2.5-flash'),
         baseUrl:
-          env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
-        apiKeyEncrypted: env.AI_FALLBACK_API_KEY ? encryptSecret(env.AI_FALLBACK_API_KEY) : null,
-        preset: env.AI_FALLBACK_PROVIDER || 'gemini',
+          env.AI_FALLBACK_BASE_URL ||
+          (isOpenAi(fallbackProvider)
+            ? 'https://api.openai.com/v1'
+            : 'https://generativelanguage.googleapis.com/v1beta/openai/'),
+        apiKeyEncrypted:
+          env.AI_FALLBACK_API_KEY || (isOpenAi(fallbackProvider) ? env.OPENAI_API_KEY : undefined)
+            ? encryptSecret(env.AI_FALLBACK_API_KEY || env.OPENAI_API_KEY || '')
+            : null,
+        preset: fallbackProvider,
         isEnabled: true,
         notes: 'Fallback provider when the primary model fails.',
         createdAt: now,
@@ -717,12 +733,22 @@ function seedAiDefaults() {
       {
         profile: 'advanced',
         label: 'Advanced Planner',
-        provider: env.AI_ADVANCED_PROVIDER || env.AI_PROVIDER || 'deepseek',
+        provider: advancedProvider,
         transport: 'openai_compatible',
-        model: env.AI_ADVANCED_MODEL || 'deepseek-v4-pro',
-        baseUrl: env.AI_ADVANCED_BASE_URL || env.AI_BASE_URL || 'https://api.deepseek.com',
-        apiKeyEncrypted: env.AI_ADVANCED_API_KEY ? encryptSecret(env.AI_ADVANCED_API_KEY) : null,
-        preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
+        model: env.AI_ADVANCED_MODEL || (isOpenAi(advancedProvider) ? 'gpt-5.6-luna' : 'deepseek-v4-pro'),
+        baseUrl:
+          env.AI_ADVANCED_BASE_URL ||
+          env.AI_BASE_URL ||
+          (isOpenAi(advancedProvider) ? 'https://api.openai.com/v1' : 'https://api.deepseek.com'),
+        apiKeyEncrypted:
+          env.AI_ADVANCED_API_KEY ||
+          env.AI_API_KEY ||
+          (isOpenAi(advancedProvider) ? env.OPENAI_API_KEY : undefined)
+            ? encryptSecret(
+                env.AI_ADVANCED_API_KEY || env.AI_API_KEY || env.OPENAI_API_KEY || ''
+              )
+            : null,
+        preset: advancedProvider,
         isEnabled: true,
         notes: 'Used for complex multi-step planning.',
         createdAt: now,
@@ -791,6 +817,13 @@ function migrateAccountAuthColumns() {
   for (const [name, definition] of additions) {
     if (!existing.has(name))
       sqlite.exec(`ALTER TABLE accounts ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function migrateAccountSignatureColumn() {
+  const columns = sqlite.prepare(`PRAGMA table_info(accounts)`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'signature')) {
+    sqlite.exec(`ALTER TABLE accounts ADD COLUMN signature TEXT;`);
   }
 }
 
@@ -900,7 +933,7 @@ function readFixtureEmails(): FixtureEmail[] {
 }
 
 export function resetForTests() {
-  const isSafeTestEnv = env.NODE_ENV === 'test' || env.DB_PATH === ':memory:';
+  const isSafeTestEnv = sqlite.name === ':memory:';
   const allowDangerousReset = process.env.ALLOW_DANGEROUS_DB_RESET === 'true';
   if (!isSafeTestEnv && !allowDangerousReset) {
     throw new Error(

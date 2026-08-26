@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { cn } from "$lib/utils/cn";
+	import { Tabs as SkeletonTabs } from '@skeletonlabs/skeleton-svelte';
 
 	let {
-		value = $bindable(""),
-		class: className = $bindable(""),
+		value = $bindable(''),
+		class: className = $bindable(''),
 		children
 	}: {
 		value?: string;
@@ -12,8 +12,12 @@
 	} = $props();
 </script>
 
-<div class={cn("space-y-2", className)} data-value={value}>
+<SkeletonTabs
+	value={value}
+	onValueChange={(details: { value: string }) => (value = details.value)}
+	class={`space-y-2 ${className}`}
+>
 	{#if children}
 		{@render children()}
 	{/if}
-</div>
+</SkeletonTabs>

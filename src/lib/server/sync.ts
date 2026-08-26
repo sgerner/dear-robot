@@ -54,6 +54,7 @@ export async function syncAccount(accountId: number) {
   }
   const provider = providerForAccount(account);
   const now = nowIso();
+  let activeFolderPath = '(folder discovery)';
   db.update(accounts)
     .set({ syncStatus: 'syncing', syncError: null, updatedAt: now })
     .where(eq(accounts.id, accountId))
@@ -78,6 +79,7 @@ export async function syncAccount(accountId: number) {
     }
     const foldersToSync = remoteFolders.length ? remoteFolders : [{ path: 'INBOX' }];
     for (const folder of foldersToSync) {
+      activeFolderPath = folder.path;
       const isInboxFolder =
         (folder as { role?: string | null }).role === 'inbox' ||
         folder.path.toLowerCase() === 'inbox';
@@ -189,6 +191,10 @@ export async function syncAccount(accountId: number) {
       .where(eq(accounts.id, accountId))
       .run();
   } catch (error) {
+    console.error(
+      `[dear-robot] Sync failed for ${account.email} in ${activeFolderPath}:`,
+      error instanceof Error ? error.stack || error.message : String(error)
+    );
     db.update(accounts)
       .set({
         syncStatus: 'error',

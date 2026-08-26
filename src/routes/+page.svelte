@@ -1387,6 +1387,21 @@
     }
   }
 
+  async function startOpenAiLogin(profile: 'primary' | 'fallback' | 'advanced') {
+    const result = await api('/api/ai-profiles/openai/login', {
+      method: 'POST',
+      body: JSON.stringify({ profile })
+    });
+    if (result.authorizationUrl) {
+      window.open(result.authorizationUrl, '_blank', 'noopener,noreferrer');
+    }
+    return result;
+  }
+
+  async function getOpenAiLoginStatus(profile: 'primary' | 'fallback' | 'advanced') {
+    return api(`/api/ai-profiles/openai/login?profile=${encodeURIComponent(profile)}`);
+  }
+
   async function loadModelsDevCatalog() {
     if (modelsDevLoaded || modelsDevLoading) return;
     modelsDevLoading = true;
@@ -2488,6 +2503,8 @@
     composeHtml = '';
     const selected = data.selected?.message;
     const accountId = selected?.accountId || data.accounts[0]?.id || 0;
+    const signature =
+      data.accounts.find((account: { id: number }) => account.id === accountId)?.signature?.trim() || '';
     if (!selected || mode === 'compose') {
       const serverDraft = data.drafts?.find(
         (draft: DraftView) =>
@@ -2516,7 +2533,7 @@
             cc: '',
             bcc: '',
             subject: '',
-            body: '',
+            body: signature,
             attachments: [],
             sourceMessageId: null
           };
@@ -2530,7 +2547,7 @@
         cc: '',
         bcc: '',
         subject: replySubject(selected.subject),
-        body: '',
+        body: signature,
         attachments: [],
         sourceMessageId: selected.id
       };
@@ -2542,7 +2559,7 @@
         cc: [selected.to, selected.cc].filter(Boolean).join(', '),
         bcc: '',
         subject: replySubject(selected.subject),
-        body: '',
+        body: signature,
         attachments: [],
         sourceMessageId: selected.id
       };
@@ -2554,7 +2571,7 @@
         cc: '',
         bcc: '',
         subject: forwardSubject(selected.subject),
-        body: `\n\n--- Forwarded message ---\nFrom: ${selected.from}\nTo: ${selected.to}\nDate: ${new Date(selected.date).toLocaleString()}\nSubject: ${selected.subject}\n\n${selected.bodyText}`,
+        body: `${signature ? `${signature}\n\n` : ''}--- Forwarded message ---\nFrom: ${selected.from}\nTo: ${selected.to}\nDate: ${new Date(selected.date).toLocaleString()}\nSubject: ${selected.subject}\n\n${selected.bodyText}`,
         attachments: [],
         sourceMessageId: selected.id
       };
@@ -3595,6 +3612,8 @@
                 {audioModels}
                 {selectAudioProvider}
                 {saveAudioDictationProfile}
+                {startOpenAiLogin}
+                {getOpenAiLoginStatus}
               />
             {/await}
           {/if}

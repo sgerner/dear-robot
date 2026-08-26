@@ -28,6 +28,7 @@ suite('live provider integration (gated)', () => {
       smtpPort: Number(process.env.SMTP_PORT || 465),
       smtpUsername: process.env.SMTP_USERNAME || '',
       smtpPasswordEncrypted: encryptSecret(process.env.SMTP_PASSWORD || ''),
+      signature: null,
       authType: 'password' as const,
       oauthProvider: null,
       oauthAccessTokenEncrypted: null,

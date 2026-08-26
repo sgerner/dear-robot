@@ -2,8 +2,11 @@
   "name": "gemini-proxy-worker",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "description": "Cloudflare Worker proxy for Gemini API",
   "devDependencies": {
-    "wrangler": "^3.109.0"
+    "wrangler": "^4.125.0"
   }
 }

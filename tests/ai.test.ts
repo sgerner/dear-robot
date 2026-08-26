@@ -18,4 +18,15 @@ describe('AI suggestion layer', () => {
     expect(result.provider).toBe('mock');
     expect(EmailSuggestionSchema.parse(result.suggestion).recommended_action).toBe('spam');
   });
+
+  it('resolves OpenAI to its public API endpoint and model defaults', async () => {
+    const { defaultApiKeyForProvider, defaultBaseUrlForProvider, defaultModelForProvider } =
+      await import('../src/lib/server/ai/provider');
+
+    expect(defaultBaseUrlForProvider('openai', 'https://example.test')).toBe(
+      'https://api.openai.com/v1'
+    );
+    expect(defaultModelForProvider('openai', 'fallback-model')).toBe('gpt-5.6-luna');
+    expect(defaultApiKeyForProvider('deepseek', 'configured-key')).toBe('configured-key');
+  });
 });

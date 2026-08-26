@@ -23,7 +23,8 @@ export const AccountInputSchema = z.object({
   smtpHost: z.string().min(1),
   smtpPort: z.coerce.number().int().positive(),
   smtpUsername: z.string().min(1),
-  smtpPassword: z.string().min(1)
+  smtpPassword: z.string().min(1),
+  signature: z.string().max(4000).optional().nullable()
 });
 
 const optionalSecretSchema = z.preprocess(
@@ -49,6 +50,7 @@ export function publicAccount(account: typeof accounts.$inferSelect) {
     smtpHost: account.smtpHost,
     smtpPort: account.smtpPort,
     smtpUsername: account.smtpUsername,
+    signature: account.signature,
     authType: account.authType,
     oauthProvider: account.oauthProvider,
     isEnabled: account.isEnabled,
@@ -86,6 +88,7 @@ export async function createAccount(input: z.infer<typeof AccountInputSchema>) {
       smtpPort: input.smtpPort,
       smtpUsername: input.smtpUsername,
       smtpPasswordEncrypted: encryptSecret(input.smtpPassword),
+      signature: input.signature?.trim() || null,
       isEnabled: true,
       syncStatus: 'idle',
       createdAt: now,
@@ -117,6 +120,7 @@ export async function updateAccount(id: number, input: z.infer<typeof AccountUpd
       smtpPasswordEncrypted: input.smtpPassword
         ? encryptSecret(input.smtpPassword)
         : existing.smtpPasswordEncrypted,
+      signature: input.signature === undefined ? existing.signature : input.signature?.trim() || null,
       syncStatus: existing.isEnabled ? 'idle' : 'disabled',
       syncError: null,
       updatedAt: now

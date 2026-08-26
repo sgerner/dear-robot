@@ -31,7 +31,7 @@ async function withMailboxThrottle<T>(accountId: number, op: () => Promise<T>) {
 
 async function clientFor(account: Account) {
   const accessToken = await getGoogleAccessToken(account);
-  return new ImapFlow({
+  const client = new ImapFlow({
     host: account.host,
     port: account.port,
     secure: account.port === 993,
@@ -41,6 +41,19 @@ async function clientFor(account: Account) {
     },
     logger: false
   });
+  // ImapFlow emits connection errors asynchronously. Always consume that
+  // event so a transient network timeout cannot crash the dev server.
+  if (typeof client.on === 'function') {
+    client.on('error', (error) => {
+      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'EPIPE') {
+        console.error(
+          `[dear-robot] IMAP connection error for ${account.email}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    });
+  }
+  return client;
 }
 
 export const imapEmailProvider: MailProvider = {
@@ -77,6 +90,7 @@ export const imapEmailProvider: MailProvider = {
       try {
         const mailbox = client.mailbox;
         const exists = mailbox && typeof mailbox === 'object' ? mailbox.exists : 0;
+        if (exists <= 0) return messages;
         const start = Math.max(1, exists - limit + 1);
         for await (const msg of client.fetch(`${start}:*`, {
           uid: true,
@@ -129,13 +143,18 @@ export const imapEmailProvider: MailProvider = {
       try {
         const mailbox = client.mailbox;
         const exists = mailbox && typeof mailbox === 'object' ? mailbox.exists : 0;
-        if (exists <= 0) return messages;
-        for await (const msg of client.fetch(`${sinceUidExclusive + 1}:*`, {
-          uid: true,
-          envelope: true,
-          source: true,
-          flags: true
-        })) {
+        const uidNext = mailbox && typeof mailbox === 'object' ? Number(mailbox.uidNext || 0) : 0;
+        if (exists <= 0 || (uidNext > 0 && sinceUidExclusive >= uidNext - 1)) return messages;
+        for await (const msg of client.fetch(
+          `${sinceUidExclusive + 1}:*`,
+          {
+            uid: true,
+            envelope: true,
+            source: true,
+            flags: true
+          },
+          { uid: true }
+        )) {
           const parsed = msg.source ? await simpleParser(msg.source) : null;
           messages.push({
             providerMessageId: providerMessageId(folderPath, msg.uid),

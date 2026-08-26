@@ -4,7 +4,12 @@ import { env } from '$lib/server/env';
 import { getAiConfigForRuntime } from '$lib/server/ai/settings';
 import { fetchWithTimeout } from '$lib/server/fetch';
 import { getSpeechProvider } from '$lib/speech/providers';
-import { baseEndpointFor } from '$lib/server/ai/provider';
+import {
+  baseEndpointFor,
+  defaultApiKeyForProvider,
+  defaultBaseUrlForProvider,
+  defaultModelForProvider
+} from '$lib/server/ai/provider';
 
 const TestSchema = z.object({
   profile: z.enum(['primary', 'fallback', 'advanced', 'audio']),
@@ -29,48 +34,58 @@ function profileConfig(
 ): RuntimeProfile {
   let base: RuntimeProfile;
   if (profile === 'primary') {
+    const provider = env.AI_PROVIDER || 'deepseek';
     base = {
       profile: 'primary',
       label: 'Primary',
-      provider: env.AI_PROVIDER || 'deepseek',
+      provider,
       transport: 'openai_compatible',
-      model: env.AI_MODEL || 'deepseek-v4-flash',
-      baseUrl: env.AI_BASE_URL || 'https://api.deepseek.com',
+      model: env.AI_MODEL || defaultModelForProvider(provider, 'deepseek-v4-flash'),
+      baseUrl: env.AI_BASE_URL || defaultBaseUrlForProvider(provider, 'https://api.deepseek.com'),
       proxyEnabled: !!env.AI_PROXY_URL,
       proxyUrl: env.AI_PROXY_URL || null,
-      apiKey: env.AI_API_KEY || undefined,
-      preset: env.AI_PROVIDER || 'deepseek',
+      apiKey: defaultApiKeyForProvider(provider, env.AI_API_KEY),
+      preset: provider,
       isEnabled: true,
       notes: null
     };
   } else if (profile === 'fallback') {
+    const provider = env.AI_FALLBACK_PROVIDER || 'gemini';
     base = {
       profile: 'fallback',
       label: 'Fallback',
-      provider: env.AI_FALLBACK_PROVIDER || 'gemini',
+      provider,
       transport: 'openai_compatible',
-      model: env.AI_FALLBACK_MODEL || 'gemini-2.5-flash',
+      model: env.AI_FALLBACK_MODEL || defaultModelForProvider(provider, 'gemini-2.5-flash'),
       baseUrl:
-        env.AI_FALLBACK_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        env.AI_FALLBACK_BASE_URL ||
+        defaultBaseUrlForProvider(
+          provider,
+          'https://generativelanguage.googleapis.com/v1beta/openai/'
+        ),
       proxyEnabled: !!env.AI_FALLBACK_PROXY_URL,
       proxyUrl: env.AI_FALLBACK_PROXY_URL || null,
-      apiKey: env.AI_FALLBACK_API_KEY || undefined,
-      preset: env.AI_FALLBACK_PROVIDER || 'gemini',
+      apiKey: defaultApiKeyForProvider(provider, env.AI_FALLBACK_API_KEY),
+      preset: provider,
       isEnabled: true,
       notes: null
     };
   } else if (profile === 'advanced') {
+    const provider = env.AI_ADVANCED_PROVIDER || env.AI_PROVIDER || 'deepseek';
     base = {
       profile: 'advanced',
       label: 'Advanced Planner',
-      provider: env.AI_ADVANCED_PROVIDER || env.AI_PROVIDER || 'deepseek',
+      provider,
       transport: 'openai_compatible',
-      model: env.AI_ADVANCED_MODEL || 'deepseek-v4-pro',
-      baseUrl: env.AI_ADVANCED_BASE_URL || env.AI_BASE_URL || 'https://api.deepseek.com',
+      model: env.AI_ADVANCED_MODEL || defaultModelForProvider(provider, 'deepseek-v4-pro'),
+      baseUrl:
+        env.AI_ADVANCED_BASE_URL ||
+        env.AI_BASE_URL ||
+        defaultBaseUrlForProvider(provider, 'https://api.deepseek.com'),
       proxyEnabled: !!env.AI_ADVANCED_PROXY_URL,
       proxyUrl: env.AI_ADVANCED_PROXY_URL || null,
-      apiKey: env.AI_ADVANCED_API_KEY || env.AI_API_KEY || undefined,
-      preset: env.AI_ADVANCED_PROVIDER || 'deepseek',
+      apiKey: env.AI_ADVANCED_API_KEY || env.AI_API_KEY || defaultApiKeyForProvider(provider),
+      preset: provider,
       isEnabled: true,
       notes: null
     };

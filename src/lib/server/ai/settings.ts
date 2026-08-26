@@ -25,12 +25,50 @@ export const AiProfileSchema = z.object({
 
 export type AiProfileInput = z.infer<typeof AiProfileSchema>;
 
+export type OpenAiOAuthTokens = {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  idToken?: string;
+  accountId?: string;
+};
+
 export function listAiProfiles() {
   return db.select().from(aiProfiles).orderBy(aiProfiles.id).all().map(publicAiProfile);
 }
 
 export function getAiProfile(profile: AiProfileInput['profile']) {
   return db.select().from(aiProfiles).where(eq(aiProfiles.profile, profile)).get();
+}
+
+export function saveOpenAiOAuthTokens(profile: AiProfileInput['profile'], tokens: OpenAiOAuthTokens) {
+  if (!tokens.accessToken) throw new Error('OpenAI OAuth did not return an access token');
+  if (!tokens.accountId) throw new Error('OpenAI OAuth did not return a ChatGPT account id');
+  const existing = getAiProfile(profile);
+  if (!existing) throw new Error(`AI profile ${profile} does not exist`);
+  const now = nowIso();
+  db.update(aiProfiles)
+    .set({
+      apiKeyEncrypted: encryptSecret(
+        JSON.stringify({ authType: 'openai_oauth', ...tokens })
+      ),
+      updatedAt: now
+    })
+    .where(eq(aiProfiles.profile, profile))
+    .run();
+}
+
+export function hasOpenAiOAuthTokens(profile: AiProfileInput['profile']) {
+  const saved = getAiProfile(profile);
+  if (!saved?.apiKeyEncrypted) return false;
+  const decrypted = decryptSecret(saved.apiKeyEncrypted);
+  if (!decrypted) return false;
+  try {
+    const parsed = JSON.parse(decrypted) as { authType?: string; accessToken?: string };
+    return parsed.authType === 'openai_oauth' && Boolean(parsed.accessToken);
+  } catch {
+    return false;
+  }
 }
 
 export function upsertAiProfile(input: AiProfileInput) {
@@ -46,12 +84,17 @@ export function upsertAiProfile(input: AiProfileInput) {
     }
   }
   
-  const apiKeyEncrypted =
-    input.apiKey === undefined
-      ? (existing?.apiKeyEncrypted ?? null)
-      : apiKeyToEncrypt
-        ? encryptSecret(apiKeyToEncrypt)
-        : null;
+  const hasCredentialInput =
+    input.apiKey !== undefined &&
+    input.apiKey !== null &&
+    (typeof input.apiKey === 'string'
+      ? input.apiKey.trim().length > 0
+      : Object.keys(input.apiKey).length > 0);
+  const apiKeyEncrypted = hasCredentialInput
+    ? apiKeyToEncrypt
+      ? encryptSecret(apiKeyToEncrypt)
+      : null
+    : (existing?.apiKeyEncrypted ?? null);
         
   const saved = db
     .insert(aiProfiles)
@@ -101,6 +144,7 @@ export function publicAiProfile(profile: typeof aiProfiles.$inferSelect) {
     if (decryptedRaw.startsWith('{')) {
       try {
         envValues = JSON.parse(decryptedRaw);
+        if (envValues.authType === 'openai_oauth') envValues = {};
       } catch {
         envValues = { apiKey: decryptedRaw };
       }
@@ -144,7 +188,8 @@ export function getAiConfigForRuntime(
     try {
       envValues = JSON.parse(decryptedRaw);
       // Fallback for primary key
-      apiKey = envValues.apiKey || envValues.API_KEY || Object.values(envValues)[0];
+      apiKey = envValues.apiKey || envValues.API_KEY || envValues.accessToken ||
+        (envValues.authType ? undefined : Object.values(envValues)[0]);
     } catch {
       // Not JSON
     }

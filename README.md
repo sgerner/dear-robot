@@ -222,6 +222,7 @@ Do not set `DB_PATH` manually in production. The app derives it from `DATA_DIR`.
 | `AI_BASE_URL` | `https://api.deepseek.com` | Primary AI endpoint. |
 | `AI_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the primary profile. |
 | `AI_API_KEY` | unset | Optional bootstrap API key for the primary profile. |
+| `OPENAI_API_KEY` | unset | Optional OpenAI API key used when an OpenAI profile is selected and no profile key is saved. |
 | `AI_FALLBACK_PROVIDER` | `gemini` | Fallback AI provider preset. |
 | `AI_FALLBACK_MODEL` | `gemini-2.5-flash` | Fallback AI model. |
 | `AI_FALLBACK_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` | Fallback AI endpoint. |

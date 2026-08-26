@@ -1,6 +1,15 @@
 @import 'tailwindcss';
+@import '@skeletonlabs/skeleton';
 
 @theme {
+  /* Skeleton token bridge: the app's runtime themes remain the source of truth. */
+  --color-primary-500: var(--primary);
+  --color-primary-contrast-500: var(--primary-fg);
+  --color-secondary-500: var(--secondary);
+  --color-secondary-contrast-500: var(--secondary-fg);
+  --color-error-500: var(--destructive);
+  --color-error-contrast-500: var(--destructive-fg);
+
   /* Dynamic mapping to themed variables */
   --color-background: var(--bg);
   --color-foreground: var(--fg);
