@@ -3,10 +3,23 @@ import { buildSuggestionMessages } from './prompts';
 import { buildRepairMessages, extractJson, parseSuggestion } from './repair';
 import type { EmailSuggestion, EmailSuggestionInput, EmailSuggestionResult } from './schema';
 import { getAiConfigForRuntime } from './settings';
-import { completeWithOpenAiOAuth, isOpenAiOAuthConfig } from './openai-codex';
+import {
+  completeWithOpenAiOAuth,
+  completeWithOpenAiOAuthTools,
+  isOpenAiOAuthConfig,
+  type AgentToolCall,
+  type AgentToolDefinition
+} from './openai-codex';
 import { z } from 'zod';
 
 type ChatMessage = { role: string; content: string };
+
+export type AgentChatMessage = ChatMessage & {
+  toolCallId?: string;
+  name?: string;
+  toolCalls?: AgentToolCall[];
+};
+export type { AgentToolCall, AgentToolDefinition };
 
 export type ProviderConfig = {
   profile?: 'primary' | 'fallback' | 'advanced' | 'audio';
@@ -193,6 +206,189 @@ async function completeChat(config: ProviderConfig, messages: ChatMessage[]) {
   return config.transport === 'anthropic'
     ? anthropicComplete(config, messages)
     : openAiCompatibleComplete(config, messages);
+}
+
+/**
+ * One bounded tool-aware turn.  The regular suggestion/planner path remains
+ * structured JSON-only; this endpoint is deliberately separate so a workflow
+ * can impose tool allowlists, turn limits, and approval interrupts.
+ */
+export async function generateAgentToolTurn(options: {
+  messages: AgentChatMessage[];
+  tools: AgentToolDefinition[];
+  profile?: 'primary' | 'advanced';
+  allowFallback?: boolean;
+}) {
+  const profile = options.profile || 'advanced';
+  const primary = configFor(profile);
+  const fallback = configFor('fallback');
+  const execute = async (config: ProviderConfig) => {
+    if (isOpenAiOAuthConfig(config)) {
+      const result = await completeWithOpenAiOAuthTools(config, options.messages, options.tools);
+      return { ...result, provider: config.provider, model: config.model };
+    }
+    if (!config.apiKey) throw new ProviderError(`${config.provider} API key is not configured`);
+    const endpoint = endpointFor(config);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    try {
+      if (config.transport === 'anthropic') {
+        const system = options.messages
+          .filter((message) => message.role === 'system')
+          .map((message) => message.content)
+          .join('\n\n');
+        const anthropicMessages = toAnthropicMessages(options.messages);
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'x-api-key': config.apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: config.model,
+            max_tokens: 4096,
+            system,
+            messages: anthropicMessages,
+            tools: options.tools.map((tool) => ({
+              name: tool.name,
+              description: tool.description,
+              input_schema: tool.parameters
+            }))
+          })
+        });
+        const text = await response.text();
+        if (!response.ok) throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const content = Array.isArray(parsed.content) ? parsed.content : [];
+        const toolCalls: AgentToolCall[] = [];
+        const textParts: string[] = [];
+        for (const part of content) {
+          if (!part || typeof part !== 'object') continue;
+          const row = part as Record<string, unknown>;
+          if (row.type === 'tool_use' && typeof row.name === 'string') {
+            toolCalls.push({
+              id: typeof row.id === 'string' ? row.id : `call_${toolCalls.length + 1}`,
+              name: row.name,
+              arguments: JSON.stringify(row.input || {})
+            });
+          }
+          if (typeof row.text === 'string') textParts.push(row.text);
+        }
+        return { content: textParts.join(''), toolCalls, provider: config.provider, model: config.model };
+      }
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { authorization: `Bearer ${config.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: config.model,
+          messages: options.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+            ...(message.name ? { name: message.name } : {}),
+            ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
+            ...(message.toolCalls
+              ? {
+                  tool_calls: message.toolCalls.map((call) => ({
+                    id: call.id,
+                    type: 'function',
+                    function: { name: call.name, arguments: call.arguments }
+                  }))
+                }
+              : {})
+          })),
+          tools: options.tools.map((tool) => ({
+            type: 'function',
+            function: { name: tool.name, description: tool.description, parameters: tool.parameters }
+          })),
+          tool_choice: 'auto',
+          temperature: 0.2
+        })
+      });
+      const text = await response.text();
+      if (!response.ok) throw new ProviderError(`${config.provider} ${response.status}: ${text.slice(0, 300)}`);
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const message = (parsed.choices as Array<Record<string, unknown>> | undefined)?.[0]?.message as
+        | Record<string, unknown>
+        | undefined;
+      const toolCalls = Array.isArray(message?.tool_calls)
+        ? (message?.tool_calls as Array<Record<string, unknown>>).flatMap((call, index) => {
+            const fn = call.function as Record<string, unknown> | undefined;
+            return fn && typeof fn.name === 'string'
+              ? [{
+                  id: typeof call.id === 'string' ? call.id : `call_${index + 1}`,
+                  name: fn.name,
+                  arguments: typeof fn.arguments === 'string' ? fn.arguments : '{}'
+                }]
+              : [];
+          })
+        : [];
+      return {
+        content: typeof message?.content === 'string' ? message.content : '',
+        toolCalls,
+        provider: config.provider,
+        model: config.model
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  if (env.NODE_ENV === 'test' || primary.provider === 'mock' || !primary.apiKey) {
+    return { content: 'No tool turn executed in the deterministic test provider.', toolCalls: [], provider: 'mock', model: 'deterministic-fixture' };
+  }
+  try {
+    return await execute(primary);
+  } catch (error) {
+    if (options.allowFallback === false || !fallback.apiKey) throw error;
+    return execute(fallback);
+  }
+}
+
+function toAnthropicMessages(messages: AgentChatMessage[]) {
+  const output: Array<{ role: 'user' | 'assistant'; content: Array<Record<string, unknown>> }> = [];
+  for (const message of messages) {
+    if (message.role === 'system') continue;
+    if (message.role === 'tool' && message.toolCallId) {
+      const toolResult = {
+        type: 'tool_result',
+        tool_use_id: message.toolCallId,
+        content: message.content
+      };
+      const previous = output[output.length - 1];
+      if (previous?.role === 'user' && previous.content.every((part) => part.type === 'tool_result')) {
+        previous.content.push(toolResult);
+      } else {
+        output.push({ role: 'user', content: [toolResult] });
+      }
+      continue;
+    }
+    const content: Array<Record<string, unknown>> = [];
+    if (message.content.trim()) content.push({ type: 'text', text: message.content });
+    for (const call of message.toolCalls || []) {
+      content.push({
+        type: 'tool_use',
+        id: call.id,
+        name: call.name,
+        input: parseToolArguments(call.arguments)
+      });
+    }
+    output.push({
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      content: content.length ? content : [{ type: 'text', text: '' }]
+    });
+  }
+  return output;
+}
+
+function parseToolArguments(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function configFor(profile: 'primary' | 'fallback' | 'advanced'): ProviderConfig {

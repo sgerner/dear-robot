@@ -1,7 +1,19 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+
+// Keep local development secrets in the ignored `.env.development.local` file
+// while allowing shell-provided values to remain the source of truth in CI and
+// production. The local file is intentionally loaded after `.env` so a
+// generated dev password is still available after restarting the dev server.
+dotenv.config();
+if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+  dotenv.config({
+    path: path.resolve(process.cwd(), '.env.development.local'),
+    override: true
+  });
+}
 
 const isBuildProcess =
   process.env.npm_lifecycle_event === 'build' ||

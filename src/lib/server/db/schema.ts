@@ -383,6 +383,7 @@ export const followUpReminders = sqliteTable(
       .references(() => messages.id, { onDelete: 'cascade' }),
     dueAt: text('due_at').notNull(),
     reason: text('reason').notNull(),
+    notifiedAt: text('notified_at'),
     status: text('status', { enum: ['open', 'done', 'dismissed'] })
       .notNull()
       .default('open'),
@@ -460,6 +461,9 @@ export const agentTools = sqliteTable('agent_tools', {
   argsJson: text('args_json'),
   authHeadersEncrypted: text('auth_headers_encrypted'),
   envEncrypted: text('env_encrypted'),
+  outputSchemaJson: text('output_schema_json'),
+  allowedHostsJson: text('allowed_hosts_json'),
+  maxInputBytes: integer('max_input_bytes').notNull().default(200000),
   isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),
   readOnly: integer('read_only', { mode: 'boolean' }).notNull().default(false),
   requireApprovalForWrite: integer('require_approval_for_write', { mode: 'boolean' })
@@ -478,6 +482,49 @@ export const obsidianSettings = sqliteTable('obsidian_settings', {
   updatedAt: text('updated_at').notNull()
 });
 
+/**
+ * Durable, user-defined automation rules.  Rules intentionally stay small and
+ * inspectable: matching is expressed as JSON filters and the plan is stored as
+ * a validated task template.  A rule can be run manually or by the durable
+ * scheduler in the agent runtime.
+ */
+export const automationWorkflows = sqliteTable(
+  'automation_workflows',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    description: text('description'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+    triggerType: text('trigger_type', {
+      enum: ['manual', 'new_message', 'schedule', 'follow_up_due', 'webhook']
+    })
+      .notNull()
+      .default('manual'),
+    schedule: text('schedule'),
+    timezone: text('timezone').notNull().default('UTC'),
+    filtersJson: text('filters_json').notNull().default('{}'),
+    planTemplateJson: text('plan_template_json').notNull().default('{}'),
+    approvalMode: text('approval_mode', { enum: ['always', 'risk_based', 'read_only_auto'] })
+      .notNull()
+      .default('always'),
+    dryRun: integer('dry_run', { mode: 'boolean' }).notNull().default(true),
+    maxRunsPerHour: integer('max_runs_per_hour').notNull().default(20),
+    quietHoursStart: text('quiet_hours_start'),
+    quietHoursEnd: text('quiet_hours_end'),
+    lastRunAt: text('last_run_at'),
+    nextRunAt: text('next_run_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    enabledTriggerIdx: index('automation_workflows_enabled_trigger_idx').on(
+      table.enabled,
+      table.triggerType
+    ),
+    nextRunIdx: index('automation_workflows_next_run_idx').on(table.nextRunAt)
+  })
+);
+
 export const taskRuns = sqliteTable(
   'task_runs',
   {
@@ -488,6 +535,11 @@ export const taskRuns = sqliteTable(
     suggestionId: integer('suggestion_id').references(() => aiSuggestions.id, {
       onDelete: 'set null'
     }),
+    workflowId: integer('workflow_id').references(() => automationWorkflows.id, {
+      onDelete: 'set null'
+    }),
+    triggerType: text('trigger_type').notNull().default('manual'),
+    idempotencyKey: text('idempotency_key'),
     status: text('status', {
       enum: ['planned', 'needs_approval', 'running', 'completed', 'failed', 'rejected', 'cancelled']
     })
@@ -502,11 +554,23 @@ export const taskRuns = sqliteTable(
     planJson: text('plan_json').notNull(),
     resultSummary: text('result_summary'),
     errorMessage: text('error_message'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    currentStepIndex: integer('current_step_index').notNull().default(0),
+    nextRunAt: text('next_run_at'),
+    leaseOwner: text('lease_owner'),
+    leaseUntil: text('lease_until'),
+    cancelRequested: integer('cancel_requested', { mode: 'boolean' }).notNull().default(false),
+    actor: text('actor').notNull().default('user'),
+    startedAt: text('started_at'),
+    finishedAt: text('finished_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull()
   },
   (table) => ({
-    messageCreatedIdx: index('task_runs_message_created_idx').on(table.messageId, table.createdAt)
+    messageCreatedIdx: index('task_runs_message_created_idx').on(table.messageId, table.createdAt),
+    workflowStatusIdx: index('task_runs_workflow_status_idx').on(table.workflowId, table.status),
+    idempotencyUnique: uniqueIndex('task_runs_idempotency_unique').on(table.idempotencyKey)
   })
 );
 
@@ -520,11 +584,23 @@ export const taskSteps = sqliteTable(
     stepIndex: integer('step_index').notNull(),
     title: text('title').notNull(),
     kind: text('kind', {
-      enum: ['draft_reply', 'move_to_folder', 'tool_call', 'delegate', 'mark_done']
+      enum: [
+        'draft_reply',
+        'send_reply',
+        'move_to_folder',
+        'tool_call',
+        'delegate',
+        'mark_done',
+        'notify'
+      ]
     }).notNull(),
     details: text('details').notNull(),
     toolName: text('tool_name'),
     toolInputJson: text('tool_input_json'),
+    resolvedInputJson: text('resolved_input_json'),
+    dependsOnJson: text('depends_on_json').notNull().default('[]'),
+    conditionJson: text('condition_json'),
+    outputKey: text('output_key'),
     status: text('status', {
       enum: ['pending', 'approved', 'running', 'completed', 'failed', 'rejected']
     })
@@ -536,6 +612,14 @@ export const taskSteps = sqliteTable(
       .default('low'),
     outputJson: text('output_json'),
     errorMessage: text('error_message'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    retryDelayMs: integer('retry_delay_ms').notNull().default(1000),
+    nextAttemptAt: text('next_attempt_at'),
+    idempotencyKey: text('idempotency_key'),
+    approvalReason: text('approval_reason'),
+    startedAt: text('started_at'),
+    finishedAt: text('finished_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull()
   },
@@ -556,6 +640,78 @@ export const toolCalls = sqliteTable('tool_calls', {
   durationMs: integer('duration_ms').notNull().default(0),
   createdAt: text('created_at').notNull()
 });
+
+export const agentAuditEvents = sqliteTable(
+  'agent_audit_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    workflowId: integer('workflow_id').references(() => automationWorkflows.id, {
+      onDelete: 'set null'
+    }),
+    taskRunId: integer('task_run_id').references(() => taskRuns.id, { onDelete: 'set null' }),
+    taskStepId: integer('task_step_id').references(() => taskSteps.id, { onDelete: 'set null' }),
+    actor: text('actor').notNull().default('system'),
+    eventType: text('event_type').notNull(),
+    payloadJson: text('payload_json').notNull().default('{}'),
+    createdAt: text('created_at').notNull()
+  },
+  (table) => ({
+    runCreatedIdx: index('agent_audit_events_run_created_idx').on(table.taskRunId, table.createdAt),
+    workflowCreatedIdx: index('agent_audit_events_workflow_created_idx').on(
+      table.workflowId,
+      table.createdAt
+    )
+  })
+);
+
+export const agentNotifications = sqliteTable(
+  'agent_notifications',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    taskRunId: integer('task_run_id').references(() => taskRuns.id, { onDelete: 'cascade' }),
+    taskStepId: integer('task_step_id').references(() => taskSteps.id, { onDelete: 'cascade' }),
+    type: text('type', { enum: ['approval', 'failed', 'completed', 'follow_up', 'system'] })
+      .notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    readAt: text('read_at'),
+    createdAt: text('created_at').notNull()
+  },
+  (table) => ({
+    unreadIdx: index('agent_notifications_unread_idx').on(table.readAt, table.createdAt)
+  })
+);
+
+export const agentLoopSessions = sqliteTable(
+  'agent_loop_sessions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    messageId: integer('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['running', 'needs_approval', 'completed', 'failed', 'cancelled'] })
+      .notNull()
+      .default('running'),
+    prompt: text('prompt').notNull(),
+    messagesJson: text('messages_json').notNull().default('[]'),
+    transcriptJson: text('transcript_json').notNull().default('[]'),
+    pendingApprovalsJson: text('pending_approvals_json').notNull().default('[]'),
+    approvedToolNamesJson: text('approved_tool_names_json').notNull().default('[]'),
+    allowWriteTools: integer('allow_write_tools', { mode: 'boolean' }).notNull().default(false),
+    maxTurns: integer('max_turns').notNull().default(8),
+    turnCount: integer('turn_count').notNull().default(0),
+    provider: text('provider'),
+    model: text('model'),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    finishedAt: text('finished_at')
+  },
+  (table) => ({
+    statusUpdatedIdx: index('agent_loop_sessions_status_updated_idx').on(table.status, table.updatedAt),
+    messageUpdatedIdx: index('agent_loop_sessions_message_updated_idx').on(table.messageId, table.updatedAt)
+  })
+);
 
 export const automationPolicies = sqliteTable('automation_policies', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -580,6 +736,11 @@ export const automationPolicies = sqliteTable('automation_policies', {
   maxMessagesPerRun: integer('max_messages_per_run').notNull().default(25),
   maxAutoActionsPerRun: integer('max_auto_actions_per_run').notNull().default(5),
   followUpDays: integer('follow_up_days').notNull().default(2),
+  maxAgentTurns: integer('max_agent_turns').notNull().default(8),
+  maxRunDurationMs: integer('max_run_duration_ms').notNull().default(180000),
+  defaultMaxAttempts: integer('default_max_attempts').notNull().default(3),
+  notificationEnabled: integer('notification_enabled', { mode: 'boolean' }).notNull().default(true),
+  timezone: text('timezone').notNull().default('UTC'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull()
 });
@@ -714,3 +875,7 @@ export type AgentActionQueue = typeof agentActionQueue.$inferSelect;
 export type AutopilotRun = typeof autopilotRuns.$inferSelect;
 export type ThreadSummary = typeof threadSummaries.$inferSelect;
 export type AgentObligation = typeof agentObligations.$inferSelect;
+export type AutomationWorkflow = typeof automationWorkflows.$inferSelect;
+export type AgentAuditEvent = typeof agentAuditEvents.$inferSelect;
+export type AgentNotification = typeof agentNotifications.$inferSelect;
+export type AgentLoopSession = typeof agentLoopSessions.$inferSelect;

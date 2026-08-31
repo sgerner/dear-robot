@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser, dev } from '$app/environment';
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { themeStore } from '$lib/client/theme';
   import '../lib/styles.css';
   let { children } = $props();
@@ -89,6 +90,8 @@
     class="pointer-events-none fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border border-zinc-700/70 bg-zinc-900/90 px-3 py-1 text-xs text-zinc-300 shadow-md backdrop-blur-sm transition-all"
     role="status"
     aria-live="polite"
+    in:fade={{ duration: 180 }}
+    out:fade={{ duration: 120 }}
   >
     <span class="size-2 rounded-full bg-amber-400"></span>
     <span>Offline mode</span>

@@ -54,3 +54,26 @@ export function formatPlainText(text: string | null | undefined): string {
 
   return formatted;
 }
+
+/** Turns provider/AI action identifiers into concise labels for people. */
+export function formatActionLabel(action: string | null | undefined): string {
+  if (!action) return '';
+  const labels: Record<string, string> = {
+    archive: 'Archive',
+    delete: 'Trash',
+    delegate: 'Delegate',
+    forward: 'Forward',
+    mark_read: 'Mark as read',
+    mark_unread: 'Mark as unread',
+    move_to_folder: 'Move to folder',
+    reply: 'Reply',
+    reply_all: 'Reply all',
+    spam: 'Mark as spam',
+    star: 'Star',
+    toggle_read: 'Read / unread'
+  };
+  if (labels[action]) return labels[action];
+  return action
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}

@@ -95,28 +95,37 @@
 <div class="flex flex-col relative">
   <!-- Account Picker Modal -->
   {#if showAccountPicker}
-    <div 
-      role="button"
+    <div
+      role="presentation"
       tabindex="-1"
       class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
       transition:fade={{ duration: 150 }}
       onclick={() => (showAccountPicker = false)}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          showAccountPicker = false;
-        }
-      }}
+      onkeydown={(event) => event.key === 'Escape' && (showAccountPicker = false)}
     >
       <div 
-        role="presentation"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-picker-title"
+        tabindex="-1"
         class="w-full max-w-[280px] rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
         transition:scale={{ duration: 200, start: 0.95 }}
         onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            showAccountPicker = false;
+          } else {
+            e.stopPropagation();
+          }
+        }}
       >
         <div class="flex items-center justify-between border-b border-border/60 px-4 py-3 bg-muted/30">
-          <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Switch Account</h2>
+          <h2 id="account-picker-title" class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Switch Account</h2>
           <button 
-            class="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            class="touch-target rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Close account picker"
+            title="Close account picker"
             onclick={() => (showAccountPicker = false)}
           >
             <X size={14} />
@@ -126,7 +135,7 @@
         <div class="p-2 space-y-1 max-h-[400px] overflow-y-auto scrollbar-thin">
           <button
             class={`
-              flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all
+              touch-target flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all
               ${!accountFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}
             `}
             onclick={() => selectAccount('')}
@@ -143,7 +152,7 @@
           {#each accounts as account (account.id)}
             <button
               class={`
-                flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all
+                touch-target flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all
                 ${accountFilter === String(account.id) ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}
               `}
               onclick={() => selectAccount(String(account.id))}
@@ -168,8 +177,10 @@
       <!-- Row 1: Account Filter & Search & Help -->
       <div class="flex items-center gap-1.5">
         <button
-          class="flex h-8 min-w-[70px] max-w-[100px] items-center justify-between gap-1.5 rounded-md border border-input bg-muted/30 px-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground active:scale-95"
+          class="touch-target flex h-9 min-w-[70px] max-w-[100px] items-center justify-between gap-1.5 rounded-md border border-input bg-muted/30 px-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground active:scale-95"
           onclick={() => (showAccountPicker = true)}
+          aria-haspopup="dialog"
+          aria-expanded={showAccountPicker}
           title="Switch Account"
         >
           <span class="truncate">{currentAccountLabel}</span>
@@ -183,7 +194,8 @@
           />
           <input
             bind:this={searchInput}
-            class="h-8 w-full rounded-md border border-input bg-background pl-8 pr-8 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
+            class="h-9 w-full rounded-md border border-input bg-background pl-8 pr-12 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
+            aria-label="Search mail"
             placeholder="Search mail..."
             bind:value={search}
             oninput={scheduleSearch}
@@ -202,7 +214,8 @@
 
             {#if search}
               <button
-                class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                class="touch-target rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                aria-label="Clear search"
                 onclick={() => {
                   search = '';
                   applySearch({ clearMessage: true });
@@ -214,7 +227,8 @@
           </div>
         </div>
         <button
-          class="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          class="touch-target flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors lg:min-h-8 lg:min-w-8"
+          aria-pressed={showShortcutHelp}
           class:bg-muted={showShortcutHelp}
           class:text-foreground={showShortcutHelp}
           title={showShortcutHelp ? 'Hide shortcuts' : 'Show shortcuts (?)'}
@@ -231,7 +245,8 @@
             {@const Icon = v.icon}
             <button
               class={`
-                flex flex-1 items-center justify-center gap-1.5 rounded-md py-1 px-1.5 text-xs font-medium
+                flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md py-1 px-1.5 text-xs font-medium
+                lg:min-h-7
                 transition-all duration-200
                 ${
                   view === v.id
@@ -240,6 +255,9 @@
                 }
               `}
               onclick={() => setQuickView(v.id)}
+              aria-label={v.label}
+              aria-pressed={view === v.id}
+              title={v.label}
             >
               <Icon size={12} />
               <span class="hidden sm:inline">{v.label}</span>
@@ -247,12 +265,16 @@
           {/each}
         </div>
 
-        <button
+          <button
           class={`
-            flex h-7 items-center gap-1.5 rounded-md border border-border/60 px-2 text-xs font-medium transition-all
+            flex min-h-11 items-center gap-1.5 rounded-md border border-border/60 px-2 text-xs font-medium transition-all
+            lg:min-h-7
             ${foldersExpanded ? 'bg-primary/10 text-primary border-primary/20' : 'bg-muted/10 text-muted-foreground hover:bg-muted/30'}
           `}
           onclick={() => (foldersExpanded = !foldersExpanded)}
+          aria-expanded={foldersExpanded}
+          aria-label={foldersExpanded ? 'Hide folders' : 'Show folders'}
+          title={foldersExpanded ? 'Hide folders' : 'Show folders'}
         >
           <FolderOpen size={12} />
           <span class="hidden sm:inline">Folders</span>
@@ -329,7 +351,8 @@
                 {#each group.folders as folder (folder.id)}
                   <button
                     class={`
-                      flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs
+                      flex min-h-11 w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs
+                      lg:min-h-7
                       transition-colors duration-150
                       ${
                         query?.folder === folder.path &&

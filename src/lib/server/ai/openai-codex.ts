@@ -24,6 +24,18 @@ async function loadOAuthModule(): Promise<OAuthModule> {
 
 type LoginProfile = Exclude<AiProfileInput['profile'], 'audio'>;
 
+export type AgentToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+};
+
+export type AgentToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+
 type LoginState = {
   profile: LoginProfile;
   flow: OpenAIDeviceFlow;
@@ -114,7 +126,13 @@ export function isOpenAiOAuthConfig(config: ProviderConfig) {
 
 export async function completeWithOpenAiOAuth(
   config: ProviderConfig,
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{
+    role: string;
+    content: string;
+    toolCallId?: string;
+    name?: string;
+    toolCalls?: AgentToolCall[];
+  }>
 ) {
   const tokens = oauthTokensFromConfig(config);
   if (!tokens) throw new Error('OpenAI OAuth is not connected for this profile');
@@ -150,6 +168,115 @@ export async function completeWithOpenAiOAuth(
   const body = await response.text();
   if (!response.ok) throw new Error(`openai ${response.status}: ${body.slice(0, 300)}`);
   return extractResponseText(body);
+}
+
+/** A non-streaming Responses call used by the bounded agent loop. */
+export async function completeWithOpenAiOAuthTools(
+  config: ProviderConfig,
+  messages: Array<{
+    role: string;
+    content: string;
+    toolCallId?: string;
+    name?: string;
+    toolCalls?: AgentToolCall[];
+  }>,
+  tools: AgentToolDefinition[]
+) {
+  const tokens = oauthTokensFromConfig(config);
+  if (!tokens) throw new Error('OpenAI OAuth is not connected for this profile');
+  if (!config.profile || config.profile === 'audio') {
+    throw new Error('OpenAI OAuth requires a primary, fallback, or advanced AI profile');
+  }
+  const { createCodexOAuthClient } = await loadOAuthModule();
+  const client = createCodexOAuthClient({
+    tokens,
+    onTokens: async (refreshed: OpenAIOAuthTokens) => {
+      await saveOpenAiOAuthTokens(config.profile as LoginProfile, refreshed);
+    }
+  });
+  const response = await client.request('/responses', {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: config.model,
+      input: toResponsesInput(messages),
+      tools: tools.map((tool) => ({
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+        strict: false
+      })),
+      tool_choice: 'auto',
+      store: false
+    })
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`openai ${response.status}: ${body.slice(0, 300)}`);
+  const parsed = JSON.parse(body) as Record<string, unknown>;
+  const output = Array.isArray(parsed.output) ? parsed.output : [];
+  const toolCalls: AgentToolCall[] = [];
+  const text: string[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    if (row.type === 'function_call' && typeof row.name === 'string') {
+      toolCalls.push({
+        id: typeof row.call_id === 'string' ? row.call_id : `call_${toolCalls.length + 1}`,
+        name: row.name,
+        arguments: typeof row.arguments === 'string' ? row.arguments : '{}'
+      });
+    }
+    if (row.type === 'message' && Array.isArray(row.content)) {
+      for (const part of row.content) {
+        if (part && typeof part === 'object' && typeof (part as Record<string, unknown>).text === 'string')
+          text.push((part as Record<string, unknown>).text as string);
+      }
+    }
+  }
+  if (typeof parsed.output_text === 'string') text.push(parsed.output_text);
+  return { content: text.join(''), toolCalls };
+}
+
+/**
+ * Responses keeps function calls and their outputs as first-class input
+ * items.  Converting them to Chat Completions-style `tool` messages makes an
+ * OAuth-backed Responses request fail on the second turn, so preserve the
+ * native item shape here.
+ */
+function toResponsesInput(
+  messages: Array<{
+    role: string;
+    content: string;
+    toolCallId?: string;
+    name?: string;
+    toolCalls?: AgentToolCall[];
+  }>
+) {
+  return messages.flatMap((message) => {
+    if (message.role === 'tool' && message.toolCallId) {
+      return [
+        {
+          type: 'function_call_output',
+          call_id: message.toolCallId,
+          output: message.content
+        }
+      ];
+    }
+    const items: Array<Record<string, unknown>> = [];
+    if (message.content.trim()) {
+      items.push({ type: 'message', role: message.role, content: message.content });
+    }
+    for (const call of message.toolCalls || []) {
+      items.push({
+        type: 'function_call',
+        call_id: call.id,
+        name: call.name,
+        arguments: call.arguments
+      });
+    }
+    return items;
+  });
 }
 
 function extractResponseText(body: string) {

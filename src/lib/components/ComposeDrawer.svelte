@@ -66,22 +66,28 @@
   onclick={onClose}
 ></button>
 
-<section
-  class="fixed bottom-0 right-0 z-50 flex max-h-[92vh] h-full w-full flex-col overflow-hidden border-t border-border bg-background shadow-2xl md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:w-[min(840px,calc(100vw-2rem))] md:border"
+<dialog
+  open
+  aria-modal="true"
+  aria-labelledby="compose-dialog-title"
+  tabindex="-1"
+  onkeydown={(event) => event.key === 'Escape' && onClose()}
+  class="m-0 p-0 text-foreground fixed bottom-0 right-0 z-50 flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden border-t border-border bg-background shadow-2xl lg:bottom-4 lg:left-1/2 lg:h-full lg:max-h-[92vh] lg:-translate-x-1/2 lg:right-auto lg:w-[min(840px,calc(100vw-2rem))] lg:border"
   transition:slide={{ duration: 200 }}
 >
   <!-- Header -->
   <header class="flex items-center justify-between border-b border-border px-4 py-2.5 shrink-0">
     <div class="flex items-center gap-2.5">
       <Sparkles size={15} class="text-primary" />
-      <h2 class="text-sm font-semibold text-foreground">{getModeLabel(composeMode)}</h2>
+      <h2 id="compose-dialog-title" class="text-sm font-semibold text-foreground">{getModeLabel(composeMode)}</h2>
       {#if compose.draftId}
         <span class="text-xs text-muted-foreground">#{compose.draftId}</span>
       {/if}
     </div>
     <button
-      class="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      class="touch-target rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       title="Close"
+      aria-label="Close compose"
       onclick={onClose}
     >
       <X size={16} />
@@ -100,7 +106,8 @@
       <!-- Account + To row -->
       <div class="flex items-center gap-0 border-b border-border">
         <select
-          class="h-8 shrink-0 border-r border-border bg-transparent px-3 text-xs text-muted-foreground outline-none hover:text-foreground cursor-pointer"
+          class="h-10 shrink-0 border-r border-border bg-transparent px-3 text-xs text-muted-foreground outline-none hover:text-foreground cursor-pointer"
+          aria-label="Sending account"
           bind:value={compose.accountId}
         >
           {#each data.accounts as account (account.id)}
@@ -113,7 +120,8 @@
             >To</span
           >
           <input
-            class="h-8 w-full bg-transparent pl-8 pr-20 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            class="h-10 w-full bg-transparent pl-8 pr-20 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="To"
             list="contact-options"
             placeholder="recipient@..."
             bind:value={compose.to}
@@ -121,7 +129,7 @@
           <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
               type="button"
-              class="text-xs font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showCc
+              class="touch-target text-xs font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showCc
                 ? 'text-primary'
                 : ''}"
               onclick={() => (showCc = !showCc)}
@@ -130,7 +138,7 @@
             </button>
             <button
               type="button"
-              class="text-xs font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showBcc
+              class="touch-target text-xs font-medium uppercase tracking-wider px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors {showBcc
                 ? 'text-primary'
                 : ''}"
               onclick={() => (showBcc = !showBcc)}
@@ -149,7 +157,8 @@
             >Cc</span
           >
           <input
-            class="h-8 w-full bg-transparent pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            class="h-10 w-full bg-transparent pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Cc"
             list="contact-options"
             placeholder="Add cc..."
             bind:value={compose.cc}
@@ -165,7 +174,8 @@
             >Bcc</span
           >
           <input
-            class="h-8 w-full bg-transparent pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            class="h-10 w-full bg-transparent pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Bcc"
             placeholder="Add bcc..."
             bind:value={compose.bcc}
           />
@@ -175,7 +185,8 @@
       <!-- Subject -->
       <div class="relative">
         <input
-          class="h-8 w-full bg-transparent px-3 text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground placeholder:font-normal"
+          class="h-10 w-full bg-transparent px-3 text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground placeholder:font-normal"
+          aria-label="Subject"
           placeholder="Subject"
           bind:value={compose.subject}
         />
@@ -194,7 +205,7 @@
       <div class="flex border border-border p-0.5">
         <button
           type="button"
-          class={`px-2 py-0.5 text-xs font-medium transition-colors ${
+          class={`touch-target px-2 py-0.5 text-xs font-medium transition-colors ${
             composeEditorMode === 'plain'
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -205,7 +216,7 @@
         </button>
         <button
           type="button"
-          class={`px-2 py-0.5 text-xs font-medium transition-colors ${
+          class={`touch-target px-2 py-0.5 text-xs font-medium transition-colors ${
             composeEditorMode === 'rich'
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -217,7 +228,7 @@
       </div>
 
       <label
-        class="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+        class="touch-target inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <Paperclip size={12} />
         <span>Attach</span>
@@ -238,7 +249,7 @@
         {#each compose.attachments as attachment, idx (`${attachment.filename}-${idx}`)}
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 bg-background border border-border px-2 py-0.5 text-xs text-foreground hover:border-destructive/50 group transition-colors"
+            class="inline-flex min-h-10 items-center gap-1.5 bg-background border border-border px-2 py-0.5 text-xs text-foreground transition-colors hover:border-destructive/50 group"
             aria-label={`${attachment.filename} Remove`}
             onclick={() => removeAttachment(idx)}
           >
@@ -261,6 +272,7 @@
           <input
             id="compose-ai-prompt"
             class="min-w-0 flex-1 h-7 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Ask AI to write"
             placeholder="Ask AI to write..."
             bind:value={composeAiPrompt}
             onkeydown={(event) =>
@@ -279,7 +291,7 @@
         />
         <button
           type="button"
-          class="flex items-center gap-1 bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+          class="touch-target flex shrink-0 items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
           onclick={generateComposeBody}
           disabled={isGeneratingCompose || !composeAiPrompt.trim()}
         >
@@ -299,6 +311,7 @@
         <textarea
           id="compose-html-body"
           class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+          aria-label="Message body (rich text)"
           placeholder="Write your message..."
           bind:value={composeHtml}
         ></textarea>
@@ -306,6 +319,7 @@
         <textarea
           id="compose-body"
           class="h-full w-full resize-none bg-background p-3 pr-10 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+          aria-label="Message body"
           placeholder="Write your message..."
           bind:value={compose.body}
         ></textarea>
@@ -324,24 +338,25 @@
 
     <!-- Footer -->
     <footer
-      class="flex items-center justify-between gap-2 border-t border-border px-3 py-2 shrink-0"
+      class="flex shrink-0 flex-col items-stretch gap-2 border-t border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+      style="padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));"
     >
       <p class="text-xs text-muted-foreground">Autosaves · Offline queue</p>
-      <div class="flex gap-2">
+      <div class="flex w-full gap-2 sm:w-auto">
         <Button
           variant="outline"
           size="sm"
-          class="h-7 text-xs"
+          class="touch-target flex-1 text-xs sm:flex-none"
           data-testid="save-draft"
           onclick={saveDraft}
         >
           Save
         </Button>
-        <Button variant="outline" size="sm" class="h-7 text-xs" onclick={onClose}>Cancel</Button>
+        <Button variant="outline" size="sm" class="touch-target flex-1 text-xs sm:flex-none" onclick={onClose}>Cancel</Button>
         <Button
           variant="default"
           size="sm"
-          class="h-7 text-xs"
+          class="touch-target flex-1 text-xs sm:flex-none"
           data-testid="send-compose"
           onclick={sendCompose}
         >
@@ -350,4 +365,4 @@
       </div>
     </footer>
   </form>
-</section>
+</dialog>

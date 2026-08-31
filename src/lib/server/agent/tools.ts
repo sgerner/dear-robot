@@ -25,6 +25,10 @@ export function listAgentTools() {
       command: tool.command,
       args: safeParseStringArray(tool.argsJson),
       skillsMarkdown: readToolSkillsMarkdown(tool.id),
+      inputSchema: safeParseJsonRecord(tool.outputSchemaJson),
+      outputSchema: safeParseJsonRecord(tool.outputSchemaJson),
+      allowedHosts: safeParseStringArray(tool.allowedHostsJson),
+      maxInputBytes: tool.maxInputBytes,
       isEnabled: tool.isEnabled,
       readOnly: tool.readOnly,
       requireApprovalForWrite: tool.requireApprovalForWrite,
@@ -79,6 +83,11 @@ export function createAgentTool(input: unknown) {
       envEncrypted: Object.keys(parsed.env).length
         ? encryptSecret(JSON.stringify(parsed.env))
         : null,
+      outputSchemaJson: JSON.stringify(
+        Object.keys(parsed.inputSchema).length ? parsed.inputSchema : parsed.outputSchema
+      ),
+      allowedHostsJson: JSON.stringify(parsed.allowedHosts),
+      maxInputBytes: parsed.maxInputBytes,
       isEnabled: parsed.isEnabled,
       readOnly: parsed.readOnly,
       requireApprovalForWrite: parsed.requireApprovalForWrite,
@@ -120,6 +129,17 @@ export function updateAgentTool(id: number, input: unknown) {
       argsJson: parsed.args ? JSON.stringify(parsed.args) : existing.argsJson,
       authHeadersEncrypted: nextHeaders,
       envEncrypted: nextEnv,
+      outputSchemaJson:
+        parsed.inputSchema !== undefined
+          ? JSON.stringify(parsed.inputSchema)
+          : parsed.outputSchema !== undefined
+            ? JSON.stringify(parsed.outputSchema)
+          : existing.outputSchemaJson,
+      allowedHostsJson:
+        parsed.allowedHosts !== undefined
+          ? JSON.stringify(parsed.allowedHosts)
+          : existing.allowedHostsJson,
+      maxInputBytes: parsed.maxInputBytes ?? existing.maxInputBytes,
       isEnabled: parsed.isEnabled ?? existing.isEnabled,
       readOnly: parsed.readOnly ?? existing.readOnly,
       requireApprovalForWrite: parsed.requireApprovalForWrite ?? existing.requireApprovalForWrite,
@@ -158,6 +178,9 @@ export async function executeTool(
         args?: string[];
         authHeadersEncrypted?: string | null;
         envEncrypted?: string | null;
+        outputSchemaJson?: string | null;
+        allowedHostsJson?: string | null;
+        maxInputBytes?: number;
         timeoutMs: number;
       },
   input: Record<string, unknown>,
@@ -167,6 +190,10 @@ export async function executeTool(
   let status: 'completed' | 'failed' = 'completed';
   let resultOutput: unknown;
   try {
+    const inputBytes = Buffer.byteLength(JSON.stringify(input), 'utf8');
+    if (inputBytes > (tool.maxInputBytes || 200000)) {
+      throw new Error(`Tool input exceeds ${tool.maxInputBytes || 200000} byte limit`);
+    }
     if (tool.kind === 'obsidian') {
       resultOutput = await executeObsidianTool(input);
     } else {
@@ -208,6 +235,10 @@ function sanitizeTool(tool: typeof agentTools.$inferSelect, skillsMarkdown?: str
     args: safeParseStringArray(tool.argsJson),
     skillsMarkdown:
       skillsMarkdown !== undefined ? skillsMarkdown || '' : readToolSkillsMarkdown(tool.id),
+    inputSchema: safeParseJsonRecord(tool.outputSchemaJson),
+    outputSchema: safeParseJsonRecord(tool.outputSchemaJson),
+    allowedHosts: safeParseStringArray(tool.allowedHostsJson),
+    maxInputBytes: tool.maxInputBytes,
     isEnabled: tool.isEnabled,
     readOnly: tool.readOnly,
     requireApprovalForWrite: tool.requireApprovalForWrite,
@@ -260,11 +291,17 @@ async function runHttpTool(
   tool: {
     endpoint: string | null;
     authHeadersEncrypted?: string | null;
+    allowedHostsJson?: string | null;
     timeoutMs: number;
   },
   input: Record<string, unknown>
 ) {
   if (!tool.endpoint) throw new Error('Tool endpoint is missing');
+  const url = new URL(tool.endpoint);
+  const allowedHosts = safeParseStringArray(tool.allowedHostsJson ?? null);
+  if (allowedHosts.length && !allowedHosts.includes(url.hostname)) {
+    throw new Error(`Tool host ${url.hostname} is not in the configured allowlist`);
+  }
   const headers = decryptJsonRecord(tool.authHeadersEncrypted);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), tool.timeoutMs || 30000);
@@ -355,5 +392,17 @@ function decryptJsonRecord(value: string | null | undefined) {
     return typeof parsed === 'object' && parsed ? (parsed as Record<string, string>) : {};
   } catch {
     return {};
+  }
+}
+
+function safeParseJsonRecord(value: string | null | undefined) {
+  if (!value) return {} as Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {} as Record<string, unknown>;
   }
 }

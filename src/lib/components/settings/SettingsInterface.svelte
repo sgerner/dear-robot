@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade, fly } from 'svelte/transition';
   import {
     ArrowLeft,
     ArrowRight,
@@ -56,8 +57,8 @@
   ];
 </script>
 
-<div class="mt-6 space-y-4">
-  <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="mt-6 space-y-4" in:fade={{ duration: 180 }}>
+  <section class="surface-section rounded-lg p-5" in:fly={{ y: 8, duration: 180 }}>
     <h3 class="font-medium">Application Theme</h3>
     <p class="mt-1 text-sm text-zinc-400">
       Choose a visual style that matches your workflow.
@@ -65,7 +66,8 @@
     <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
       {#each themes as theme (theme.id)}
         <button
-          class="group relative flex flex-col overflow-hidden rounded-md border transition-all duration-200 { $themeStore === theme.id ? 'border-primary ring-2 ring-primary/20' : 'border-white/10 hover:border-white/20 bg-black/20' }"
+          class="group touch-target relative flex flex-col overflow-hidden rounded-md border transition-all duration-200 hover:-translate-y-0.5 { $themeStore === theme.id ? 'border-primary ring-2 ring-primary/20' : 'border-white/10 hover:border-white/20 bg-black/20' }"
+          aria-pressed={$themeStore === theme.id}
           onclick={() => themeStore.setTheme(theme.id)}
         >
           <div class="flex h-12 w-full items-center justify-center" style="background: {theme.colors[0]}">
@@ -87,7 +89,7 @@
     </div>
   </section>
 
-  <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+  <section class="surface-section rounded-lg p-5" in:fly={{ y: 8, duration: 180, delay: 35 }}>
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h3 class="font-medium">Quick Action Bar</h3>
@@ -123,18 +125,20 @@
           {#if quickActionIds.includes(action.id)}
             <div class="flex gap-1">
               <button
-                class="flex h-7 w-7 items-center justify-center rounded border border-white/10 text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-30"
+                class="touch-target flex h-7 w-7 items-center justify-center rounded border border-white/10 text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-30"
                 onclick={() => moveQuickAction(action.id, -1)}
                 disabled={quickActionIds.indexOf(action.id) === 0}
                 title="Move Up"
+                aria-label={`Move ${action.label} up`}
               >
                 <ChevronUp size={14} />
               </button>
               <button
-                class="flex h-7 w-7 items-center justify-center rounded border border-white/10 text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-30"
+                class="touch-target flex h-7 w-7 items-center justify-center rounded border border-white/10 text-zinc-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-30"
                 onclick={() => moveQuickAction(action.id, 1)}
                 disabled={quickActionIds.indexOf(action.id) === quickActionIds.length - 1}
                 title="Move Down"
+                aria-label={`Move ${action.label} down`}
               >
                 <ChevronDown size={14} />
               </button>
@@ -145,7 +149,7 @@
     </div>
   </section>
 
-  <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+  <section class="surface-section rounded-lg p-5" in:fly={{ y: 8, duration: 180, delay: 70 }}>
     <div class="flex items-center gap-2">
       <h3 class="font-medium">Mobile Swipe Gestures</h3>
       <div class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">Mobile Only</div>
@@ -171,6 +175,7 @@
                 <span class="font-medium text-zinc-400">{gesture.label}</span>
                 <select
                   class="rounded border border-white/10 bg-black/40 px-2 py-1 text-zinc-200 outline-none focus:border-primary/50"
+                  aria-label={`${gesture.label} right-swipe action`}
                   value={swipeSettings[gesture.key]}
                   onchange={(event) => updateSwipeSetting(gesture.key as any, (event.currentTarget as HTMLSelectElement).value)}
                 >
@@ -227,6 +232,7 @@
                 <span class="font-medium text-zinc-400">{gesture.label}</span>
                 <select
                   class="rounded border border-white/10 bg-black/40 px-2 py-1 text-zinc-200 outline-none focus:border-destructive/50"
+                  aria-label={`${gesture.label} left-swipe action`}
                   value={swipeSettings[gesture.key]}
                   onchange={(event) => updateSwipeSetting(gesture.key as any, (event.currentTarget as HTMLSelectElement).value)}
                 >
@@ -269,7 +275,7 @@
     </div>
   </section>
 
-  <section class="rounded-lg border border-white/10 bg-white/[0.03] p-5">
+  <section class="surface-section rounded-lg p-5" in:fly={{ y: 8, duration: 180, delay: 105 }}>
     <h3 class="font-medium">Folder Role Mapping</h3>
     <p class="mt-1 text-sm text-zinc-400">
       Override provider folder roles used by archive, spam, trash, sent, and draft actions.
@@ -287,6 +293,7 @@
                   <span class="min-w-0 truncate text-zinc-300">{folder.path}</span>
                   <select
                     class="rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-primary/50"
+                    aria-label={`Folder role for ${folder.path}`}
                     value={folder.role || ''}
                     onchange={(event) =>
                       saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value)}

@@ -36,6 +36,8 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/Card.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
+  import Switch from '$lib/components/ui/Switch.svelte';
+  import WorkflowManager from '$lib/components/WorkflowManager.svelte';
 
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
@@ -88,6 +90,10 @@
   let webhookTarget = $state('');
   let status = $state('');
   let taskNote = $state('');
+  let agentLoopPrompt = $state('');
+  let agentLoopResult = $state<any>(null);
+  let agentLoopBusy = $state(false);
+  let taskAudits = $state<Record<number, Array<any>>>({});
   let memoryAssistantPrompt = $state('');
   const coreAiProfileKeys = ['primary', 'fallback', 'advanced'] as const;
   const settingsCategories = [
@@ -244,6 +250,9 @@
     argsCsv: '',
     headersJson: '',
     envJson: '',
+    inputSchemaJson: '',
+    allowedHostsCsv: '',
+    maxInputBytes: 200000,
     readOnly: false,
     requireApprovalForWrite: true
   });
@@ -286,7 +295,12 @@
     maxMessagesPerRun: 25,
     maxAutoActionsPerRun: 5,
     followUpDays: 2,
-    autoApproveReadOnlyToolCalls: true
+    autoApproveReadOnlyToolCalls: true,
+    maxAgentTurns: 8,
+    maxRunDurationMs: 180000,
+    defaultMaxAttempts: 3,
+    notificationEnabled: true,
+    timezone: 'UTC'
   });
   const googleOauthDefaultScopes = ['openid', 'email', 'profile', 'https://mail.google.com/'];
   let googleOauthSettings = $state({
@@ -541,6 +555,11 @@
         if (autopilotPolicy.maxAutoActionsPerRun !== (p.maxAutoActionsPerRun || 5)) autopilotPolicy.maxAutoActionsPerRun = p.maxAutoActionsPerRun || 5;
         if (autopilotPolicy.followUpDays !== (p.followUpDays || 2)) autopilotPolicy.followUpDays = p.followUpDays || 2;
         if (autopilotPolicy.autoApproveReadOnlyToolCalls !== Boolean(p.autoApproveReadOnlyToolCalls)) autopilotPolicy.autoApproveReadOnlyToolCalls = Boolean(p.autoApproveReadOnlyToolCalls);
+        if (autopilotPolicy.maxAgentTurns !== (p.maxAgentTurns || 8)) autopilotPolicy.maxAgentTurns = p.maxAgentTurns || 8;
+        if (autopilotPolicy.maxRunDurationMs !== (p.maxRunDurationMs || 180000)) autopilotPolicy.maxRunDurationMs = p.maxRunDurationMs || 180000;
+        if (autopilotPolicy.defaultMaxAttempts !== (p.defaultMaxAttempts || 3)) autopilotPolicy.defaultMaxAttempts = p.defaultMaxAttempts || 3;
+        if (autopilotPolicy.notificationEnabled !== Boolean(p.notificationEnabled)) autopilotPolicy.notificationEnabled = Boolean(p.notificationEnabled);
+        if (autopilotPolicy.timezone !== (p.timezone || 'UTC')) autopilotPolicy.timezone = p.timezone || 'UTC';
       });
     }
   });
@@ -632,7 +651,9 @@
     if (data.selected?.message?.id) {
       messageDetailCache = { ...messageDetailCache, [data.selected.message.id]: data.selected };
     }
-    const media = window.matchMedia('(max-width: 767px)');
+    // Keep tablets in the focused mobile shell until there is enough room for
+    // the rail, mailbox list, and message detail to remain readable side by side.
+    const media = window.matchMedia('(max-width: 1023px)');
     const applyViewport = () => {
       isMobileViewport = media.matches;
       if (!media.matches) mobileSettingsDetailOpen = false;
@@ -1961,6 +1982,88 @@
     await invalidateAll();
   }
 
+  async function cancelTask(taskId: number) {
+    await api(`/api/tasks/${taskId}/cancel`, { method: 'POST', body: '{}' });
+    status = 'Workflow cancellation requested';
+    await invalidateAll();
+  }
+
+  async function resumeTask(taskId: number) {
+    await api(`/api/tasks/${taskId}/resume`, { method: 'POST', body: '{}' });
+    status = 'Workflow resumed';
+    await invalidateAll();
+  }
+
+  async function retryTaskStep(taskId: number, stepId: number) {
+    await api(`/api/tasks/${taskId}/retry/${stepId}`, { method: 'POST', body: '{}' });
+    status = 'Step queued for retry';
+    await invalidateAll();
+  }
+
+  async function editTaskStep(
+    taskId: number,
+    stepId: number,
+    input: { title?: string; details?: string }
+  ) {
+    await api(`/api/tasks/${taskId}/steps/${stepId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input)
+    });
+    status = 'Workflow step updated';
+    await invalidateAll();
+  }
+
+  async function loadTaskAudit(taskId: number) {
+    if (taskAudits[taskId]) return;
+    try {
+      const result = await api(`/api/tasks/${taskId}/audit`);
+      taskAudits = { ...taskAudits, [taskId]: result.events || [] };
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Unable to load workflow audit';
+    }
+  }
+
+  async function runAgentLoop(prompt: string) {
+    if (!data.selected?.message || !prompt.trim() || agentLoopBusy) return;
+    agentLoopBusy = true;
+    agentLoopResult = null;
+    try {
+      agentLoopResult = await api('/api/agent/loop', {
+        method: 'POST',
+        body: JSON.stringify({ messageId: data.selected.message.id, prompt: prompt.trim() })
+      });
+      status = agentLoopResult.status === 'needs_approval' ? 'Agent paused for approval' : 'Agent loop complete';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Agent loop failed';
+    } finally {
+      agentLoopBusy = false;
+    }
+  }
+
+  async function resumeAgentLoop(sessionId: number, approvedToolNames: string[]) {
+    agentLoopBusy = true;
+    try {
+      agentLoopResult = await api('/api/agent/loop', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, approvedToolNames })
+      });
+      status = agentLoopResult.status === 'needs_approval' ? 'Agent paused for approval' : 'Agent loop complete';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Agent resume failed';
+    } finally {
+      agentLoopBusy = false;
+    }
+  }
+
+  async function cancelAgentLoop(sessionId: number) {
+    try {
+      agentLoopResult = await api(`/api/agent/loop?sessionId=${sessionId}`, { method: 'DELETE' });
+      status = 'Agent loop cancelled';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Agent cancellation failed';
+    }
+  }
+
   async function selectFolder(accountId: number, folderPath: string) {
     mobileMenuOpen = false;
     showShortcutHelp = false;
@@ -2258,6 +2361,12 @@
         args,
         authHeaders: headers,
         env: envMap,
+        inputSchema: parseJsonMap(agentToolForm.inputSchemaJson),
+        allowedHosts: agentToolForm.allowedHostsCsv
+          .split(',')
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean),
+        maxInputBytes: Number(agentToolForm.maxInputBytes) || 200000,
         readOnly: agentToolForm.readOnly,
         requireApprovalForWrite: agentToolForm.requireApprovalForWrite
       })
@@ -2271,6 +2380,9 @@
       argsCsv: '',
       headersJson: '',
       envJson: '',
+      inputSchemaJson: '',
+      allowedHostsCsv: '',
+      maxInputBytes: 200000,
       readOnly: false,
       requireApprovalForWrite: true
     };
@@ -2923,9 +3035,9 @@
           ? settingsCategories.find((category) => category.key === settingsCategory)?.label ||
             'Settings'
           : 'Settings'
-        : data.query?.messageId
-          ? data.selected?.message?.subject || 'Dear Robot'
-          : 'Dear Robot'
+      : data.selected?.message?.id || data.query?.messageId
+        ? data.selected?.message?.subject || 'Message'
+        : 'Inbox'
   );
 </script>
 
@@ -2934,7 +3046,7 @@
 </svelte:head>
 
 <main
-  class="relative z-10 grid h-screen grid-cols-1 overflow-hidden pt-14 text-foreground md:grid-cols-[60px_minmax(300px,380px)_1fr] md:pt-0"
+  class="relative z-10 grid h-[100dvh] min-h-0 grid-cols-1 overflow-hidden pt-14 text-foreground lg:grid-cols-[60px_minmax(300px,380px)_1fr] lg:pt-0"
 >
   {#if isLoading}
     <div class="fixed left-0 right-0 top-0 z-50 h-0.5 bg-primary/20" transition:fade>
@@ -2944,13 +3056,13 @@
 
   {#if mobileMenuOpen}
     <button
-      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+      class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
       aria-label="Close navigation"
       onclick={() => (mobileMenuOpen = false)}
       transition:fade={{ duration: 150 }}
     ></button>
     <aside
-      class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-border bg-background md:hidden"
+      class="fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-border bg-background lg:hidden"
       in:fly={{ x: -24, duration: 200 }}
     >
       <div class="flex items-center justify-between border-b border-border/60 px-4 py-3">
@@ -2963,7 +3075,9 @@
           <p class="text-sm font-semibold text-foreground">Dear Robot</p>
         </div>
         <button
-          class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          class="touch-target rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close navigation"
+          title="Close navigation"
           onclick={() => (mobileMenuOpen = false)}
         >
           <X size={16} />
@@ -2971,21 +3085,21 @@
       </div>
       <div class="space-y-1 p-3">
         <button
-          class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+          class={`touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => setQuickView('inbox')}
         >
           <Inbox size={18} />
           <span>Inbox</span>
         </button>
         <button
-          class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+          class={`touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => openOperations('autopilot')}
         >
           <Bot size={18} />
           <span>AI Operations</span>
         </button>
         <button
-          class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+          class={`touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => openSettings('accounts')}
         >
           <Settings size={18} />
@@ -2995,7 +3109,7 @@
       <div class="flex-1"></div>
       <div class="border-t border-border/60 p-3">
         <button
-          class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200"
+          class="touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-all duration-200"
           onclick={() => openCompose('compose')}
         >
           <PenLine size={18} />
@@ -3007,19 +3121,19 @@
 
   <!-- Mobile Header -->
   <header
-    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/80 backdrop-cinematic px-3 md:hidden"
+    class="fixed left-0 right-0 top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/80 backdrop-cinematic px-3 lg:hidden"
   >
     <div class="flex items-center gap-1">
       <button
-        class="rounded-lg p-2 text-foreground hover:bg-muted transition-colors"
+        class="touch-target rounded-lg p-2 text-foreground transition-colors hover:bg-muted"
         aria-label="Open navigation"
         onclick={() => (mobileMenuOpen = true)}
       >
         <Menu size={20} />
       </button>
-      {#if view === 'settings' || view === 'operations' || data.query?.messageId}
+      {#if view === 'settings' || view === 'operations' || data.selected?.message?.id || data.query?.messageId}
         <button
-          class="rounded-lg p-2 text-foreground hover:bg-muted transition-colors"
+          class="touch-target rounded-lg p-2 text-foreground transition-colors hover:bg-muted"
           aria-label="Back"
           onclick={mobileBack}
         >
@@ -3031,7 +3145,7 @@
       <p class="truncate text-sm font-semibold text-foreground">{mobileHeaderTitle}</p>
     </div>
     <button
-      class="rounded-lg p-2 text-primary hover:bg-primary/10 transition-colors"
+      class="touch-target rounded-lg p-2 text-primary transition-colors hover:bg-primary/10"
       aria-label="Compose"
       title="Compose"
       onclick={() => openCompose('compose')}
@@ -3042,7 +3156,7 @@
 
   <!-- Desktop Icon Rail -->
   <nav
-    class="z-10 hidden h-full flex-col items-center gap-1 overflow-y-auto border-r border-border/60 bg-background/80 backdrop-cinematic px-2 pt-4 scrollbar-none md:flex"
+    class="z-10 hidden h-full flex-col items-center gap-1 overflow-y-auto border-r border-border/60 bg-background/80 backdrop-cinematic px-2 pt-4 scrollbar-none lg:flex"
   >
     <div
       class="mb-6 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"
@@ -3051,21 +3165,21 @@
     </div>
     <div class="flex flex-col gap-1">
       <button
-        class={`rounded-xl p-3 transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        class={`touch-target rounded-xl p-3 transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         title="Inbox"
         onclick={() => setQuickView('inbox')}
       >
         <Inbox size={20} />
       </button>
       <button
-        class={`rounded-xl p-3 transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        class={`touch-target rounded-xl p-3 transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         title="Operations"
         onclick={() => openOperations('autopilot')}
       >
         <Bot size={20} />
       </button>
       <button
-        class={`rounded-xl p-3 transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        class={`touch-target rounded-xl p-3 transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         title="Settings"
         onclick={() => openSettings()}
       >
@@ -3084,7 +3198,7 @@
   </nav>
 
   <section
-    class={`h-full overflow-hidden border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 md:pb-0 ${view === 'settings' || view === 'operations' ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}
+    class={`h-full overflow-hidden border-r border-border/60 bg-background/80 backdrop-cinematic pb-20 lg:pb-0 ${view === 'settings' || view === 'operations' ? 'hidden lg:flex lg:flex-col' : 'flex flex-col'}`}
   >
     <div class="flex-none border-b border-border/60 pt-2">
       {#if onboardingTitle && onboardingBody}
@@ -3120,6 +3234,8 @@
         <div
           class="m-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5"
           transition:slide={{ duration: 200 }}
+          role="status"
+          aria-live="polite"
         >
           <div class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></div>
           <p class="text-xs font-medium text-primary">{status}</p>
@@ -3191,11 +3307,11 @@
         <div class="space-y-4 p-3" in:fade={{ duration: 150 }}>
           <div class="flex rounded-lg border border-border/60 bg-muted/30 p-1">
             <button
-              class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              class={`touch-target flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
               onclick={() => openOperations('autopilot')}>Autopilot</button
             >
             <button
-              class={`flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              class={`touch-target flex-1 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
               onclick={() => openOperations('executed')}>Executed</button
             >
           </div>
@@ -3235,7 +3351,8 @@
           </h2>
           {#each settingsCategories as category (category.key)}
             <button
-              class={`w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${settingsCategory === category.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              class={`touch-target w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${settingsCategory === category.key ? 'bg-primary/10 text-primary shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              aria-current={settingsCategory === category.key ? 'page' : undefined}
               onclick={() => openSettingsCategory(category.key)}
             >
               <p class="text-sm font-medium">{category.label}</p>
@@ -3249,7 +3366,7 @@
 
   {#if isInboxView(view)}
     <section
-      class="hidden flex-1 min-w-0 bg-background/60 backdrop-cinematic md:block"
+      class="hidden flex-1 min-w-0 bg-background/60 backdrop-cinematic lg:block"
     >
       <MessageDetail
         selected={data.selected ? { ...data.selected, tasks: data.tasks } : null}
@@ -3280,24 +3397,35 @@
         {approveTask}
         {rejectTask}
         {executeTask}
+        {cancelTask}
+        {resumeTask}
+        {retryTaskStep}
+        {editTaskStep}
+        {runAgentLoop}
+        {resumeAgentLoop}
+        {cancelAgentLoop}
+        bind:agentLoopPrompt
+        {agentLoopResult}
+        {agentLoopBusy}
       />
     </section>
   {/if}
 
   {#if view === 'operations'}
-    <section class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0">
+    <section class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 lg:pb-0">
       <div class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         <div class="mb-6 flex rounded-lg border border-border/60 bg-muted/30 p-1">
           <button
-            class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            class={`touch-target flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'autopilot' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             onclick={() => openOperations('autopilot')}>Autopilot</button
           >
           <button
-            class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            class={`touch-target flex-1 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 ${operationsCategory === 'executed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             onclick={() => openOperations('executed')}>Executed</button
           >
         </div>
         {#if operationsCategory === 'autopilot'}
+          <div class="space-y-6" in:fly={{ y: 10, duration: 200 }}>
           <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p class="text-xs font-medium text-primary">AI Operations</p>
@@ -3310,11 +3438,11 @@
             <Button variant="default" onclick={runAutopilot}>Run Autopilot</Button>
           </div>
 
-          <section class="mt-6 grid gap-3 md:grid-cols-4">
+          <section class="mt-6 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
             {#each [{ value: data.autopilot?.stats?.proposed || 0, label: 'Awaiting review' }, { value: data.autopilot?.stats?.approved || 0, label: 'Approved' }, { value: data.autopilot?.stats?.openFollowUps || 0, label: 'Open follow-ups' }, { value: `${data.autopilot?.stats?.avgLatencyMs || 0}ms`, label: 'AI latency' }] as stat, i (i)}
-              <Card class="p-4">
-                <p class="text-2xl font-semibold text-foreground">{stat.value}</p>
-                <p class="mt-1 text-xs text-muted-foreground">{stat.label}</p>
+              <Card class="p-3 md:p-4">
+                <p class="text-xl font-semibold tabular-nums text-foreground md:text-2xl">{stat.value}</p>
+                <p class="mt-1 text-[11px] leading-tight text-muted-foreground md:text-xs">{stat.label}</p>
               </Card>
             {/each}
           </section>
@@ -3367,38 +3495,18 @@
                 >
               </div>
               <div class="mt-4 grid gap-3 md:grid-cols-2">
-                <label
-                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
-                >
-                  <span>Autopilot enabled</span><input
-                    type="checkbox"
-                    bind:checked={autopilotPolicy.autopilotEnabled}
-                  />
-                </label>
-                <label
-                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
-                >
-                  <span>Dry-run only</span><input
-                    type="checkbox"
-                    bind:checked={autopilotPolicy.dryRunOnly}
-                  />
-                </label>
-                <label
-                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
-                >
-                  <span>Auto-file low-risk mail</span><input
-                    type="checkbox"
-                    bind:checked={autopilotPolicy.allowAutoFileLowRisk}
-                  />
-                </label>
-                <label
-                  class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
-                >
-                  <span>Auto-handle low-risk no-action</span><input
-                    type="checkbox"
-                    bind:checked={autopilotPolicy.allowAutoNoActionLowRisk}
-                  />
-                </label>
+                <div class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <Switch bind:checked={autopilotPolicy.autopilotEnabled} label="Autopilot enabled" />
+                </div>
+                <div class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <Switch bind:checked={autopilotPolicy.dryRunOnly} label="Dry-run only" />
+                </div>
+                <div class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <Switch bind:checked={autopilotPolicy.allowAutoFileLowRisk} label="Auto-file low-risk mail" />
+                </div>
+                <div class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <Switch bind:checked={autopilotPolicy.allowAutoNoActionLowRisk} label="Auto-handle low-risk no-action" />
+                </div>
                 <label
                   class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground"
                 >
@@ -3421,9 +3529,82 @@
                     bind:value={autopilotPolicy.maxAutoActionsPerRun}
                   />
                 </label>
+                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Agent turns per loop</span><input
+                    class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring"
+                    type="number" min="1" max="24" bind:value={autopilotPolicy.maxAgentTurns}
+                  />
+                </label>
+                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Max workflow milliseconds</span><input
+                    class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring"
+                    type="number" min="1000" max="900000" bind:value={autopilotPolicy.maxRunDurationMs}
+                  />
+                </label>
+                <label class="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <span>Default step attempts</span><input
+                    class="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:ring-1 focus:ring-ring"
+                    type="number" min="1" max="8" bind:value={autopilotPolicy.defaultMaxAttempts}
+                  />
+                </label>
+                <div class="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground">
+                  <Switch bind:checked={autopilotPolicy.notificationEnabled} label="Workflow notifications" />
+                </div>
               </div>
             </Card>
           </section>
+
+          <section class="mt-6">
+            <Card class="p-5">
+              <WorkflowManager
+                workflows={data.workflows || []}
+                csrfToken={data.csrfToken}
+                messageId={null}
+                onChanged={invalidateAll}
+                onStatus={(value: string) => (status = value)}
+              />
+            </Card>
+          </section>
+
+          <section class="mt-6">
+            <Card class="p-5">
+              <div class="flex items-center justify-between gap-3"><div><h3 class="font-medium text-foreground">Workflow history</h3><p class="mt-1 text-sm text-muted-foreground">Every plan, approval, retry, and outcome stays inspectable.</p></div><span class="text-xs text-muted-foreground">{data.workflowRuns?.length || 0} recent</span></div>
+              <div class="mt-4 space-y-2">
+                {#each data.workflowRuns || [] as run (run.id)}
+                  <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background/50 p-3">
+                    <div class="min-w-0"><p class="truncate text-sm font-medium text-foreground">{run.summary}</p><p class="mt-1 text-xs text-muted-foreground">{run.subject || 'Message workflow'} · {run.triggerType || 'manual'} · {new Date(run.createdAt).toLocaleString()}</p></div>
+                    <div class="flex items-center gap-2">
+                    <span class={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-wider ${run.status === 'completed' ? 'border-primary/40 text-primary' : run.status === 'failed' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground'}`}>{run.status}</span>
+                    <Button variant="ghost" size="sm" onclick={() => loadTaskAudit(run.id)}>Audit</Button>
+                    {#if run.status === 'failed'}<Button variant="outline" size="sm" onclick={() => resumeTask(run.id)}>Resume</Button>{/if}
+                    {#if ['planned', 'needs_approval', 'running'].includes(run.status)}<Button variant="ghost" size="sm" onclick={() => cancelTask(run.id)}>Cancel</Button>{/if}
+                    </div>
+                  </div>
+                  {#if taskAudits[run.id]}
+                    <div class="ml-3 border-l border-primary/20 pl-3" in:slide={{ duration: 150 }}>
+                      {#each taskAudits[run.id].slice(-8) as event (event.id)}
+                        <div class="flex gap-2 py-1 text-[11px]">
+                          <span class="shrink-0 font-medium text-primary">{event.eventType}</span>
+                          <span class="text-muted-foreground">{event.actor} · {new Date(event.createdAt).toLocaleTimeString()}</span>
+                        </div>
+                      {:else}
+                        <p class="py-1 text-[11px] text-muted-foreground">No audit events recorded.</p>
+                      {/each}
+                    </div>
+                  {/if}
+                {:else}<p class="text-sm text-muted-foreground">No workflow runs yet.</p>{/each}
+              </div>
+            </Card>
+          </section>
+
+          {#if data.notifications?.length}
+            <section class="mt-6">
+              <Card class="p-5">
+                <div class="flex items-center justify-between gap-3"><div><h3 class="font-medium text-foreground">Notifications</h3><p class="mt-1 text-sm text-muted-foreground">Approvals, retries, and failures that need your attention.</p></div><Button variant="outline" size="sm" onclick={() => api('/api/agent/notifications', { method: 'POST', body: JSON.stringify({ ids: data.notifications.map((item: { id: number }) => item.id) }) }).then(invalidateAll)}>Mark read</Button></div>
+                <div class="mt-4 space-y-2">{#each data.notifications as notification (notification.id)}<div class="rounded-md border border-border bg-background/50 p-3"><p class="text-sm font-medium text-foreground">{notification.title}</p><p class="mt-1 text-xs text-muted-foreground">{notification.body}</p></div>{/each}</div>
+              </Card>
+            </section>
+          {/if}
 
           <section class="mt-6 grid gap-4 xl:grid-cols-2">
             <Card class="p-5">
@@ -3490,7 +3671,9 @@
               </div>
             </Card>
           </section>
+          </div>
         {:else if operationsCategory === 'executed'}
+          <div in:fly={{ y: 10, duration: 200 }}>
           <h2 class="text-2xl font-semibold text-foreground">Executed Actions</h2>
           <div class="mt-6 space-y-3">
             {#each data.executed as action (action.id)}
@@ -3508,188 +3691,235 @@
               </p>
             {/each}
           </div>
+          </div>
         {/if}
       </div>
     </section>
   {:else if view === 'settings'}
-    <section class="min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 md:pb-0">
+    <section class="settings-content min-w-0 overflow-y-auto bg-background/60 backdrop-cinematic pb-24 lg:pb-0">
       <div class="mx-auto max-w-5xl p-4 md:p-8" in:fade={{ duration: 150 }}>
         {#if isMobileViewport && !mobileSettingsDetailOpen}
-          <h2 class="text-2xl font-semibold text-foreground">Settings</h2>
-          <p class="mt-2 text-muted-foreground">Choose what you want to configure.</p>
-          {#await import('$lib/components/settings/SettingsCategoryList.svelte') then module}
+          <div in:fly={{ y: 8, duration: 180 }}>
+            <h2 class="text-2xl font-semibold text-foreground">Settings</h2>
+            <p class="mt-2 text-muted-foreground">Choose what you want to configure.</p>
+          </div>
+          {#await import('$lib/components/settings/SettingsCategoryList.svelte')}
+            <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+              Loading settings…
+            </div>
+          {:then module}
             {@const SettingsCategoryList = module.default}
-            <SettingsCategoryList
-              categories={settingsCategories as unknown as Array<{
-                key: string;
-                label: string;
-                detail: string;
-              }>}
-              selected={settingsCategory}
-              onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
-            />
+            <div in:fly={{ y: 12, duration: 220, delay: 40 }}>
+              <SettingsCategoryList
+                categories={settingsCategories as unknown as Array<{
+                  key: string;
+                  label: string;
+                  detail: string;
+                }>}
+                selected={settingsCategory}
+                onSelect={(category) => openSettingsCategory(category as SettingsCategory)}
+              />
+            </div>
           {/await}
         {:else}
-          <h2 class="text-2xl font-semibold text-foreground">Configuration</h2>
-          {#if settingsCategory === 'accounts'}
-            {#await import('$lib/components/settings/SettingsAccounts.svelte') then module}
-              {@const SettingsAccounts = module.default}
-              <SettingsAccounts
-                {data}
-                bind:accountForm
-                bind:googleOauthSettings
-                {googleOauthHasSecret}
-                {googleOauthConnectedEmail}
-                {copyToClipboard}
-                {folderRoleOptions}
-                {saveFolderRole}
-                {accountAction}
-                {saveExistingAccount}
-                {addAccount}
-                {testNewAccount}
-                {discoverAccountSettings}
-                {saveGoogleOauthSettings}
-                {startGoogleConnect}
-                {accountAddState}
-                {accountAddError}
-                {accountTestState}
-                {accountTestError}
-                {accountDiscoverState}
-                {accountDiscoverError}
-                />
-            {/await}
-          {/if}
-          {#if settingsCategory === 'memory'}
-            {#await import('$lib/components/settings/SettingsMemory.svelte') then module}
-              {@const SettingsMemory = module.default}
-              <SettingsMemory
-                {data}
-                bind:memoryAssistantPrompt
-                bind:coreProfileText
-                bind:memoryAdvancedMode
-                bind:memoryText
-                bind:skillsText
-                dictationTargetId={dictationTarget?.id || null}
-                {dictationActive}
-                {dictationUnavailable}
-                {dictationLevel}
-                {toggleDictation}
-                {applyMemoryAssistant}
-                {saveCoreProfile}
-                {saveSkills}
-                {resetSkills}
-                {setAdvancedMemoryMode}
-                {saveMemory}
-                {resetMemory}
-                {removeMemoryRule}
-              />
-            {/await}
-          {/if}
-          {#if settingsCategory === 'models'}
-            {#await import('$lib/components/settings/SettingsModels.svelte') then module}
-              {@const SettingsModels = module.default}
-              <SettingsModels
-                {data}
-                {coreAiProfileKeys}
-                bind:aiProfileForms
-                bind:profileMode
-                bind:profileEnvValues
-                {aiProfileRecommendations}
-                {modelsDevProviders}
-                {loadModelsDevCatalog}
-                {selectCatalogProviderForProfile}
-                {selectedCatalogModels}
-                {selectedCatalogProvider}
-                {requiredEnvVars}
-                {setProfileMode}
-                {testAiProfile}
-                {saveAiProfile}
-                {modelsDevLoading}
-                bind:audioProviderId
-                bind:audioModelId
-                bind:audioApiKey
-                {audioProvider}
-                {audioModels}
-                {selectAudioProvider}
-                {saveAudioDictationProfile}
-                {startOpenAiLogin}
-                {getOpenAiLoginStatus}
-              />
-            {/await}
-          {/if}
-          {#if settingsCategory === 'tools'}
-            {#await import('$lib/components/settings/SettingsTools.svelte') then module}
-              {@const SettingsTools = module.default}
-              <SettingsTools
-                {data}
-                {copyToClipboard}
-                {testAgentTool}
-                {toggleAgentTool}
-                {removeAgentTool}
-                {addAgentTool}
-                {saveToolSkills}
-                {saveToolConfig}
-                bind:obsidianSettings
-                {saveObsidianSettings}
-                {installCliPackage}
-                {addWebhook}
-                bind:agentToolForm
-                bind:cliInstallForm
-                bind:webhookTarget
-              />
-            {/await}
-          {/if}
-          {#if settingsCategory === 'interface'}
-            {#await import('$lib/components/settings/SettingsInterface.svelte') then module}
-              {@const SettingsInterface = module.default}
-              <SettingsInterface
-                {quickActionCatalog}
-                {quickActionIds}
-                {resetInterfacePreferences}
-                {setQuickActionEnabled}
-                {moveQuickAction}
-                {swipeSettings}
-                {swipeActionCatalog}
-                {updateSwipeSetting}
-                folderGroups={folderGroups()}
-                {saveFolderRole}
-                {folderRoleOptions}
-              />
-            {/await}
-          {/if}
-          {#if settingsCategory === 'advanced'}
-            {#await import('$lib/components/settings/SettingsAdvanced.svelte') then module}
-              {@const SettingsAdvanced = module.default}
-              <SettingsAdvanced
-                bind:cachePassphrase
-                {cacheEncrypted}
-                {saveCacheEncryption}
-                {backups}
-                {backupPolicy}
-                {createBackupNow}
-                {refreshBackups}
-                {restoreBackupNow}
-                {auditSnapshot}
-                {loadAuditSnapshot}
-                bind:contactsImportCsv
-                {exportContacts}
-                {importContacts}
-                dictationTargetId={dictationTarget?.id || null}
-                {dictationActive}
-                {dictationUnavailable}
-                {dictationLevel}
-                {toggleDictation}
-              />
-            {/await}
-          {/if}
+          <div in:fly={{ y: 10, duration: 200 }}>
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-[0.18em] text-primary">Settings</p>
+                <h2 class="mt-1 text-2xl font-semibold text-foreground">Configuration</h2>
+              </div>
+              {#if isMobileViewport}
+                <Button variant="outline" size="sm" class="touch-target shrink-0" onclick={() => (mobileSettingsDetailOpen = false)}>
+                  All settings
+                </Button>
+              {/if}
+            </div>
+            <div class="mt-4" in:fade={{ duration: 160 }}>
+              {#if settingsCategory === 'accounts'}
+                {#await import('$lib/components/settings/SettingsAccounts.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading accounts…
+                  </div>
+                {:then module}
+                  {@const SettingsAccounts = module.default}
+                  <SettingsAccounts
+                    {data}
+                    bind:accountForm
+                    bind:googleOauthSettings
+                    {googleOauthHasSecret}
+                    {googleOauthConnectedEmail}
+                    {copyToClipboard}
+                    {folderRoleOptions}
+                    {saveFolderRole}
+                    {accountAction}
+                    {saveExistingAccount}
+                    {addAccount}
+                    {testNewAccount}
+                    {discoverAccountSettings}
+                    {saveGoogleOauthSettings}
+                    {startGoogleConnect}
+                    {accountAddState}
+                    {accountAddError}
+                    {accountTestState}
+                    {accountTestError}
+                    {accountDiscoverState}
+                    {accountDiscoverError}
+                    />
+                {/await}
+              {/if}
+              {#if settingsCategory === 'memory'}
+                {#await import('$lib/components/settings/SettingsMemory.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading memory settings…
+                  </div>
+                {:then module}
+                  {@const SettingsMemory = module.default}
+                  <SettingsMemory
+                    {data}
+                    bind:memoryAssistantPrompt
+                    bind:coreProfileText
+                    bind:memoryAdvancedMode
+                    bind:memoryText
+                    bind:skillsText
+                    dictationTargetId={dictationTarget?.id || null}
+                    {dictationActive}
+                    {dictationUnavailable}
+                    {dictationLevel}
+                    {toggleDictation}
+                    {applyMemoryAssistant}
+                    {saveCoreProfile}
+                    {saveSkills}
+                    {resetSkills}
+                    {setAdvancedMemoryMode}
+                    {saveMemory}
+                    {resetMemory}
+                    {removeMemoryRule}
+                  />
+                {/await}
+              {/if}
+              {#if settingsCategory === 'models'}
+                {#await import('$lib/components/settings/SettingsModels.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading model settings…
+                  </div>
+                {:then module}
+                  {@const SettingsModels = module.default}
+                  <SettingsModels
+                    {data}
+                    {coreAiProfileKeys}
+                    bind:aiProfileForms
+                    bind:profileMode
+                    bind:profileEnvValues
+                    {aiProfileRecommendations}
+                    {modelsDevProviders}
+                    {loadModelsDevCatalog}
+                    {selectCatalogProviderForProfile}
+                    {selectedCatalogModels}
+                    {selectedCatalogProvider}
+                    {requiredEnvVars}
+                    {setProfileMode}
+                    {testAiProfile}
+                    {saveAiProfile}
+                    {modelsDevLoading}
+                    bind:audioProviderId
+                    bind:audioModelId
+                    bind:audioApiKey
+                    {audioProvider}
+                    {audioModels}
+                    {selectAudioProvider}
+                    {saveAudioDictationProfile}
+                    {startOpenAiLogin}
+                    {getOpenAiLoginStatus}
+                  />
+                {/await}
+              {/if}
+              {#if settingsCategory === 'tools'}
+                {#await import('$lib/components/settings/SettingsTools.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading agent tools…
+                  </div>
+                {:then module}
+                  {@const SettingsTools = module.default}
+                  <SettingsTools
+                    {data}
+                    {copyToClipboard}
+                    {testAgentTool}
+                    {toggleAgentTool}
+                    {removeAgentTool}
+                    {addAgentTool}
+                    {saveToolSkills}
+                    {saveToolConfig}
+                    bind:obsidianSettings
+                    {saveObsidianSettings}
+                    {installCliPackage}
+                    {addWebhook}
+                    bind:agentToolForm
+                    bind:cliInstallForm
+                    bind:webhookTarget
+                  />
+                {/await}
+              {/if}
+              {#if settingsCategory === 'interface'}
+                {#await import('$lib/components/settings/SettingsInterface.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading interface settings…
+                  </div>
+                {:then module}
+                  {@const SettingsInterface = module.default}
+                  <SettingsInterface
+                    {quickActionCatalog}
+                    {quickActionIds}
+                    {resetInterfacePreferences}
+                    {setQuickActionEnabled}
+                    {moveQuickAction}
+                    {swipeSettings}
+                    {swipeActionCatalog}
+                    {updateSwipeSetting}
+                    folderGroups={folderGroups()}
+                    {saveFolderRole}
+                    {folderRoleOptions}
+                  />
+                {/await}
+              {/if}
+              {#if settingsCategory === 'advanced'}
+                {#await import('$lib/components/settings/SettingsAdvanced.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading advanced settings…
+                  </div>
+                {:then module}
+                  {@const SettingsAdvanced = module.default}
+                  <SettingsAdvanced
+                    bind:cachePassphrase
+                    {cacheEncrypted}
+                    {saveCacheEncryption}
+                    {backups}
+                    {backupPolicy}
+                    {createBackupNow}
+                    {refreshBackups}
+                    {restoreBackupNow}
+                    {auditSnapshot}
+                    {loadAuditSnapshot}
+                    bind:contactsImportCsv
+                    {exportContacts}
+                    {importContacts}
+                    dictationTargetId={dictationTarget?.id || null}
+                    {dictationActive}
+                    {dictationUnavailable}
+                    {dictationLevel}
+                    {toggleDictation}
+                  />
+                {/await}
+              {/if}
+            </div>
+          </div>
         {/if}
       </div>
     </section>
   {/if}
 
-  {#if data.query?.messageId && !['settings', 'operations'].includes(view)}
+  {#if isMobileViewport && isInboxView(view) && data.selected?.message?.id}
     <MobileQuickActions
-      selectedMessage={(data.selected?.message || data.messages.find((m: any) => m.id === data.query?.messageId)) || null}
+      selectedMessage={data.selected?.message || null}
       visibleActionIds={visibleMobileQuickActions()}
       overflowActionIds={overflowMobileQuickActions()}
       {quickActionButtonClass}

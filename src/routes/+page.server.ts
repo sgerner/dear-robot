@@ -11,7 +11,7 @@ import { readAgentInstructions } from '$lib/server/memory';
 import { db } from '$lib/server/db';
 import { executedActions } from '$lib/server/db/schema';
 import { desc } from 'drizzle-orm';
-import { listTaskRunDetailsForMessage } from '$lib/server/agent/tasks';
+import { listTaskRunDetailsForMessage, listTaskRuns } from '$lib/server/agent/tasks';
 import { listAgentTools } from '$lib/server/agent/tools';
 import { listAiProfiles } from '$lib/server/ai/settings';
 import { getMemoryOverview, memoryOnboardingState } from '$lib/server/memory-learning';
@@ -23,6 +23,8 @@ import { env } from '$lib/server/env';
 import { speechToTextProviders } from '$lib/speech/providers';
 import { getAudioDictationSettings } from '$lib/server/ai/settings';
 import { getObsidianSettings } from '$lib/server/obsidian';
+import { listAutomationWorkflows } from '$lib/server/agent/workflows';
+import { listAgentNotifications } from '$lib/server/agent/runtime';
 
 export function load({ url, depends }) {
   const useDepends = typeof depends === 'function' ? depends : () => {};
@@ -123,6 +125,9 @@ export function load({ url, depends }) {
         : 'Authorization: Bearer <MCP_AUTH_TOKEN>'
     },
     autopilot: isOperationsView ? listAutopilotDashboard() : null,
+    workflows: isOperationsView ? listAutomationWorkflows() : [],
+    workflowRuns: isOperationsView ? listTaskRuns(undefined, 40) : [],
+    notifications: listAgentNotifications({ unreadOnly: true, limit: 20 }),
     briefing: isOperationsView ? buildDailyBriefing() : null,
     memoryOnboarding: isSettingsView ? memoryOnboardingState() : null,
     executed: isOperationsView

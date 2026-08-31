@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Copy } from 'lucide-svelte';
+  import { Copy, Eye, EyeOff } from 'lucide-svelte';
+  import { fade } from 'svelte/transition';
   import Switch from '$lib/components/ui/Switch.svelte';
 
   let {
@@ -52,6 +53,9 @@
       argsCsv: string;
       headersJson: string;
       envJson: string;
+      inputSchemaJson: string;
+      allowedHostsCsv: string;
+      maxInputBytes: number;
       readOnly: boolean;
       requireApprovalForWrite: boolean;
     };
@@ -65,6 +69,20 @@
 
   let toolSkillsDrafts = $state<Record<number, string>>({});
   let toolConfigDrafts = $state<Record<number, { envJson: string; headersJson: string }>>({});
+  let showMcpToken = $state(false);
+
+  function maskSecret(value: string | null | undefined) {
+    if (!value) return '(not configured)';
+    if (value.length <= 8) return '••••••••';
+    return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+  }
+
+  function displayedAuthHeader() {
+    const header = data.mcp?.authHeader as string | undefined;
+    if (!header) return 'Authorization: Bearer <MCP_AUTH_TOKEN>';
+    if (showMcpToken) return header;
+    return header.replace(/(Bearer\s+).+/i, '$1••••••••');
+  }
 
   function toolSkillsValue(tool: { id: number; skillsMarkdown?: string | null }) {
     return toolSkillsDrafts[tool.id] ?? tool.skillsMarkdown ?? '';
@@ -113,7 +131,8 @@
   }
 </script>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="mt-4 space-y-4" in:fade={{ duration: 180 }}>
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Obsidian Vault</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Optional mounted vault for durable notes and retrieval. Mount the same absolute path inside
@@ -122,6 +141,7 @@
   <div class="mt-3 grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="Obsidian vault path"
       placeholder="Vault path inside the container, e.g. /obsidian"
       bind:value={obsidianSettings.vaultPath}
     />
@@ -152,7 +172,7 @@
   </div>
 </div>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Agent Tools (Bring Your Own)</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Default mode is owner-trusted. Tools can run with full access for this instance. `skills.md`
@@ -168,6 +188,16 @@
               {tool.kind} · {tool.readOnly ? 'read-only' : 'read/write'} · {tool.isEnabled
                 ? 'enabled'
                 : 'disabled'}
+            </p>
+            <p class="mt-1 max-w-xl text-[11px] text-zinc-600">
+              {#if tool.kind === 'mcp_http'}
+                {tool.allowedHosts?.length
+                  ? `Hosts: ${tool.allowedHosts.join(', ')}`
+                  : 'Hosts: unrestricted (add an allowlist for production)'}
+                · max {Math.round((tool.maxInputBytes || 200000) / 1000)} KB
+              {:else}
+                Input cap: {Math.round((tool.maxInputBytes || 200000) / 1000)} KB
+              {/if}
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -196,6 +226,7 @@
           </p>
           <textarea
             class="mt-2 min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 text-xs leading-6 outline-none"
+            aria-label={`skills.md for ${tool.name}`}
             value={toolSkillsValue(tool)}
             oninput={(event) =>
               updateToolSkillsDraft(tool.id, (event.currentTarget as HTMLTextAreaElement).value)}
@@ -223,6 +254,7 @@
           <div class="mt-2 grid gap-2">
             <textarea
               class="min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 text-xs leading-6 outline-none"
+              aria-label={`Environment JSON for ${tool.name}`}
               placeholder="Env JSON, for example OPENCLAW_REDIRECT_URI and OPENCLAW_REFRESH_TOKEN"
               value={toolConfigValue(tool.id).envJson}
               oninput={(event) =>
@@ -234,6 +266,7 @@
             ></textarea>
             <textarea
               class="min-h-24 w-full rounded-md border border-white/10 bg-black/30 p-3 text-xs leading-6 outline-none"
+              aria-label={`Auth headers JSON for ${tool.name}`}
               placeholder="Auth headers JSON, for example Authorization bearer values"
               value={toolConfigValue(tool.id).headersJson}
               oninput={(event) =>
@@ -267,11 +300,13 @@
     <div class="grid gap-2 md:grid-cols-2">
       <input
         class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+        aria-label="Tool name"
         placeholder="Tool name"
         bind:value={agentToolForm.name}
       />
       <select
         class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+        aria-label="Tool kind"
         bind:value={agentToolForm.kind}
       >
         <option value="mcp_http">MCP HTTP</option>
@@ -280,34 +315,68 @@
     </div>
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="Tool description"
       placeholder="Description"
       bind:value={agentToolForm.description}
     />
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="MCP endpoint URL"
       placeholder="Endpoint URL (for MCP HTTP)"
       bind:value={agentToolForm.endpoint}
     />
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="CLI command"
       placeholder="Command (for CLI)"
       bind:value={agentToolForm.command}
     />
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="CLI arguments"
       placeholder="CLI args csv, e.g. -e,console.log(1)"
       bind:value={agentToolForm.argsCsv}
     />
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="Tool auth headers JSON"
       placeholder="Auth headers JSON map"
       bind:value={agentToolForm.headersJson}
     />
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="Tool environment JSON"
       placeholder="Env JSON map"
       bind:value={agentToolForm.envJson}
     />
+    <div class="grid gap-2 md:grid-cols-2">
+      <input
+        class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+        aria-label="Allowed tool hosts"
+        placeholder="Allowed hosts (comma-separated; blank leaves unrestricted)"
+        bind:value={agentToolForm.allowedHostsCsv}
+      />
+      <input
+        class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+        aria-label="Maximum tool input bytes"
+        type="number"
+        min="1000"
+        max="2000000"
+        step="1000"
+        placeholder="Max input bytes (200000)"
+        bind:value={agentToolForm.maxInputBytes}
+      />
+    </div>
+    <textarea
+      class="min-h-20 w-full rounded-md border border-white/10 bg-black/30 p-3 text-xs leading-6 outline-none"
+      aria-label="Tool input schema JSON"
+      placeholder="Optional input JSON schema (for example: type + properties)"
+      bind:value={agentToolForm.inputSchemaJson}
+    ></textarea>
+    <p class="text-xs text-zinc-500">
+      Security defaults: HTTP tools stay unscoped until you add an allowlist; input is capped to
+      protect the agent loop from oversized payloads.
+    </p>
     <div class="flex flex-wrap items-center gap-4">
       <Switch bind:checked={agentToolForm.readOnly} label="Read-only" />
       <Switch
@@ -322,7 +391,7 @@
   </form>
 </div>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Install CLI Inside Container</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Install a CLI package directly in this running instance, then reference its binary in a `cli`
@@ -337,6 +406,7 @@
   >
     <select
       class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="CLI package manager"
       bind:value={cliInstallForm.manager}
     >
       <option value="npm">npm</option>
@@ -348,11 +418,13 @@
     </select>
     <input
       class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm md:col-span-2"
+      aria-label="CLI package specification"
       placeholder="Package spec (example: @openclaw/cli or stripe-cli)"
       bind:value={cliInstallForm.packageSpec}
     />
     <input
       class="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+      aria-label="CLI binary name"
       placeholder="Binary (optional, e.g. openclaw)"
       bind:value={cliInstallForm.binaryName}
     />
@@ -378,24 +450,25 @@
 </div>
 
 <form
-  class="mt-4 flex gap-2"
+  class="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"
   onsubmit={(event) => {
     event.preventDefault();
     addWebhook();
   }}
 >
   <input
-    class="flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+    class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+    aria-label="Delegate webhook URL"
     placeholder="Delegate webhook URL"
     bind:value={webhookTarget}
   />
   <button
-    class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
+    class="touch-target inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-primary/80 px-3 text-xs font-medium text-primary-foreground transition-all duration-300 hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97]"
     >Add webhook</button
   >
 </form>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="surface-section rounded-lg p-5">
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <h3 class="font-medium">MCP Server</h3>
@@ -427,11 +500,11 @@
     <div class="rounded-md border border-white/10 bg-black/20 p-3">
       <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">Authorization Header</p>
       <div class="mt-2 flex flex-wrap items-center gap-2">
-        <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200"
-          >{data.mcp?.authHeader || 'Authorization: Bearer <MCP_AUTH_TOKEN>'}</code
+        <code class="max-w-full break-all rounded bg-black/40 px-2 py-1 text-xs text-zinc-200"
+          >{displayedAuthHeader()}</code
         >
         <button
-          class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300"
+          class="touch-target inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 lg:min-h-8 lg:min-w-8"
           onclick={() => copyToClipboard(data.mcp?.authHeader || '', 'Auth header')}
         >
           <Copy size={12} />
@@ -442,11 +515,21 @@
     <div class="rounded-md border border-white/10 bg-black/20 p-3">
       <p class="text-xs uppercase tracking-[0.18em] text-zinc-500">MCP Auth Token</p>
       <div class="mt-2 flex flex-wrap items-center gap-2">
-        <code class="rounded bg-black/40 px-2 py-1 text-xs text-zinc-200"
-          >{data.mcp?.authToken || '(not configured)'}</code
+        <code class="max-w-full break-all rounded bg-black/40 px-2 py-1 text-xs text-zinc-200"
+          >{showMcpToken ? data.mcp?.authToken || '(not configured)' : maskSecret(data.mcp?.authToken)}</code
         >
         <button
-          class="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 disabled:opacity-40"
+          class="touch-target inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 lg:min-h-8 lg:min-w-8"
+          aria-label={showMcpToken ? 'Hide MCP token' : 'Reveal MCP token'}
+          title={showMcpToken ? 'Hide MCP token' : 'Reveal MCP token'}
+          onclick={() => (showMcpToken = !showMcpToken)}
+          disabled={!data.mcp?.authToken}
+        >
+          {#if showMcpToken}<EyeOff size={12} />{:else}<Eye size={12} />{/if}
+          <span class="hidden sm:inline">{showMcpToken ? 'Hide' : 'Reveal'}</span>
+        </button>
+        <button
+          class="touch-target inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 disabled:opacity-40 lg:min-h-8 lg:min-w-8"
           onclick={() => copyToClipboard(data.mcp?.authToken || '', 'MCP token')}
           disabled={!data.mcp?.authToken}
         >
@@ -463,4 +546,5 @@
       </p>
     </div>
   </div>
+</div>
 </div>

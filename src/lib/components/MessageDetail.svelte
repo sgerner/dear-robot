@@ -21,15 +21,17 @@
     Moon,
     ThumbsDown,
     CheckCircle2,
-    AlertCircle,
     XCircle,
-    RotateCcw
+    Play,
+    Pause,
+    Pencil,
+    WandSparkles,
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
-  import { formatPlainText } from '$lib/utils/format';
+  import { formatActionLabel, formatPlainText } from '$lib/utils/format';
 
   let {
     selected,
@@ -58,7 +60,17 @@
     selectMessage,
     approveTask,
     rejectTask,
-    executeTask
+    executeTask: _executeTask,
+    cancelTask,
+    resumeTask,
+    retryTaskStep,
+    editTaskStep,
+    runAgentLoop,
+    resumeAgentLoop,
+    cancelAgentLoop,
+    agentLoopPrompt = $bindable(''),
+    agentLoopResult = null,
+    agentLoopBusy = false
   }: {
     selected: any;
     view: string;
@@ -90,10 +102,48 @@
     approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
     rejectTask: (_id: number) => void | Promise<void>;
     executeTask: (_id: number) => void | Promise<void>;
+    cancelTask: (_id: number) => void | Promise<void>;
+    resumeTask: (_id: number) => void | Promise<void>;
+    retryTaskStep: (_id: number, _stepId: number) => void | Promise<void>;
+    editTaskStep: (
+      _id: number,
+      _stepId: number,
+      _input: { title?: string; details?: string }
+    ) => void | Promise<void>;
+    runAgentLoop: (_prompt: string) => void | Promise<void>;
+    resumeAgentLoop: (_sessionId: number, _toolNames: string[]) => void | Promise<void>;
+    cancelAgentLoop: (_sessionId: number) => void | Promise<void>;
+    agentLoopPrompt: string;
+    agentLoopResult: any;
+    agentLoopBusy: boolean;
   } = $props();
 
   let isGenerating = $state(false);
   let emailTheme = $state<'light' | 'dark'>('dark');
+  let editingStepId = $state<number | null>(null);
+  let editingStepTitle = $state('');
+  let editingStepDetails = $state('');
+
+  function beginStepEdit(step: { id: number; title: string; details: string }) {
+    editingStepId = step.id;
+    editingStepTitle = step.title;
+    editingStepDetails = step.details;
+  }
+
+  function cancelStepEdit() {
+    editingStepId = null;
+    editingStepTitle = '';
+    editingStepDetails = '';
+  }
+
+  async function saveStepEdit(runId: number, stepId: number) {
+    if (!editingStepTitle.trim() || !editingStepDetails.trim()) return;
+    await editTaskStep(runId, stepId, {
+      title: editingStepTitle.trim(),
+      details: editingStepDetails.trim()
+    });
+    cancelStepEdit();
+  }
 
   async function handleGenerateSuggestion() {
     if (isGenerating) return;
@@ -187,14 +237,14 @@
 </script>
 
 {#if selected && !['settings', 'operations'].includes(view)}
-  <div class="flex flex-col xl:flex-row h-full overflow-hidden">
-    <ScrollArea class="flex-1 h-[calc(100dvh-3.5rem)] md:h-screen scrollbar-thin">
+  <div class="flex h-full flex-col overflow-hidden xl:flex-row" in:fade={{ duration: 180 }}>
+    <ScrollArea class="flex-1 h-[calc(100dvh-3.5rem)] lg:h-screen scrollbar-thin">
       <article class="mx-auto max-w-4xl p-4 md:p-6 lg:p-8">
         <!-- AI Panel (Small/Medium screens - Top placement) -->
         <div class="xl:hidden mb-6">
           {#if selected.suggestion}
             <div class="suggestion-container" transition:slide={{ duration: 200 }}>
-              {@render aiPanelSnippet()}
+              {@render aiPanelSnippet(false)}
             </div>
           {:else}
             <div class="suggestion-container" transition:fade={{ duration: 150 }}>
@@ -218,7 +268,7 @@
             </span>
           </div>
 
-          <h2 class="text-xl font-semibold tracking-tight text-foreground md:text-2xl leading-tight">
+          <h2 class="break-words text-xl font-semibold leading-tight tracking-tight text-foreground md:text-2xl">
             {selected.message.subject}
           </h2>
 
@@ -236,7 +286,7 @@
         </header>
 
         <!-- Quick Actions Toolbar -->
-        <div class="sticky top-0 z-10 hidden flex-wrap items-center gap-1.5 py-3 md:flex">
+        <div class="sticky top-0 z-10 hidden flex-nowrap items-center gap-1.5 overflow-x-auto rounded-lg border border-border/50 bg-background/85 px-2 py-2.5 shadow-sm backdrop-blur-md scrollbar-thin lg:flex">
           {#each quickActionIds as actionId (actionId)}
             {@const Icon = actionIcons[actionId]}
             {@const meta = quickActionMeta(actionId)}
@@ -247,6 +297,9 @@
                   ? 'default'
                   : 'outline'}
               size="sm"
+              class="shrink-0"
+              aria-label={meta?.label || actionId}
+              title={meta?.label || actionId}
               data-testid={`quick-action-${actionId.replace(/_/g, '-')}`}
               onclick={() => runQuickAction(actionId)}
             >
@@ -255,14 +308,15 @@
               {:else if Icon}
                 <Icon size={14} />
               {/if}
-              <span class="ml-1.5">{meta?.label || actionId}</span>
+              <span class="sr-only 2xl:not-sr-only 2xl:ml-1.5">{meta?.label || actionId}</span>
             </Button>
           {/each}
 
-          <div class="h-6 w-px bg-border mx-1"></div>
+          <div class="h-6 w-px shrink-0 bg-border mx-1"></div>
 
           <select
-            class="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            class="h-8 shrink-0 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            aria-label="Move message to folder"
             onchange={(e) => moveSelected(e.currentTarget.value)}
           >
             <option value="">Move to...</option>
@@ -332,46 +386,56 @@
                       <div class="flex items-center justify-end gap-1 mb-2">
                         <div class="flex border border-border/40 p-0.5 bg-background">
                           <button
-                            class={`px-1.5 py-0.5 transition-all duration-150 ${
+                              class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
                               getMessageEmailTheme(item.id) === 'dark'
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:text-foreground'
                             }`}
                             onclick={() => setMessageEmailTheme(item.id, 'dark')}
                             title="Dark Mode"
+                            aria-label="Use dark email theme"
+                            aria-pressed={getMessageEmailTheme(item.id) === 'dark'}
                           >
                             <Moon size={11} />
                           </button>
                           <button
-                            class={`px-1.5 py-0.5 transition-all duration-150 ${
+                              class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
                               getMessageEmailTheme(item.id) === 'light'
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:text-foreground'
                             }`}
                             onclick={() => setMessageEmailTheme(item.id, 'light')}
                             title="Light Mode"
+                            aria-label="Use light email theme"
+                            aria-pressed={getMessageEmailTheme(item.id) === 'light'}
                           >
                             <Sun size={11} />
                           </button>
                         </div>
                         <div class="flex border border-border/40 p-0.5 bg-background text-xs">
                           <button
-                            class={`px-1.5 py-0.5 transition-all duration-150 ${
+                            class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
                               getMessageBodyMode(item.id) === 'html'
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:text-foreground'
                             }`}
                             onclick={() => setMessageBodyMode(item.id, 'html')}
+                            title="Show formatted HTML"
+                            aria-label="Show formatted HTML"
+                            aria-pressed={getMessageBodyMode(item.id) === 'html'}
                           >
                             H
                           </button>
                           <button
-                            class={`px-1.5 py-0.5 transition-all duration-150 ${
+                            class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
                               getMessageBodyMode(item.id) === 'text'
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:text-foreground'
                             }`}
                             onclick={() => setMessageBodyMode(item.id, 'text')}
+                            title="Show plain text"
+                            aria-label="Show plain text"
+                            aria-pressed={getMessageBodyMode(item.id) === 'text'}
                           >
                             P
                           </button>
@@ -454,24 +518,28 @@
                   <!-- Email Theme Toggle -->
                   <div class="flex border border-border/40 p-0.5 text-xs bg-background">
                     <button
-                      class={`px-2 py-1 transition-all duration-150 ${
+                      class={`min-h-10 min-w-10 px-2 py-1 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
                         emailTheme === 'dark'
                           ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                       onclick={() => (emailTheme = 'dark')}
                       title="Dark Mode"
+                      aria-label="Use dark email theme"
+                      aria-pressed={emailTheme === 'dark'}
                     >
                       <Moon size={12} />
                     </button>
                     <button
-                      class={`px-2 py-1 transition-all duration-150 ${
+                      class={`min-h-10 min-w-10 px-2 py-1 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
                         emailTheme === 'light'
                           ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                       onclick={() => (emailTheme = 'light')}
                       title="Light Mode"
+                      aria-label="Use light email theme"
+                      aria-pressed={emailTheme === 'light'}
                     >
                       <Sun size={12} />
                     </button>
@@ -486,6 +554,9 @@
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                       onclick={() => (bodyMode = 'html')}
+                      title="Show formatted HTML"
+                      aria-label="Show formatted HTML"
+                      aria-pressed={bodyMode === 'html'}
                     >
                       HTML
                     </button>
@@ -496,6 +567,9 @@
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                       onclick={() => (bodyMode = 'text')}
+                      title="Show plain text"
+                      aria-label="Show plain text"
+                      aria-pressed={bodyMode === 'text'}
                     >
                       Plain
                     </button>
@@ -532,7 +606,7 @@
 
         {#if selected.suggestion}
           <div transition:slide={{ duration: 200 }}>
-            {@render aiPanelSnippet()}
+            {@render aiPanelSnippet(true)}
           </div>
         {:else}
           <div transition:fade={{ duration: 150 }}>
@@ -543,9 +617,9 @@
     </aside>
   </div>
 {:else if view === 'operations' || view === 'settings'}
-  <div class="hidden md:block"></div>
+  <div class="hidden lg:block"></div>
 {:else}
-  <div class="grid h-full place-items-center text-muted-foreground">
+  <div class="grid h-full place-items-center text-muted-foreground" in:fade={{ duration: 180 }}>
     <div class="flex flex-col items-center gap-3">
       <div class="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
         <svg
@@ -609,29 +683,32 @@
   </div>
 {/snippet}
 
-{#snippet aiPanelSnippet()}
-  <div class="suggestion-card ai-card rounded-xl overflow-hidden border border-primary/30 shadow-2xl">
+{#snippet aiPanelSnippet(withTestIds = false)}
+  <div
+    class="suggestion-card ai-card rounded-xl overflow-hidden border border-primary/30 shadow-2xl"
+    data-testid={withTestIds ? 'ai-action-card' : undefined}
+  >
     <!-- Suggestion Header -->
     <div class="p-4 bg-primary/5 border-b border-primary/10">
-      <div class="flex items-start justify-between gap-3 mb-3">
-        <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <div class="flex min-w-0 items-center gap-2">
           <Sparkles size={16} class="text-primary" />
-          <h3 class="font-bold text-sm text-foreground uppercase tracking-wider">{selected.suggestion.category}</h3>
+          <h3 class="truncate font-bold text-sm text-foreground uppercase tracking-wider">{selected.suggestion.category}</h3>
         </div>
-        <div class="flex items-center gap-2">
-          <div class="flex border border-border/60 rounded-md p-0.5 bg-background/40 shrink-0 mr-1">
-            <button class="p-1 hover:text-primary transition-colors" onclick={() => recordMessageOutcome('resolved')} title="Perfect Outcome">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+          <div class="flex shrink-0 rounded-md border border-border/60 bg-background/40 p-0.5">
+            <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-primary transition-colors" onclick={() => recordMessageOutcome('resolved')} title="Perfect Outcome" aria-label="Mark suggestion as a perfect outcome">
               <ThumbsUp size={12} />
             </button>
-            <button class="p-1 hover:text-destructive transition-colors" onclick={() => recordMessageOutcome('bad_draft')} title="Needs Improvement">
+            <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-destructive transition-colors" onclick={() => recordMessageOutcome('bad_draft')} title="Needs Improvement" aria-label="Mark suggestion as needing improvement">
               <ThumbsDown size={12} />
             </button>
           </div>
-          <div class="flex gap-1">
-            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-primary/20 text-primary border border-primary/20 rounded">
-              {selected.suggestion.recommendedAction}
+          <div class="flex min-w-0 flex-wrap justify-end gap-1">
+            <span class="max-w-full truncate rounded border border-primary/20 bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
+              {formatActionLabel(selected.suggestion.recommendedAction)}
             </span>
-            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 {selected.suggestion.riskLevel === 'high' ? 'bg-destructive/20 text-destructive border-destructive/20' : 'bg-muted text-muted-foreground border-border'} border rounded">
+            <span class="max-w-full truncate rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase {selected.suggestion.riskLevel === 'high' ? 'border-destructive/20 bg-destructive/20 text-destructive' : 'border-border bg-muted text-muted-foreground'}">
               {selected.suggestion.riskLevel}
             </span>
           </div>
@@ -647,15 +724,16 @@
       <div class="p-4">
         <div class="relative group">
           <textarea
-            id="draft-reply"
-            data-testid="draft-reply"
+            id={withTestIds ? 'draft-reply' : 'draft-reply-mobile'}
+            data-testid={withTestIds ? 'draft-reply' : undefined}
             class="min-h-32 w-full resize-y bg-background/50 border border-border/60 p-3 pr-10 text-sm leading-relaxed outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all"
+            aria-label="Draft reply"
             placeholder="Drafting response..."
             bind:value={draftText}
           ></textarea>
           <div class="absolute right-2 top-2">
             <DictationButton
-              targetId="draft-reply"
+              targetId={withTestIds ? 'draft-reply' : 'draft-reply-mobile'}
               activeTargetId={dictationTargetId}
               recording={dictationActive}
               unavailable={dictationUnavailable}
@@ -673,14 +751,29 @@
               variant="default"
               size="sm"
               class="flex-1 neon-glow h-8"
+              data-testid={withTestIds ? 'execute-suggestion' : undefined}
               onclick={executeSuggestion}
             >
               <Send size={13} class="mr-1.5" /> Execute
             </Button>
-            <Button variant="outline" size="sm" class="h-8 w-8 p-0" onclick={saveEdit} title="Save Changes">
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-11 w-11 p-0 lg:h-8 lg:w-8"
+              onclick={saveEdit}
+              title="Save changes"
+              aria-label="Save"
+            >
               <CheckCircle2 size={14} />
             </Button>
-            <Button variant="outline" size="sm" class="h-8 w-8 p-0" onclick={rejectSuggestion} title="Reject Suggestion">
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-11 w-11 p-0 lg:h-8 lg:w-8"
+              onclick={rejectSuggestion}
+              title="Reject suggestion"
+              aria-label="Reject suggestion"
+            >
               <XCircle size={14} class="text-destructive" />
             </Button>
           </div>
@@ -688,15 +781,17 @@
           <!-- Tweak Input -->
           <div class="relative">
             <input
-              id="regen-note"
-              class="w-full h-8 bg-background/40 border border-border/60 px-3 pr-8 text-xs outline-none focus:border-primary/50 rounded-md"
+              id={withTestIds ? 'regen-note' : 'regen-note-mobile'}
+              class="h-11 w-full rounded-md border border-border/60 bg-background/40 px-3 pr-12 text-xs outline-none focus:border-primary/50"
+              aria-label="Tweak prompt"
               placeholder="Tweak prompt..."
               bind:value={regenNote}
             />
             <button 
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+              class="touch-target absolute right-0.5 top-1/2 -translate-y-1/2 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
               onclick={regenerate}
               title="Regenerate"
+              aria-label="Regenerate suggestion"
             >
               <RefreshCw size={12} class={isGenerating ? "animate-spin" : ""} />
             </button>
@@ -715,7 +810,8 @@
         <Button
           variant="outline"
           size="sm"
-          class="h-7 text-[10px] px-2"
+          class="min-h-11 px-2 text-[10px] lg:h-8 lg:min-h-0"
+          data-testid={withTestIds ? 'plan-task' : undefined}
           onclick={createTaskPlan}
         >
           <Sparkles size={10} class="mr-1" /> New Plan
@@ -724,11 +820,63 @@
 
       <div class="relative mb-3">
         <input
-          id="task-note"
-          class="w-full h-7 bg-background/40 border border-border/60 px-2 text-xs outline-none focus:border-primary/50 rounded-md"
+          id={withTestIds ? 'task-note' : 'task-note-mobile'}
+          data-testid={withTestIds ? 'task-note' : undefined}
+          class="w-full min-h-11 lg:h-8 lg:min-h-0 bg-background/40 border border-border/60 px-2 text-xs outline-none focus:border-primary/50 rounded-md"
+          aria-label="Task instructions"
           placeholder="Task instructions..."
           bind:value={taskNote}
         />
+      </div>
+
+      <div class="mb-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
+        <div class="mb-2 flex items-center gap-2">
+          <WandSparkles size={13} class="text-primary" />
+          <span class="text-[10px] font-semibold uppercase tracking-widest text-primary">Agent loop</span>
+          <span class="ml-auto text-[10px] text-muted-foreground">read-only until approved</span>
+        </div>
+        <div class="flex gap-2">
+          <input
+            class="min-h-10 min-w-0 flex-1 rounded-md border border-border/60 bg-background/60 px-2.5 text-xs outline-none transition-colors focus:border-primary/50 lg:min-h-8"
+            placeholder="Ask the agent to investigate…"
+            aria-label="Agent loop prompt"
+            bind:value={agentLoopPrompt}
+            onkeydown={(event) => event.key === 'Enter' && runAgentLoop(agentLoopPrompt)}
+          />
+          <Button
+            variant="default"
+            size="sm"
+            class="min-h-10 shrink-0 px-2.5 text-[10px] lg:min-h-8"
+            onclick={() => runAgentLoop(agentLoopPrompt)}
+            disabled={agentLoopBusy || !agentLoopPrompt.trim()}
+          >
+            {#if agentLoopBusy}<span class="animate-pulse">Working…</span>{:else}<WandSparkles size={11} /> Run{/if}
+          </Button>
+        </div>
+        {#if agentLoopResult}
+          <div class="mt-2 rounded-md border border-border/50 bg-background/50 p-2" transition:slide={{ duration: 160 }}>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{agentLoopResult.status}</span>
+              {#if agentLoopResult.turns}<span class="text-[10px] text-muted-foreground">{agentLoopResult.turns} turn(s)</span>{/if}
+            </div>
+            {#if agentLoopResult.content}<p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-foreground">{agentLoopResult.content}</p>{/if}
+            {#if agentLoopResult.pendingApprovals?.length}
+              <div class="mt-2 space-y-2">
+                <p class="text-[10px] text-amber-400">Paused before write-capable actions. Approve each tool explicitly to continue.</p>
+                <div class="flex flex-wrap gap-1.5">
+                  {#each agentLoopResult.pendingApprovals as call (call.id)}
+                    <Button variant="outline" size="sm" class="min-h-7 px-2 text-[10px]" onclick={() => resumeAgentLoop(agentLoopResult.sessionId, [call.name])}>
+                      <CheckCircle2 size={10} /> Approve {call.name}
+                    </Button>
+                  {/each}
+                  <Button variant="ghost" size="sm" class="min-h-7 px-2 text-[10px]" onclick={() => cancelAgentLoop(agentLoopResult.sessionId)}>
+                    <XCircle size={10} /> Cancel loop
+                  </Button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
 
       {#if selected.tasks?.length}
@@ -743,20 +891,82 @@
                   </p>
                 </div>
                 <div class="flex gap-1">
-                  <button class="p-1 hover:text-primary transition-colors" onclick={() => approveTask(task.run.id)} title="Approve">
-                    <CheckCircle2 size={12} />
-                  </button>
-                  <button class="p-1 hover:text-destructive transition-colors" onclick={() => rejectTask(task.run.id)} title="Reject">
-                    <XCircle size={12} />
-                  </button>
+                  {#if !['completed', 'rejected', 'cancelled'].includes(task.run.status) && task.steps?.some((step: { status: string }) => ['approved', 'running'].includes(step.status))}
+                    <button
+                      class="touch-target rounded-md p-1 hover:bg-muted hover:text-primary transition-colors"
+                      onclick={() => _executeTask(task.run.id)}
+                      title="Execute task"
+                      aria-label="Execute task"
+                      data-testid={withTestIds ? 'execute-task' : undefined}
+                    >
+                      <Send size={12} />
+                    </button>
+                  {/if}
+                  {#if ['needs_approval', 'planned'].includes(task.run.status)}
+                    <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-primary transition-colors" onclick={() => approveTask(task.run.id)} title="Approve all steps" aria-label="Approve all task steps" data-testid={withTestIds ? 'approve-task' : undefined}>
+                      <CheckCircle2 size={12} />
+                    </button>
+                  {/if}
+                  {#if task.run.status === 'failed'}
+                    <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-primary transition-colors" onclick={() => resumeTask(task.run.id)} title="Resume workflow" aria-label="Resume workflow">
+                      <Play size={12} />
+                    </button>
+                  {:else if ['planned', 'needs_approval', 'running'].includes(task.run.status)}
+                    <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-destructive transition-colors" onclick={() => cancelTask(task.run.id)} title="Cancel workflow" aria-label="Cancel workflow">
+                      <Pause size={12} />
+                    </button>
+                  {/if}
+                  {#if !['completed', 'rejected', 'cancelled'].includes(task.run.status)}
+                    <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-destructive transition-colors" onclick={() => rejectTask(task.run.id)} title="Reject workflow" aria-label="Reject workflow">
+                      <XCircle size={12} />
+                    </button>
+                  {/if}
                 </div>
               </div>
               {#if task.steps?.length}
                 <div class="space-y-1">
-                  {#each task.steps.slice(0, 3) as step (step.id)}
-                    <div class="flex items-center justify-between gap-2 text-[10px] bg-background/20 px-2 py-1 rounded">
-                      <span class="truncate text-muted-foreground">{step.title}</span>
-                      <span class="font-bold {step.status === 'completed' ? 'text-primary' : 'text-muted-foreground'}">{step.status}</span>
+                  {#each task.steps as step, stepIndex (step.id)}
+                    <div class="rounded bg-background/20 px-2 py-1.5 text-[10px]" transition:slide={{ duration: 140 }}>
+                      {#if editingStepId === step.id}
+                        <div class="space-y-2" transition:fade={{ duration: 120 }}>
+                          <input
+                            class="h-8 w-full rounded border border-border/60 bg-background/70 px-2 text-[10px] outline-none focus:border-primary/60"
+                            aria-label={`Edit step ${stepIndex + 1} title`}
+                            bind:value={editingStepTitle}
+                          />
+                          <textarea
+                            class="min-h-16 w-full resize-y rounded border border-border/60 bg-background/70 px-2 py-1.5 text-[10px] leading-4 outline-none focus:border-primary/60"
+                            aria-label={`Edit step ${stepIndex + 1} details`}
+                            bind:value={editingStepDetails}
+                          ></textarea>
+                          <div class="flex justify-end gap-1.5">
+                            <Button variant="ghost" size="sm" class="h-7 px-2 text-[10px]" onclick={cancelStepEdit}>Cancel</Button>
+                            <Button variant="default" size="sm" class="h-7 px-2 text-[10px]" onclick={() => saveStepEdit(task.run.id, step.id)} disabled={!editingStepTitle.trim() || !editingStepDetails.trim()}>
+                              <CheckCircle2 size={10} /> Save
+                            </Button>
+                          </div>
+                        </div>
+                      {:else}
+                        <div class="flex items-center justify-between gap-2">
+                          <span class="min-w-0 truncate text-muted-foreground">{stepIndex + 1}. {step.title}</span>
+                          <div class="flex shrink-0 items-center gap-1.5">
+                            <span class="font-bold {step.status === 'completed' ? 'text-primary' : step.status === 'failed' ? 'text-destructive' : 'text-muted-foreground'}">{step.status}</span>
+                            {#if !['completed', 'rejected', 'cancelled', 'running'].includes(task.run.status)}
+                              <button class="touch-target rounded p-1 text-muted-foreground hover:bg-muted hover:text-primary" onclick={() => beginStepEdit(step)} title="Edit step" aria-label={`Edit step ${stepIndex + 1}`}>
+                                <Pencil size={10} />
+                              </button>
+                            {/if}
+                          </div>
+                        </div>
+                        {#if step.approvalReason && step.status === 'pending'}<p class="mt-1 text-[9px] text-amber-400">{step.approvalReason}</p>{/if}
+                        {#if step.output}<pre class="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-[9px] leading-4 text-muted-foreground">{JSON.stringify(step.output, null, 2)}</pre>{/if}
+                        {#if step.errorMessage}
+                          <div class="mt-1 flex items-center justify-between gap-2">
+                            <p class="line-clamp-2 text-[9px] text-destructive">{step.errorMessage}</p>
+                            {#if step.status === 'failed'}<button class="shrink-0 text-[9px] text-primary hover:underline" onclick={() => retryTaskStep(task.run.id, step.id)}>Retry</button>{/if}
+                          </div>
+                        {/if}
+                      {/if}
                     </div>
                   {/each}
                 </div>

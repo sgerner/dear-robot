@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fade } from 'svelte/transition';
+  import { fade, slide } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
   import {
     Plus,
     ChevronDown,
@@ -160,14 +161,14 @@
   }
 </script>
 
-<div class="mt-6 space-y-4">
+<div class="mt-6 space-y-4" in:fade={{ duration: 180 }}>
   <h3 class="text-sm font-medium text-zinc-300">Email Accounts</h3>
   {#each data.accounts as account (account.id)}
-    <article class="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <p class="font-medium">{account.email}</p>
-          <p class="text-xs text-zinc-500">
+    <article class="surface-section min-w-0 rounded-lg p-3" animate:flip={{ duration: 200 }}>
+      <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-medium" title={account.email}>{account.email}</p>
+          <p class="break-words text-xs text-zinc-500">
             {account.host}:{account.port} -> {account.smtpHost}:{account.smtpPort}
           </p>
           <p class="mt-1 text-xs text-zinc-400">
@@ -176,44 +177,44 @@
               : ''} · {account.authType === 'oauth_gmail' ? 'gmail oauth' : 'password auth'}
           </p>
         </div>
-        <span class="rounded-full border border-white/10 px-2 py-1 text-xs"
+        <span class="shrink-0 rounded-full border border-white/10 px-2 py-1 text-xs"
           >{account.isEnabled ? 'enabled' : 'disabled'}</span
         >
       </div>
       <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
         <div class="flex flex-wrap gap-2">
           <button
-            class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
+            class="touch-target rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
             onclick={() => accountAction(account.id, 'test')}>Test</button
           >
           {#if account.authType === 'oauth_gmail'}
             <button
-              class="rounded-md border border-sky-400/30 px-2 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-400/10"
+              class="touch-target rounded-md border border-sky-400/30 px-2 py-1 text-xs text-sky-100 transition-colors hover:bg-sky-400/10"
               onclick={() => startGoogleConnect(account.email)}
             >
               Reconnect Gmail
             </button>
           {/if}
           <button
-            class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
+            class="touch-target rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
             onclick={() => startEditing(account)}
           >
             <PencilLine size={12} />
             Edit
           </button>
           <button
-            class="rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
+            class="touch-target rounded-md border border-white/10 px-2 py-1 text-xs transition-colors hover:bg-white/5"
             onclick={() => accountAction(account.id, account.isEnabled ? 'disable' : 'enable')}
             >{account.isEnabled ? 'Disable' : 'Enable'}</button
           >
           <button
-            class="rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200 transition-colors hover:bg-red-400/10"
+            class="touch-target rounded-md border border-red-400/30 px-2 py-1 text-xs text-red-200 transition-colors hover:bg-red-400/10"
             onclick={() => accountAction(account.id, 'delete')}>Remove</button
           >
         </div>
 
         <button
-          class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+          class="touch-target flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
           onclick={() => toggleAccountFolders(account.id)}
         >
           <Folder size={14} />
@@ -354,7 +355,7 @@
       {/if}
 
       {#if expandedAccounts[account.id]}
-        <div class="mt-3 space-y-2 border-t border-white/5 pt-3">
+        <div class="mt-3 space-y-2 border-t border-white/5 pt-3" transition:slide={{ duration: 180 }}>
           <div class="flex items-center justify-between">
             <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Folder Role Mapping</h4>
             <p class="text-xs text-zinc-600 italic">Overrides IMAP discovery</p>
@@ -368,6 +369,7 @@
                 </div>
                 <select
                   class="w-28 rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-xs text-zinc-200 outline-none transition-colors duration-150 focus:border-accent/50"
+                  aria-label={`Folder role for ${folder.path}`}
                   value={folder.role || ''}
                   onchange={(event) =>
                     saveFolderRole(folder.id, (event.currentTarget as HTMLSelectElement).value)}
@@ -384,7 +386,7 @@
       </article>
       {/each}
   <form
-    class="space-y-4 rounded-lg border border-white/10 bg-white/[0.03] p-4"
+    class="surface-section space-y-4 rounded-lg p-4"
     onsubmit={(event) => {
       event.preventDefault();
       addAccount();
@@ -444,16 +446,16 @@
         <label class="mb-1 block text-xs font-medium uppercase tracking-wider text-zinc-500" for="account-email">
           Account Email
         </label>
-        <div class="flex gap-2">
+        <div class="flex min-w-0 gap-2">
           <input
             id="account-email"
-            class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-accent/50"
+            class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none focus:border-accent/50"
             placeholder="e.g. user@example.com"
             bind:value={accountForm.email}
           />
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 disabled:opacity-50"
+            class="touch-target flex shrink-0 items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 disabled:opacity-50"
             onclick={discoverAccountSettings}
             disabled={!accountForm.email || !accountForm.email.includes('@') || accountDiscoverState === 'loading'}
             title="Autodiscover settings"
@@ -547,7 +549,7 @@
       </div>
     </div>
   </form>
-  <section class="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+  <section class="surface-section space-y-3 rounded-lg p-3" in:fade={{ duration: 180 }}>
     <div class="space-y-1">
       <h3 class="text-sm font-medium">Connect Gmail (Google OAuth)</h3>
       <p class="text-xs text-zinc-400">

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { fly } from 'svelte/transition';
+
   let {
     categories,
     selected,
@@ -13,7 +15,9 @@
 <div class="mt-6 space-y-1">
   {#each categories as category (category.key)}
     <button
-      class={`w-full rounded-lg px-3 py-3 text-left transition-colors ${selected === category.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+      class={`touch-target w-full rounded-lg px-3 py-3 text-left transition-all duration-200 hover:translate-x-0.5 ${selected === category.key ? 'bg-primary/10 text-primary shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+      aria-current={selected === category.key ? 'page' : undefined}
+      in:fly={{ y: 8, duration: 180, delay: 35 * categories.indexOf(category) }}
       onclick={() => onSelect(category.key)}
     >
       <p class="text-sm font-medium">{category.label}</p>

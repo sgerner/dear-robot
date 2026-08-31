@@ -93,7 +93,7 @@ describe('IMAP watch loop', () => {
       smtpUsername: 'user@example.test',
       smtpPasswordEncrypted: 'encrypted',
       authType: 'password' as const
-    } as any;
+    } as unknown as Parameters<typeof imapEmailProvider.watchInbox>[0];
 
     const controller = new AbortController();
     const mailboxChanged = vi.fn(async () => {

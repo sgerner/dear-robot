@@ -46,7 +46,7 @@
 <!-- Backdrop for overflow menu -->
 {#if quickActionOverflowOpen && overflowActionIds.length}
   <button
-    class="fixed inset-0 z-40 bg-black/40 md:hidden"
+    class="fixed inset-0 z-40 bg-black/40 lg:hidden"
     aria-label="Close menu"
     transition:fade={{ duration: 150 }}
     onclick={() => (quickActionOverflowOpen = false)}
@@ -55,7 +55,7 @@
 
 <!-- Mobile Quick Actions Bar -->
 <nav
-  class="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background/95 backdrop-blur-md md:hidden safe-area-pb"
+  class="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 bg-background/95 backdrop-blur-md lg:hidden safe-area-pb"
   style="padding-bottom: env(safe-area-inset-bottom, 0px);"
 >
   <div
@@ -67,7 +67,7 @@
       {@const meta = quickActionMeta(actionId)}
       <button
         class={`
-          group relative flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1
+          touch-target group relative flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1
           transition-all duration-200 active:scale-95
           ${
             meta?.tone === 'danger'
@@ -90,7 +90,7 @@
         {:else if Icon}
           <Icon size={20} />
         {/if}
-        <span class="text-xs font-medium truncate max-w-full">{meta?.label}</span>
+        <span class="quick-action-label max-w-full text-center text-[10px] font-medium leading-tight line-clamp-2">{meta?.label}</span>
       </button>
     {/each}
 
@@ -98,7 +98,7 @@
       <div class="relative">
         <button
           class={`
-            flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 w-full
+            touch-target flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 px-1
             transition-all duration-200 active:scale-95
             ${quickActionOverflowOpen ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}
           `}
@@ -111,7 +111,7 @@
           {:else}
             <MoreHorizontal size={20} />
           {/if}
-          <span class="text-xs font-medium">More</span>
+          <span class="quick-action-label quick-action-more-label text-[10px] font-medium leading-tight">More</span>
         </button>
 
         <!-- Overflow Menu -->
@@ -158,5 +158,11 @@
 <style>
   .safe-area-pb {
     padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  }
+
+  @media (max-width: 359px) {
+    .quick-action-label {
+      display: none;
+    }
   }
 </style>

@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS follow_up_reminders (
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   due_at TEXT NOT NULL,
   reason TEXT NOT NULL,
+  notified_at TEXT,
   status TEXT NOT NULL DEFAULT 'open',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -312,6 +313,9 @@ CREATE TABLE IF NOT EXISTS agent_tools (
   args_json TEXT,
   auth_headers_encrypted TEXT,
   env_encrypted TEXT,
+  output_schema_json TEXT,
+  allowed_hosts_json TEXT,
+  max_input_bytes INTEGER NOT NULL DEFAULT 200000,
   is_enabled INTEGER NOT NULL DEFAULT 1,
   read_only INTEGER NOT NULL DEFAULT 0,
   require_approval_for_write INTEGER NOT NULL DEFAULT 1,
@@ -326,10 +330,35 @@ CREATE TABLE IF NOT EXISTS obsidian_settings (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS automation_workflows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  trigger_type TEXT NOT NULL DEFAULT 'manual',
+  schedule TEXT,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  filters_json TEXT NOT NULL DEFAULT '{}',
+  plan_template_json TEXT NOT NULL DEFAULT '{}',
+  approval_mode TEXT NOT NULL DEFAULT 'always',
+  dry_run INTEGER NOT NULL DEFAULT 1,
+  max_runs_per_hour INTEGER NOT NULL DEFAULT 20,
+  quiet_hours_start TEXT,
+  quiet_hours_end TEXT,
+  last_run_at TEXT,
+  next_run_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS automation_workflows_enabled_trigger_idx ON automation_workflows(enabled, trigger_type);
+CREATE INDEX IF NOT EXISTS automation_workflows_next_run_idx ON automation_workflows(next_run_at);
 CREATE TABLE IF NOT EXISTS task_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   suggestion_id INTEGER REFERENCES ai_suggestions(id) ON DELETE SET NULL,
+  workflow_id INTEGER REFERENCES automation_workflows(id) ON DELETE SET NULL,
+  trigger_type TEXT NOT NULL DEFAULT 'manual',
+  idempotency_key TEXT,
   status TEXT NOT NULL DEFAULT 'planned',
   complexity TEXT NOT NULL DEFAULT 'simple',
   model_used TEXT NOT NULL,
@@ -338,9 +367,21 @@ CREATE TABLE IF NOT EXISTS task_runs (
   plan_json TEXT NOT NULL,
   result_summary TEXT,
   error_message TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  current_step_index INTEGER NOT NULL DEFAULT 0,
+  next_run_at TEXT,
+  lease_owner TEXT,
+  lease_until TEXT,
+  cancel_requested INTEGER NOT NULL DEFAULT 0,
+  actor TEXT NOT NULL DEFAULT 'user',
+  started_at TEXT,
+  finished_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS task_runs_idempotency_unique ON task_runs(idempotency_key);
+CREATE INDEX IF NOT EXISTS task_runs_workflow_status_idx ON task_runs(workflow_id, status);
 CREATE TABLE IF NOT EXISTS task_steps (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   task_run_id INTEGER NOT NULL REFERENCES task_runs(id) ON DELETE CASCADE,
@@ -350,11 +391,23 @@ CREATE TABLE IF NOT EXISTS task_steps (
   details TEXT NOT NULL,
   tool_name TEXT,
   tool_input_json TEXT,
+  resolved_input_json TEXT,
+  depends_on_json TEXT NOT NULL DEFAULT '[]',
+  condition_json TEXT,
+  output_key TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
   requires_approval INTEGER NOT NULL DEFAULT 1,
   risk_level TEXT NOT NULL DEFAULT 'low',
   output_json TEXT,
   error_message TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  retry_delay_ms INTEGER NOT NULL DEFAULT 1000,
+  next_attempt_at TEXT,
+  idempotency_key TEXT,
+  approval_reason TEXT,
+  started_at TEXT,
+  finished_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -370,6 +423,50 @@ CREATE TABLE IF NOT EXISTS tool_calls (
   duration_ms INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_audit_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER REFERENCES automation_workflows(id) ON DELETE SET NULL,
+  task_run_id INTEGER REFERENCES task_runs(id) ON DELETE SET NULL,
+  task_step_id INTEGER REFERENCES task_steps(id) ON DELETE SET NULL,
+  actor TEXT NOT NULL DEFAULT 'system',
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_audit_events_run_created_idx ON agent_audit_events(task_run_id, created_at);
+CREATE INDEX IF NOT EXISTS agent_audit_events_workflow_created_idx ON agent_audit_events(workflow_id, created_at);
+CREATE TABLE IF NOT EXISTS agent_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_run_id INTEGER REFERENCES task_runs(id) ON DELETE CASCADE,
+  task_step_id INTEGER REFERENCES task_steps(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  read_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_notifications_unread_idx ON agent_notifications(read_at, created_at);
+CREATE TABLE IF NOT EXISTS agent_loop_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'running',
+  prompt TEXT NOT NULL,
+  messages_json TEXT NOT NULL DEFAULT '[]',
+  transcript_json TEXT NOT NULL DEFAULT '[]',
+  pending_approvals_json TEXT NOT NULL DEFAULT '[]',
+  approved_tool_names_json TEXT NOT NULL DEFAULT '[]',
+  allow_write_tools INTEGER NOT NULL DEFAULT 0,
+  max_turns INTEGER NOT NULL DEFAULT 8,
+  turn_count INTEGER NOT NULL DEFAULT 0,
+  provider TEXT,
+  model TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_loop_sessions_status_updated_idx ON agent_loop_sessions(status, updated_at);
+CREATE INDEX IF NOT EXISTS agent_loop_sessions_message_updated_idx ON agent_loop_sessions(message_id, updated_at);
 CREATE TABLE IF NOT EXISTS automation_policies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -383,6 +480,11 @@ CREATE TABLE IF NOT EXISTS automation_policies (
   max_messages_per_run INTEGER NOT NULL DEFAULT 25,
   max_auto_actions_per_run INTEGER NOT NULL DEFAULT 5,
   follow_up_days INTEGER NOT NULL DEFAULT 2,
+  max_agent_turns INTEGER NOT NULL DEFAULT 8,
+  max_run_duration_ms INTEGER NOT NULL DEFAULT 180000,
+  default_max_attempts INTEGER NOT NULL DEFAULT 3,
+  notification_enabled INTEGER NOT NULL DEFAULT 1,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -463,7 +565,11 @@ CREATE TABLE IF NOT EXISTS memory_examples (
   migrateAccountAuthColumns();
   migrateAccountSignatureColumn();
   migrateAutomationPolicyColumns();
+  migrateFollowUpColumns();
   migrateAiProfileColumns();
+  migrateAgentToolColumns();
+  ensureAutomationTables();
+  migrateWorkflowColumns();
   ensurePerformanceIndexes();
   backfillLatestSuggestionPointers();
 
@@ -840,12 +946,140 @@ function migrateAutomationPolicyColumns() {
     ['require_approval_for_send', 'INTEGER NOT NULL DEFAULT 1'],
     ['max_messages_per_run', 'INTEGER NOT NULL DEFAULT 25'],
     ['max_auto_actions_per_run', 'INTEGER NOT NULL DEFAULT 5'],
-    ['follow_up_days', 'INTEGER NOT NULL DEFAULT 2']
+    ['follow_up_days', 'INTEGER NOT NULL DEFAULT 2'],
+    ['max_agent_turns', 'INTEGER NOT NULL DEFAULT 8'],
+    ['max_run_duration_ms', 'INTEGER NOT NULL DEFAULT 180000'],
+    ['default_max_attempts', 'INTEGER NOT NULL DEFAULT 3'],
+    ['notification_enabled', 'INTEGER NOT NULL DEFAULT 1'],
+    ['timezone', "TEXT NOT NULL DEFAULT 'UTC'"]
   ];
   for (const [name, definition] of additions) {
     if (!existing.has(name))
       sqlite.exec(`ALTER TABLE automation_policies ADD COLUMN "${name}" ${definition};`);
   }
+}
+
+function migrateFollowUpColumns() {
+  const columns = sqlite.prepare(`PRAGMA table_info(follow_up_reminders)`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'notified_at')) {
+    sqlite.exec(`ALTER TABLE follow_up_reminders ADD COLUMN notified_at TEXT;`);
+  }
+}
+
+function migrateWorkflowColumns() {
+  const additions: Record<string, Array<[string, string]>> = {
+    task_runs: [
+      ['workflow_id', 'INTEGER'],
+      ['trigger_type', "TEXT NOT NULL DEFAULT 'manual'"],
+      ['idempotency_key', 'TEXT'],
+      ['attempt_count', 'INTEGER NOT NULL DEFAULT 0'],
+      ['max_attempts', 'INTEGER NOT NULL DEFAULT 3'],
+      ['current_step_index', 'INTEGER NOT NULL DEFAULT 0'],
+      ['next_run_at', 'TEXT'],
+      ['lease_owner', 'TEXT'],
+      ['lease_until', 'TEXT'],
+      ['cancel_requested', 'INTEGER NOT NULL DEFAULT 0'],
+      ['actor', "TEXT NOT NULL DEFAULT 'user'"],
+      ['started_at', 'TEXT'],
+      ['finished_at', 'TEXT']
+    ],
+    task_steps: [
+      ['resolved_input_json', 'TEXT'],
+      ['depends_on_json', "TEXT NOT NULL DEFAULT '[]'"],
+      ['condition_json', 'TEXT'],
+      ['output_key', 'TEXT'],
+      ['attempt_count', 'INTEGER NOT NULL DEFAULT 0'],
+      ['max_attempts', 'INTEGER NOT NULL DEFAULT 3'],
+      ['retry_delay_ms', 'INTEGER NOT NULL DEFAULT 1000'],
+      ['next_attempt_at', 'TEXT'],
+      ['idempotency_key', 'TEXT'],
+      ['approval_reason', 'TEXT'],
+      ['started_at', 'TEXT'],
+      ['finished_at', 'TEXT']
+    ]
+  };
+  for (const [table, tableAdditions] of Object.entries(additions)) {
+    const columns = sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    const existing = new Set(columns.map((column) => column.name));
+    for (const [name, definition] of tableAdditions) {
+      if (!existing.has(name)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN "${name}" ${definition};`);
+    }
+  }
+  sqlite.exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS task_runs_idempotency_unique ON task_runs(idempotency_key);
+CREATE INDEX IF NOT EXISTS task_runs_workflow_status_idx ON task_runs(workflow_id, status);
+CREATE INDEX IF NOT EXISTS automation_workflows_enabled_trigger_idx ON automation_workflows(enabled, trigger_type);
+CREATE INDEX IF NOT EXISTS automation_workflows_next_run_idx ON automation_workflows(next_run_at);
+`);
+}
+
+function ensureAutomationTables() {
+  sqlite.exec(`
+CREATE TABLE IF NOT EXISTS automation_workflows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  trigger_type TEXT NOT NULL DEFAULT 'manual',
+  schedule TEXT,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  filters_json TEXT NOT NULL DEFAULT '{}',
+  plan_template_json TEXT NOT NULL DEFAULT '{}',
+  approval_mode TEXT NOT NULL DEFAULT 'always',
+  dry_run INTEGER NOT NULL DEFAULT 1,
+  max_runs_per_hour INTEGER NOT NULL DEFAULT 20,
+  quiet_hours_start TEXT,
+  quiet_hours_end TEXT,
+  last_run_at TEXT,
+  next_run_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_audit_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER REFERENCES automation_workflows(id) ON DELETE SET NULL,
+  task_run_id INTEGER REFERENCES task_runs(id) ON DELETE SET NULL,
+  task_step_id INTEGER REFERENCES task_steps(id) ON DELETE SET NULL,
+  actor TEXT NOT NULL DEFAULT 'system',
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_run_id INTEGER REFERENCES task_runs(id) ON DELETE CASCADE,
+  task_step_id INTEGER REFERENCES task_steps(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  read_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_loop_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'running',
+  prompt TEXT NOT NULL,
+  messages_json TEXT NOT NULL DEFAULT '[]',
+  transcript_json TEXT NOT NULL DEFAULT '[]',
+  pending_approvals_json TEXT NOT NULL DEFAULT '[]',
+  approved_tool_names_json TEXT NOT NULL DEFAULT '[]',
+  allow_write_tools INTEGER NOT NULL DEFAULT 0,
+  max_turns INTEGER NOT NULL DEFAULT 8,
+  turn_count INTEGER NOT NULL DEFAULT 0,
+  provider TEXT,
+  model TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_audit_events_run_created_idx ON agent_audit_events(task_run_id, created_at);
+CREATE INDEX IF NOT EXISTS agent_audit_events_workflow_created_idx ON agent_audit_events(workflow_id, created_at);
+CREATE INDEX IF NOT EXISTS agent_notifications_unread_idx ON agent_notifications(read_at, created_at);
+CREATE INDEX IF NOT EXISTS agent_loop_sessions_status_updated_idx ON agent_loop_sessions(status, updated_at);
+CREATE INDEX IF NOT EXISTS agent_loop_sessions_message_updated_idx ON agent_loop_sessions(message_id, updated_at);
+`);
 }
 
 function migrateAiProfileColumns() {
@@ -859,6 +1093,19 @@ function migrateAiProfileColumns() {
   for (const [name, definition] of additions) {
     if (!existing.has(name))
       sqlite.exec(`ALTER TABLE ai_profiles ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function migrateAgentToolColumns() {
+  const columns = sqlite.prepare(`PRAGMA table_info(agent_tools)`).all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  const additions: Array<[string, string]> = [
+    ['output_schema_json', 'TEXT'],
+    ['allowed_hosts_json', 'TEXT'],
+    ['max_input_bytes', 'INTEGER NOT NULL DEFAULT 200000']
+  ];
+  for (const [name, definition] of additions) {
+    if (!existing.has(name)) sqlite.exec(`ALTER TABLE agent_tools ADD COLUMN "${name}" ${definition};`);
   }
 }
 
@@ -950,11 +1197,15 @@ DELETE FROM thread_summaries;
 DELETE FROM ai_observability;
 DELETE FROM autopilot_runs;
 DELETE FROM agent_action_queue;
+DELETE FROM agent_notifications;
+DELETE FROM agent_audit_events;
+DELETE FROM agent_loop_sessions;
 DELETE FROM feedback_log;
 DELETE FROM ai_suggestions;
 DELETE FROM tool_calls;
 DELETE FROM task_steps;
 DELETE FROM task_runs;
+DELETE FROM automation_workflows;
 DELETE FROM agent_tools;
 DELETE FROM obsidian_settings;
 DELETE FROM automation_policies;

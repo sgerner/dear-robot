@@ -245,7 +245,7 @@
   }
 </script>
 
-<div class="mx-auto max-w-4xl pb-20 animate-fade-in">
+<div class="mx-auto max-w-4xl pb-20 animate-fade-in" in:fade={{ duration: 180 }}>
   <!-- Page Header -->
   <div class="mb-8">
     <div class="flex items-center gap-3">
@@ -362,7 +362,7 @@
               <div class="px-1">
                 <div class="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit border border-border/40">
                   <button
-                    class="px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {profileMode[
+                    class="touch-target px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {profileMode[
                       profileKey
                     ] === 'catalog'
                       ? 'bg-background text-foreground shadow-sm'
@@ -372,7 +372,7 @@
                     Model Registry
                   </button>
                   <button
-                    class="px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {profileMode[
+                    class="touch-target px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {profileMode[
                       profileKey
                     ] === 'manual'
                       ? 'bg-background text-foreground shadow-sm'

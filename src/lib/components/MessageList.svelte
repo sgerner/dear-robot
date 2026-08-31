@@ -2,7 +2,7 @@
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import MessageRow from '$lib/components/MessageRow.svelte';
   import { flip } from 'svelte/animate';
-  import { slide } from 'svelte/transition';
+  import { fade, fly, slide } from 'svelte/transition';
 
   let {
     messages = [],
@@ -86,6 +86,7 @@
     <div
       class="mx-2 border-b border-border/25 py-0.5 last:border-b-0"
       animate:flip={{ duration: 200 }}
+      in:fly={{ y: 6, duration: 180 }}
       out:slide={{ duration: 200 }}
     >
       <MessageRow
@@ -129,8 +130,8 @@
   {/each}
 
   {#if messages.length === 0}
-    <div class="flex h-48 flex-col items-center justify-center gap-2 text-muted-foreground">
-      <div class="h-10 w-10 bg-muted/30 flex items-center justify-center">
+    <div class="flex h-48 flex-col items-center justify-center gap-2 text-muted-foreground" in:fade={{ duration: 180 }}>
+      <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted/30">
         <svg
           class="h-5 w-5 text-muted-foreground"
           viewBox="0 0 24 24"
@@ -147,5 +148,10 @@
       </div>
       <p class="text-sm">No messages</p>
     </div>
+  {/if}
+
+  {#if isMobileViewport && messages.length > 0}
+    <!-- Keep the last expanded message clear of the fixed mobile action bar. -->
+    <div class="h-24 shrink-0" aria-hidden="true"></div>
   {/if}
 </ScrollArea>

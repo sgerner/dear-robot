@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Download, Upload } from 'lucide-svelte';
+  import { fade } from 'svelte/transition';
   import DictationButton from '$lib/components/DictationButton.svelte';
 
   let {
@@ -43,7 +44,8 @@
   }>();
 </script>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="space-y-4" in:fade={{ duration: 180 }}>
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Encrypted Browser Cache</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Optional client-side encryption for IndexedDB cache on shared devices. Use a local passphrase.
@@ -51,6 +53,7 @@
   <div class="mt-3 flex flex-wrap items-center gap-2">
     <input
       class="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm md:w-auto md:flex-1"
+      aria-label="Cache passphrase"
       placeholder="Cache passphrase (local browser only)"
       type="password"
       bind:value={cachePassphrase}
@@ -63,7 +66,7 @@
   <p class="mt-2 text-xs text-zinc-500">Status: {cacheEncrypted ? 'enabled' : 'disabled'}</p>
 </div>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Backups</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Create and restore `/data` snapshots for disaster recovery. Restore rewrites current DB state.
@@ -102,7 +105,7 @@
   </div>
 </div>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Admin Audit Snapshot</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Quick visibility into executed actions, tool calls, and memory learning events.
@@ -113,7 +116,7 @@
     >
   </div>
   {#if auditSnapshot}
-    <div class="mt-3 grid gap-2 md:grid-cols-3">
+    <div class="mt-3 grid gap-2 md:grid-cols-3" in:fade={{ duration: 160 }}>
       <div class="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-zinc-300">
         Executed actions: {auditSnapshot.actions}
       </div>
@@ -127,7 +130,7 @@
   {/if}
 </div>
 
-<div class="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-5">
+<div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Contacts Import/Export</h3>
   <p class="mt-2 text-sm text-zinc-400">
     Export copies CSV to clipboard. Import accepts <code>email,name</code> or
@@ -147,6 +150,7 @@
     <textarea
       id="contacts-import-csv"
       class="min-h-28 w-full rounded-md border border-white/10 bg-black/30 p-3 pr-12 text-xs outline-none"
+      aria-label="Contacts CSV"
       placeholder="email,name&#10;person@example.com,Person Name"
       bind:value={contactsImportCsv}
     ></textarea>
@@ -161,4 +165,5 @@
       />
     </div>
   </div>
+</div>
 </div>

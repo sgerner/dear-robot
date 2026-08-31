@@ -86,13 +86,19 @@ JSON schema:
   "complexity": "simple|advanced",
   "requires_user_approval": true,
   "final_reply_draft": "string|null",
+  "max_turns": 8,
   "steps": [
     {
       "title": "string",
-      "kind": "draft_reply|move_to_folder|tool_call|delegate|mark_done",
+      "kind": "draft_reply|send_reply|move_to_folder|tool_call|delegate|mark_done|notify",
       "details": "string",
       "tool_name": "string|null",
       "tool_input": {},
+      "depends_on": [1],
+      "condition": {"path":"steps.1.output.ok","operator":"equals","value":true},
+      "output_key": "lookup",
+      "max_attempts": 3,
+      "retry_delay_ms": 1000,
       "requires_approval": true,
       "risk_level": "low|medium|high"
     }
@@ -103,6 +109,8 @@ Safety:
 - legal/financial/hr/medical/tax/contract/refund/chargeback/sensitive personal data => medium/high risk.
 - never auto-send.
 - never permanently delete.
+- use dependencies and output_key when one step needs the result of another.
+- use conditions only for deterministic checks against prior step outputs; never invent executable expressions.
 - if uncertain, ask for approval in the plan.
 - for advanced tasks, use related emails outside the thread when relevant.
 - prefer mailbox_search when you need historical context by sender, subject, or topic.`

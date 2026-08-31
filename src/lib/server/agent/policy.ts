@@ -7,7 +7,13 @@ export type AgentPolicyDecision = {
 };
 
 export function assessAgentAction(input: {
-  action: RecommendedAction | 'tool_call' | 'draft_reply' | 'mark_done';
+  action:
+    | RecommendedAction
+    | 'tool_call'
+    | 'draft_reply'
+    | 'send_reply'
+    | 'mark_done'
+    | 'notify';
   subject?: string | null;
   bodyText?: string | null;
   toolReadOnly?: boolean | null;
@@ -23,7 +29,7 @@ export function assessAgentAction(input: {
     riskLevel = 'medium';
     reasons.push('Business-critical or time-sensitive topic detected.');
   }
-  if (['reply', 'forward', 'delegate'].includes(input.action)) {
+  if (['reply', 'forward', 'delegate', 'send_reply'].includes(input.action)) {
     reasons.push('External communication requires review.');
   }
   if (input.action === 'delete') {
@@ -42,7 +48,7 @@ export function assessAgentAction(input: {
     riskLevel,
     requiresApproval:
       riskLevel !== 'low' ||
-      ['reply', 'forward', 'delegate', 'delete'].includes(input.action) ||
+      ['reply', 'forward', 'delegate', 'send_reply', 'delete'].includes(input.action) ||
       (input.action === 'tool_call' && !input.toolReadOnly),
     reasons: reasons.length ? reasons : ['Low-risk reversible action.']
   } satisfies AgentPolicyDecision;

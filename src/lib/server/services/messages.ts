@@ -1145,7 +1145,7 @@ export async function executeSuggestion(id: number) {
       details = { handledWithoutMove: true };
     }
   } else if (action === 'delegate') {
-    details = await dispatchDelegateWebhooks(
+    details = await dispatchDelegateForAgent(
       message.id,
       suggestion.id,
       suggestion.delegateInstructions || ''
@@ -1189,7 +1189,7 @@ function resolveTargetFolder(accountId: number, suggestion: typeof aiSuggestions
   return undefined;
 }
 
-async function dispatchDelegateWebhooks(
+export async function dispatchDelegateForAgent(
   messageId: number,
   suggestionId: number,
   instructions: string

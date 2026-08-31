@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade, slide } from 'svelte/transition';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
   import { formatPlainText } from '$lib/utils/format';
@@ -46,18 +47,19 @@
   }>();
 </script>
 
-<div class="mt-6 space-y-4">
+<div class="mt-6 space-y-4" in:fade={{ duration: 180 }}>
   <h3 class="text-xl font-semibold">Memory</h3>
-  <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+  <div class="surface-section rounded-lg p-4">
     <p class="text-sm font-medium">Memory Assistant</p>
     <p class="mt-1 text-xs text-zinc-500">
       Describe how memory should change. The assistant will update profile and rules for you.
     </p>
-    <div class="mt-3 flex gap-2">
+    <div class="mt-3 flex flex-col gap-2 sm:flex-row">
       <div class="flex min-w-0 flex-1 items-center gap-2">
         <input
           id="memory-assistant-prompt"
           class="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"
+          aria-label="Memory assistant prompt"
           placeholder="Example: prioritize short replies for wholesale quotes and keep greetings warm"
           bind:value={memoryAssistantPrompt}
         />
@@ -71,7 +73,7 @@
         />
       </div>
       <button
-        class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
+        class="touch-target inline-flex items-center justify-center whitespace-nowrap rounded-md bg-primary/80 px-3 text-xs font-medium text-primary-foreground transition-all duration-300 hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] sm:self-center"
         onclick={applyMemoryAssistant}>Apply</button
       >
     </div>
@@ -80,6 +82,7 @@
     <textarea
       id="memory-core-profile"
       class="min-h-40 w-full resize-y rounded-lg border border-white/10 bg-black/40 p-3 pr-12 text-sm leading-6 outline-none"
+      aria-label="Core memory profile"
       bind:value={coreProfileText}
     ></textarea>
     <div class="absolute right-2 top-2">
@@ -93,7 +96,7 @@
       />
     </div>
   </div>
-  <div class="flex gap-2">
+  <div class="flex flex-wrap items-center gap-2">
     <button
       class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
       onclick={saveCoreProfile}>Save Core Profile</button
@@ -104,7 +107,7 @@
       onchange={(checked) => setAdvancedMemoryMode(checked)}
     />
   </div>
-  <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+  <div class="surface-section rounded-lg p-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p class="text-sm font-medium">skills.md</p>
@@ -121,6 +124,7 @@
       <textarea
         id="memory-skills"
         class="min-h-32 w-full resize-y rounded-lg border border-white/10 bg-black/40 p-3 pr-12 text-sm leading-6 outline-none"
+        aria-label="skills.md memory playbook"
         bind:value={skillsText}
       ></textarea>
       <div class="absolute right-2 top-2">
@@ -134,7 +138,7 @@
         />
       </div>
     </div>
-    <div class="mt-3 flex gap-2">
+    <div class="mt-3 flex flex-wrap gap-2">
       <button
         class="inline-flex items-center justify-center whitespace-nowrap font-medium ring-offset-background transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-primary/80 text-primary-foreground hover:bg-primary h-8 rounded-md px-3 text-xs"
         onclick={saveSkills}>Save Skills</button
@@ -145,10 +149,11 @@
     </div>
   </div>
   {#if memoryAdvancedMode}
-    <div class="relative">
+    <div class="relative" transition:slide={{ duration: 180 }}>
       <textarea
         id="memory-advanced"
         class="min-h-36 w-full rounded-lg border border-white/10 bg-black/40 p-3 pr-12 font-mono text-xs leading-6 outline-none"
+        aria-label="Advanced memory file"
         bind:value={memoryText}
       ></textarea>
       <div class="absolute right-2 top-2">
@@ -162,7 +167,7 @@
         />
       </div>
     </div>
-    <div class="flex gap-2">
+    <div class="flex flex-wrap gap-2">
       <button class="rounded-md border border-white/10 px-3 py-2 text-sm" onclick={saveMemory}
         >Save Memory File</button
       >
@@ -172,7 +177,7 @@
     </div>
   {/if}
   <div class="grid gap-4 md:grid-cols-2">
-    <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+    <div class="surface-section rounded-lg p-4">
       <p class="text-sm font-medium">Learned Rules</p>
       <div class="mt-3 space-y-2">
         {#each data.memoryOverview?.rules || [] as rule (rule.id)}
@@ -192,7 +197,7 @@
         {/each}
       </div>
     </div>
-    <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+    <div class="surface-section rounded-lg p-4">
       <p class="text-sm font-medium">Recent Memory Events</p>
       <div class="mt-3 space-y-2">
         {#each data.memoryOverview?.events || [] as event (event.id)}
@@ -206,7 +211,7 @@
       </div>
     </div>
   </div>
-  <div class="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+  <div class="surface-section rounded-lg p-4">
     <p class="text-sm font-medium">Top Learned Examples</p>
     <div class="mt-3 space-y-2">
       {#each data.memoryOverview?.examples || [] as example (example.id)}

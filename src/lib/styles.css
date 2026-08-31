@@ -398,6 +398,19 @@
     outline-offset: 2px;
   }
 
+  /* Keep native controls consistent with the app typography and interaction model. */
+  :where(button, input, textarea, select) {
+    font: inherit;
+  }
+
+  :where(button, [role='button'], a) {
+    touch-action: manipulation;
+  }
+
+  :where(button, input, textarea, select):disabled {
+    cursor: not-allowed;
+  }
+
   /* Selection color - primary glow */
   ::selection {
     background: oklch(from var(--primary) l c h / 0.4);
@@ -406,6 +419,65 @@
 }
 
 @layer components {
+  /* Shared controls for settings and other dense forms. Using one tokenized surface keeps
+   * the many settings panels readable across all of the selectable themes. */
+  .settings-content :where(input:not([type='file']), select, textarea) {
+    color: var(--color-foreground);
+    border-color: color-mix(in srgb, var(--color-border) 80%, transparent);
+    background-color: color-mix(in srgb, var(--color-background) 88%, transparent);
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .settings-content :where(input:not([type='file']), select) {
+    min-height: 2.75rem;
+  }
+
+  .settings-content :where(input:not([type='file']), select, textarea)::placeholder {
+    color: var(--color-muted-foreground);
+    opacity: 0.8;
+  }
+
+  .settings-content :where(input:not([type='file']), select, textarea):hover {
+    border-color: color-mix(in srgb, var(--color-ring) 45%, var(--color-border));
+  }
+
+  .settings-content :where(input:not([type='file']), select, textarea):focus-visible {
+    border-color: var(--color-ring);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ring) 22%, transparent);
+  }
+
+  .touch-target {
+    min-block-size: 2.75rem;
+    min-inline-size: 2.75rem;
+  }
+
+  .surface-section {
+    border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+    background: color-mix(in srgb, var(--color-card) 76%, transparent);
+    box-shadow: 0 8px 30px oklch(0 0 0 / 0.12);
+    backdrop-filter: blur(16px) saturate(130%);
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease;
+  }
+
+  .surface-section:hover {
+    border-color: color-mix(in srgb, var(--color-ring) 32%, var(--color-border));
+  }
+
+  .surface-section:focus-within {
+    border-color: color-mix(in srgb, var(--color-ring) 62%, var(--color-border));
+    box-shadow:
+      0 8px 30px oklch(0 0 0 / 0.12),
+      0 0 0 3px color-mix(in srgb, var(--color-ring) 14%, transparent);
+  }
+
   /* Glass morphism cards */
   .glass-card {
     background: linear-gradient(
@@ -519,6 +591,55 @@
   }
 }
 
+/* Mobile browser chrome changes the visual viewport; use dynamic viewport units for app shells. */
+@media (max-width: 1023px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  body::before {
+    opacity: 0.018;
+  }
+
+  body::after {
+    opacity: 0.56;
+  }
+
+  .backdrop-cinematic {
+    backdrop-filter: blur(12px) saturate(145%);
+    -webkit-backdrop-filter: blur(12px) saturate(145%);
+  }
+
+  .settings-content {
+    padding-bottom: max(6rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .settings-content :where(input:not([type='file']), select) {
+    min-height: 3rem;
+  }
+
+  .settings-content :where(button, [role='button']) {
+    min-height: 2.75rem;
+  }
+
+  .settings-content {
+    overflow-x: hidden;
+  }
+}
+
+/* Svelte transitions and CSS effects should never make the interface unusable for people who
+ * request reduced motion. The short duration keeps state changes perceptible without movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @layer utilities {
   /* Text balance for better typography */
   .text-balance {
@@ -619,6 +740,77 @@
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
+}
+
+/* A few legacy settings controls still carry fixed zinc/black utility colors. Re-map those
+ * utilities inside the settings surface so light themes and high-contrast palettes stay legible. */
+.settings-content [class*='text-zinc-500'],
+.settings-content [class*='text-zinc-600'] {
+  color: var(--color-muted-foreground);
+}
+
+.settings-content [class*='text-zinc-200'],
+.settings-content [class*='text-zinc-300'],
+.settings-content [class*='text-zinc-100'] {
+  color: var(--color-foreground);
+}
+
+.settings-content [class*='text-zinc-400'] {
+  color: var(--color-muted-foreground);
+}
+
+.settings-content [class*='border-white/'] {
+  border-color: color-mix(in srgb, var(--color-border) 75%, transparent);
+}
+
+.settings-content [class*='bg-black/'] {
+  background-color: color-mix(in srgb, var(--color-background) 72%, transparent);
+}
+
+.settings-content [class*='bg-zinc-'] {
+  background-color: color-mix(in srgb, var(--color-card) 88%, var(--color-background));
+}
+
+.settings-content [class*='bg-white/'] {
+  background-color: color-mix(in srgb, var(--color-card) 68%, transparent);
+}
+
+/* Keep the remaining legacy status/accent utilities inside settings aligned with the
+ * active Skeleton theme. These selectors are intentionally scoped so email content and
+ * provider-specific badges can keep their own visual language. */
+.settings-content [class*='text-sky-'],
+.settings-content [class*='text-emerald-'] {
+  color: var(--color-primary);
+}
+
+.settings-content [class*='border-sky-'],
+.settings-content [class*='border-emerald-'] {
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+}
+
+.settings-content [class*='bg-sky-'],
+.settings-content [class*='bg-emerald-'] {
+  background-color: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.settings-content [class*='text-red-'] {
+  color: var(--color-destructive);
+}
+
+.settings-content [class*='border-red-'] {
+  border-color: color-mix(in srgb, var(--color-destructive) 42%, var(--color-border));
+}
+
+.settings-content [class*='bg-red-'] {
+  background-color: color-mix(in srgb, var(--color-destructive) 14%, transparent);
+}
+
+.settings-content :where(code) {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Email HTML content styles */

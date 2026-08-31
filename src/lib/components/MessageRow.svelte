@@ -19,7 +19,7 @@
   import { slide, fade } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
-  import { formatPlainText } from '$lib/utils/format';
+  import { formatActionLabel, formatPlainText } from '$lib/utils/format';
   import { getCache, upsertCache } from '$lib/client/local-cache';
 
   let {
@@ -176,11 +176,6 @@
     if (open) void loadDetail();
   });
 
-  function handleRowClick(e: Event) {
-    const target = e.target as HTMLElement;
-    if (target.closest('button, select, textarea, input, a, details, summary')) return;
-    onToggle(message.id);
-  }
 </script>
 
 <div
@@ -220,7 +215,9 @@
   <!-- Message row wrapper -->
   <div
     data-row-click
-    class={`block w-full text-left transition-all duration-150 ${
+    role="group"
+    aria-label={`Message row: ${message.subject || 'Untitled'}`}
+    class={`touch-pan-y block w-full text-left transition-all duration-150 ${
       selectedConversationKey === message.conversationKey || selectedId === message.id
         ? 'bg-primary/[0.06] border-l-2 border-l-primary'
         : 'border-l-2 border-l-transparent hover:bg-muted/30'
@@ -230,123 +227,131 @@
     onpointermove={updateSwipe}
     onpointerup={(e) => finishSwipe(e, message.id)}
     onpointercancel={cancelSwipe}
-    onclick={handleRowClick}
-    onkeydown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onToggle(message.id);
-      }
-    }}
-    role="button"
-    tabindex="0"
   >
     <!-- Preview header (always visible, unified with body when open) -->
     <div class="px-3 py-2 min-w-0 {open ? 'pb-1' : ''}">
-      <!-- Line 1: From + inline badge + date + toggles -->
-      <div class="flex items-center gap-2 min-w-0">
-        <p
-          class={`truncate text-sm flex-1 min-w-0 ${message.isRead ? 'text-muted-foreground font-normal' : 'font-semibold text-foreground'}`}
-        >
-          {#if message.isFlagged}
-            <Star size={12} class="inline fill-primary text-primary mr-1 -mt-0.5" />
+      <button
+        type="button"
+        class="block min-w-0 w-full text-left rounded-sm transition-colors hover:bg-muted/20 focus-visible:bg-muted/20"
+        onclick={() => onToggle(message.id)}
+        aria-expanded={open}
+        aria-label={`${open ? 'Collapse' : 'Open'} message: ${message.subject || 'Untitled'}`}
+      >
+        <!-- Line 1: From + inline badge + date -->
+        <div class="flex items-center gap-2 min-w-0">
+          <p
+            class={`truncate text-sm flex-1 min-w-0 ${message.isRead ? 'text-muted-foreground font-normal' : 'font-semibold text-foreground'}`}
+          >
+            {#if message.isFlagged}
+              <Star size={12} class="inline fill-primary text-primary mr-1 -mt-0.5" />
+            {/if}
+            {message.from}
+          </p>
+
+          {#if message.suggestionStatus}
+            <span
+              class="shrink-0 text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {message.riskLevel ===
+              'high'
+                ? 'bg-destructive/15 text-destructive'
+                : message.riskLevel === 'medium'
+                  ? 'bg-muted/50 text-muted-foreground'
+                  : 'bg-primary/15 text-primary'}"
+            >
+              {formatActionLabel(message.recommendedAction)}
+            </span>
           {/if}
-          {message.from}
+
+          <time
+            class="shrink-0 text-xs tabular-nums tracking-tight text-muted-foreground"
+          >
+            {open && detail?.message?.date
+              ? fullFormatDate(detail.message.date)
+              : formatDate(message.date)}
+          </time>
+        </div>
+
+        <!-- Line 2: Subject -->
+        <p
+          class={`truncate text-sm leading-tight ${message.isRead ? 'text-muted-foreground' : 'font-medium text-foreground'}`}
+        >
+          {message.subject}
+          {#if message.conversationCount > 1}
+            <span class="ml-2 inline-flex items-center rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              {message.conversationCount} msgs
+            </span>
+          {/if}
         </p>
 
-        {#if message.suggestionStatus}
-          <span
-            class="shrink-0 text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {message.riskLevel ===
-            'high'
-              ? 'bg-destructive/15 text-destructive'
-              : message.riskLevel === 'medium'
-                ? 'bg-muted/50 text-muted-foreground'
-                : 'bg-primary/15 text-primary'}"
-          >
-            {message.recommendedAction}
-          </span>
-        {/if}
-
-        {#if open && detail?.message?.safeBodyHtml}
-          <div class="shrink-0 flex items-center gap-1">
-            <!-- Light/Dark toggle -->
-            <div class="flex border border-border/40 p-0.5 bg-background">
-              <button
-                class={`px-1.5 py-0.5 transition-all duration-150 ${
-                  emailTheme === 'dark'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onclick={() => { emailTheme = 'dark'; }}
-                title="Dark Mode"
-              >
-                <Moon size={11} />
-              </button>
-              <button
-                class={`px-1.5 py-0.5 transition-all duration-150 ${
-                  emailTheme === 'light'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onclick={() => { emailTheme = 'light'; }}
-                title="Light Mode"
-              >
-                <Sun size={11} />
-              </button>
-            </div>
-            <!-- HTML/Plain toggle -->
-            <div class="flex border border-border/40 p-0.5 bg-background text-xs">
-              <button
-                class={`px-1.5 py-0.5 transition-all duration-150 ${
-                  bodyMode === 'html'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onclick={() => { bodyMode = 'html'; }}
-              >
-                H
-              </button>
-              <button
-                class={`px-1.5 py-0.5 transition-all duration-150 ${
-                  bodyMode === 'text'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onclick={() => { bodyMode = 'text'; }}
-              >
-                P
-              </button>
-            </div>
+        <!-- Line 3: Snippet (hidden when open) -->
+        {#if !open}
+          <div class="truncate text-xs leading-tight text-muted-foreground mt-0.5">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            {@html formatPlainText(message.snippet)}
           </div>
         {/if}
+      </button>
 
-        <time
-          class="shrink-0 text-xs tabular-nums tracking-tight {message.isRead
-            ? 'text-muted-foreground'
-            : 'text-muted-foreground'}"
-        >
-          {open && detail?.message?.date
-            ? fullFormatDate(detail.message.date)
-            : formatDate(message.date)}
-        </time>
-      </div>
-
-      <!-- Line 2: Subject -->
-      <p
-        class={`truncate text-sm leading-tight ${message.isRead ? 'text-muted-foreground' : 'font-medium text-foreground'}`}
-      >
-        {message.subject}
-        {#if message.conversationCount > 1}
-          <span class="ml-2 inline-flex items-center rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-            {message.conversationCount} msgs
-          </span>
-        {/if}
-      </p>
-
-      <!-- Line 3: Snippet (hidden when open) -->
-      {#if !open}
-        <div class="truncate text-xs leading-tight text-muted-foreground mt-0.5">
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          {@html formatPlainText(message.snippet)}        </div>
+      {#if open && detail?.message?.safeBodyHtml}
+        <div class="flex items-center justify-end gap-1 pt-1" role="group" aria-label="Message display options">
+          <!-- Light/Dark toggle -->
+          <div class="flex border border-border/40 p-0.5 bg-background">
+            <button
+              class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
+                emailTheme === 'dark'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onclick={() => { emailTheme = 'dark'; }}
+              title="Dark Mode"
+              aria-label="Use dark email theme"
+              aria-pressed={emailTheme === 'dark'}
+            >
+              <Moon size={11} />
+            </button>
+            <button
+              class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
+                emailTheme === 'light'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onclick={() => { emailTheme = 'light'; }}
+              title="Light Mode"
+              aria-label="Use light email theme"
+              aria-pressed={emailTheme === 'light'}
+            >
+              <Sun size={11} />
+            </button>
+          </div>
+          <!-- HTML/Plain toggle -->
+          <div class="flex border border-border/40 p-0.5 bg-background text-xs">
+            <button
+              class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
+                bodyMode === 'html'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onclick={() => { bodyMode = 'html'; }}
+              title="Show formatted HTML"
+              aria-label="Show formatted HTML"
+              aria-pressed={bodyMode === 'html'}
+            >
+              H
+            </button>
+            <button
+              class={`min-h-10 min-w-10 px-1.5 py-0.5 transition-all duration-150 lg:min-h-7 lg:min-w-7 ${
+                bodyMode === 'text'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onclick={() => { bodyMode = 'text'; }}
+              title="Show plain text"
+              aria-label="Show plain text"
+              aria-pressed={bodyMode === 'text'}
+            >
+              P
+            </button>
+          </div>
+        </div>
       {/if}
     </div>
 
@@ -354,7 +359,12 @@
     {#if open}
       <div class="px-3 pb-3" transition:slide={{ duration: 200 }}>
         {#if detailLoading}
-          <div class="py-4 text-xs text-muted-foreground">Loading...</div>
+          <div class="space-y-2.5 py-4" role="status" aria-label="Loading message">
+            <div class="h-3 w-3/4 animate-pulse rounded bg-muted/70"></div>
+            <div class="h-3 w-full animate-pulse rounded bg-muted/50"></div>
+            <div class="h-3 w-5/6 animate-pulse rounded bg-muted/50"></div>
+            <div class="h-20 w-full animate-pulse rounded-lg border border-border/40 bg-muted/30"></div>
+          </div>
         {:else if detail}
           <!-- Body content -->
           {#if bodyMode === 'html' && detail.message?.safeBodyHtml}
@@ -445,6 +455,7 @@
                     ? 'default'
                     : 'outline'}
                 size="sm"
+                class="hidden lg:inline-flex"
                 data-testid={`quick-action-${actionId.replace(/_/g, '-')}`}
                 onclick={() => { runQuickAction(actionId, message.id); }}
               >
@@ -457,10 +468,11 @@
               </Button>
             {/each}
 
-            <div class="h-5 w-px bg-border mx-0.5"></div>
+            <div class="hidden h-5 w-px bg-border mx-0.5 lg:block"></div>
 
             <select
-              class="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              class="touch-target h-11 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring lg:h-7"
+              aria-label="Move message to folder"
               onchange={(e) => { moveSelected(e.currentTarget.value); }}
             >
               <option value="">Move to...</option>
@@ -481,7 +493,7 @@
                   </div>
                   <div class="flex gap-1.5 shrink-0">
                     <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium bg-primary/15 text-primary">
-                      {detail.suggestion.recommendedAction}
+                      {formatActionLabel(detail.suggestion.recommendedAction)}
                     </span>
                     <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {detail.suggestion.riskLevel === 'high' ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground'}">
                       {detail.suggestion.riskLevel}
@@ -512,6 +524,7 @@
                     <textarea
                       id={`draft-reply-${message.id}`}
                       class="min-h-24 w-full resize-y bg-muted border border-border/40 p-2.5 pr-10 text-xs leading-relaxed outline-none placeholder:text-muted-foreground focus:border-primary/40 transition-all"
+                      aria-label="Draft reply"
                       placeholder="Draft reply..."
                       bind:value={draftText}
                     ></textarea>

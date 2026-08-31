@@ -26,7 +26,12 @@ export const AutopilotPolicySchema = z.object({
   maxMessagesPerRun: z.coerce.number().int().min(1).max(200).default(25),
   maxAutoActionsPerRun: z.coerce.number().int().min(0).max(100).default(5),
   followUpDays: z.coerce.number().int().min(1).max(30).default(2),
-  autoApproveReadOnlyToolCalls: z.boolean().default(true)
+  autoApproveReadOnlyToolCalls: z.boolean().default(true),
+  maxAgentTurns: z.coerce.number().int().min(1).max(24).default(8),
+  maxRunDurationMs: z.coerce.number().int().min(1000).max(900000).default(180000),
+  defaultMaxAttempts: z.coerce.number().int().min(1).max(8).default(3),
+  notificationEnabled: z.boolean().default(true),
+  timezone: z.string().max(80).default('UTC')
 });
 
 export const QueueBulkSchema = z.object({
@@ -70,6 +75,11 @@ export function getAutopilotPolicy() {
       maxMessagesPerRun: 25,
       maxAutoActionsPerRun: 5,
       followUpDays: 2,
+      maxAgentTurns: 8,
+      maxRunDurationMs: 180000,
+      defaultMaxAttempts: 3,
+      notificationEnabled: true,
+      timezone: 'UTC',
       createdAt: now,
       updatedAt: now
     })

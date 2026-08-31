@@ -7,6 +7,7 @@ import { env } from '$lib/server/env';
 import { checkRateLimit } from '$lib/server/rate-limit';
 import { startAutopilotScheduler } from '$lib/server/agent/autopilot';
 import { applyCliManifestOnStartup } from '$lib/server/agent/cli-installer';
+import { startWorkflowScheduler } from '$lib/server/agent/workflows';
 
 let booted = false;
 
@@ -17,6 +18,7 @@ function boot() {
   if (env.NODE_ENV !== 'test') {
     startSyncEngine();
     startAutopilotScheduler();
+    startWorkflowScheduler();
     applyCliManifestOnStartup();
   }
 }
@@ -42,6 +44,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   const isLogin = event.url.pathname.startsWith('/login');
   const isHealth = event.url.pathname === '/api/health';
   const isMcp = event.url.pathname.startsWith('/api/mcp');
+  const isWorkflowWebhook = /^\/api\/workflows\/\d+\/webhook$/.test(event.url.pathname);
+  const webhookBearer = event.request.headers.get('authorization');
+  const webhookTokenAuthorized =
+    isWorkflowWebhook && Boolean(env.MCP_AUTH_TOKEN) && webhookBearer === `Bearer ${env.MCP_AUTH_TOKEN}`;
   const isOAuth = event.url.pathname.startsWith('/api/accounts/google/start') || 
                   event.url.pathname.startsWith('/api/accounts/google/callback');
   const isApi = event.url.pathname.startsWith('/api/');
@@ -53,9 +59,19 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  if (!isHealth && !isLogin && !isOAuth && !isMcp && !event.locals.user.authenticated) {
+  if (
+    !isHealth &&
+    !isLogin &&
+    !isOAuth &&
+    !isMcp &&
+    !isWorkflowWebhook &&
+    !event.locals.user.authenticated
+  ) {
     if (isApi) throw error(401, 'Unauthorized');
     throw redirect(303, '/login');
+  }
+  if (isWorkflowWebhook && !event.locals.user.authenticated && !webhookTokenAuthorized) {
+    throw error(401, 'Unauthorized');
   }
 
   if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
@@ -67,12 +83,21 @@ export const handle: Handle = async ({ event, resolve }) => {
       });
       if (!limited.allowed) throw error(429, 'Rate limit exceeded');
     }
-    if (!sameOriginOrForm(event.request.headers)) throw error(403, 'Invalid origin');
+    if (!webhookTokenAuthorized && !sameOriginOrForm(event.request.headers)) {
+      throw error(403, 'Invalid origin');
+    }
     const headerToken = event.request.headers.get('x-csrf-token');
     const formHeader = event.request.headers
       .get('content-type')
       ?.includes('application/x-www-form-urlencoded');
-    if (!isLogin && !isMcp && isApi && headerToken !== event.locals.csrfToken && !formHeader) {
+    if (
+      !isLogin &&
+      !isMcp &&
+      !isWorkflowWebhook &&
+      isApi &&
+      headerToken !== event.locals.csrfToken &&
+      !formHeader
+    ) {
       throw error(403, 'Invalid CSRF token');
     }
   }
