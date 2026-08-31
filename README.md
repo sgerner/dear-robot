@@ -25,6 +25,7 @@ At a glance, Dear Robot gives you:
 - PWA support for a more app-like browser experience
 - Optional Obsidian vault mount for long-lived notes and handoffs
 - Optional live-provider test paths for IMAP, SMTP, and AI integrations
+- Server-side browser recipes that can collect dashboard reports and queue reviewed Farin uploads
 
 ## What It Is Good At
 
@@ -43,6 +44,37 @@ At a glance, Dear Robot gives you:
 - The Obsidian vault integration is optional. It only appears as a tool when the vault is mounted, readable, and enabled in Settings.
 - The app expects one operator account model. It is not designed as a multi-tenant SaaS.
 - Production requires persistent secrets. Do not rely on development defaults.
+
+## Browser Automations and Farin Reports
+
+Dear Robot can teach an agent a repeatable, multi-step dashboard task such as
+signing in to DoorDash or Uber Eats, opening the latest report, and downloading
+the CSV. Open **AI Operations -> Browser automations**, create a profile and
+recipe, then choose **Record**. A headed Chromium window opens on the host so
+you can complete the login and report flow. Password fields are not recorded;
+the encrypted, isolated browser profile keeps the authenticated session.
+
+Runs replay only allowlisted HTTP(S) URLs and store downloads beneath
+`DATA_DIR/browser/downloads`. Review the downloaded file, then choose **Upload to
+Farin**. Uploads are explicit and approval-gated in workflows. The Farin tenant
+CLI currently accepts JSON request bodies but does not expose a multipart file
+upload command, so the app uses Farin's authenticated multipart upload endpoint
+for the final file transfer (or its accounting automation secret endpoint when
+configured). No iframe or shared default Chrome profile is used.
+
+Recipes can create a paused, dry-run **every 7d** workflow. Enable it only after
+reviewing the generated steps; the browser collection and Farin upload remain
+separate, inspectable actions.
+
+For local development, install the browser once:
+
+```bash
+npx playwright install chromium
+```
+
+Set `FARIN_API_KEY` and `FARIN_COMPANY_ID` in the server environment, or enter
+them in the Browser automations panel. Secrets are encrypted with
+`ENCRYPTION_KEY` and are never serialized to the client.
 
 ## Cloudflare Worker Proxy (for VPS users)
 
@@ -179,6 +211,7 @@ If you do not want Obsidian support, remove the `/obsidian` volume mount. The fe
 ### Persistent paths inside the container
 
 - `/data` holds the SQLite database, memory files, backups, skills, and other runtime state.
+- `/data/browser` holds isolated Playwright profiles and downloaded report files. Keep this volume private.
 - `/obsidian` is the optional vault mount used by the Obsidian tool.
 
 Do not set `DB_PATH` manually in production. The app derives it from `DATA_DIR`.
@@ -212,6 +245,13 @@ Do not set `DB_PATH` manually in production. The app derives it from `DATA_DIR`.
 | `PORT` | `3000` | Port the Node server listens on. |
 | `DATA_DIR` | `/data` | Root directory for SQLite, memory, backups, and skills. Must be absolute. |
 | `DB_PATH` | derived from `DATA_DIR` | Not meant to be set manually. The app derives the SQLite path automatically. |
+| `BROWSER_HEADLESS` | `true` | Headless browser replay default. Recording always opens a headed window. |
+| `BROWSER_MAX_RUNTIME_MS` | `180000` | Maximum navigation/action timeout for a browser run. |
+| `BROWSER_MAX_DOWNLOAD_BYTES` | `31457280` | Maximum browser download and Farin upload size. |
+| `FARIN_API_HOST` | `https://farin.app` | Farin tenant API origin (localhost HTTP is allowed for development). |
+| `FARIN_API_KEY` | unset | Optional server bootstrap tenant API key. Prefer the encrypted UI setting. |
+| `FARIN_COMPANY_ID` | unset | Farin company id paired with the tenant key/automation secret. |
+| `FARIN_AUTOMATION_SECRET` | unset | Optional shared accounting automation secret used by the ingest endpoint. |
 
 ### AI profiles
 

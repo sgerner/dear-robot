@@ -330,6 +330,58 @@ CREATE TABLE IF NOT EXISTS obsidian_settings (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS browser_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  start_url TEXT NOT NULL,
+  allowed_hosts_json TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS browser_profiles_enabled_idx ON browser_profiles(enabled);
+CREATE TABLE IF NOT EXISTS browser_recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile_id INTEGER NOT NULL REFERENCES browser_profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  start_url TEXT NOT NULL,
+  actions_json TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_run_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS browser_recipes_profile_updated_idx ON browser_recipes(profile_id, updated_at);
+CREATE INDEX IF NOT EXISTS browser_recipes_enabled_idx ON browser_recipes(enabled);
+CREATE TABLE IF NOT EXISTS browser_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id INTEGER REFERENCES browser_recipes(id) ON DELETE SET NULL,
+  profile_id INTEGER REFERENCES browser_profiles(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  trigger_type TEXT NOT NULL DEFAULT 'manual',
+  current_action_index INTEGER NOT NULL DEFAULT 0,
+  download_path TEXT,
+  download_filename TEXT,
+  logs_json TEXT NOT NULL DEFAULT '[]',
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS browser_runs_recipe_created_idx ON browser_runs(recipe_id, created_at);
+CREATE INDEX IF NOT EXISTS browser_runs_status_created_idx ON browser_runs(status, created_at);
+CREATE TABLE IF NOT EXISTS farin_settings (
+  id INTEGER PRIMARY KEY,
+  host TEXT NOT NULL DEFAULT 'https://farin.app',
+  company_id TEXT,
+  api_key_encrypted TEXT,
+  automation_secret_encrypted TEXT,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS automation_workflows (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -569,6 +621,7 @@ CREATE TABLE IF NOT EXISTS memory_examples (
   migrateAiProfileColumns();
   migrateAgentToolColumns();
   ensureAutomationTables();
+  ensureBrowserAutomationTables();
   migrateWorkflowColumns();
   ensurePerformanceIndexes();
   backfillLatestSuggestionPointers();
@@ -1082,6 +1135,63 @@ CREATE INDEX IF NOT EXISTS agent_loop_sessions_message_updated_idx ON agent_loop
 `);
 }
 
+function ensureBrowserAutomationTables() {
+  sqlite.exec(`
+CREATE TABLE IF NOT EXISTS browser_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  start_url TEXT NOT NULL,
+  allowed_hosts_json TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS browser_profiles_enabled_idx ON browser_profiles(enabled);
+CREATE TABLE IF NOT EXISTS browser_recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile_id INTEGER NOT NULL REFERENCES browser_profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  start_url TEXT NOT NULL,
+  actions_json TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_run_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS browser_recipes_profile_updated_idx ON browser_recipes(profile_id, updated_at);
+CREATE INDEX IF NOT EXISTS browser_recipes_enabled_idx ON browser_recipes(enabled);
+CREATE TABLE IF NOT EXISTS browser_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id INTEGER REFERENCES browser_recipes(id) ON DELETE SET NULL,
+  profile_id INTEGER REFERENCES browser_profiles(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  trigger_type TEXT NOT NULL DEFAULT 'manual',
+  current_action_index INTEGER NOT NULL DEFAULT 0,
+  download_path TEXT,
+  download_filename TEXT,
+  logs_json TEXT NOT NULL DEFAULT '[]',
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS browser_runs_recipe_created_idx ON browser_runs(recipe_id, created_at);
+CREATE INDEX IF NOT EXISTS browser_runs_status_created_idx ON browser_runs(status, created_at);
+CREATE TABLE IF NOT EXISTS farin_settings (
+  id INTEGER PRIMARY KEY,
+  host TEXT NOT NULL DEFAULT 'https://farin.app',
+  company_id TEXT,
+  api_key_encrypted TEXT,
+  automation_secret_encrypted TEXT,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`);
+}
+
 function migrateAiProfileColumns() {
   const columns = sqlite.prepare(`PRAGMA table_info(ai_profiles)`).all() as Array<{ name: string }>;
   const existing = new Set(columns.map((column) => column.name));
@@ -1208,6 +1318,10 @@ DELETE FROM task_runs;
 DELETE FROM automation_workflows;
 DELETE FROM agent_tools;
 DELETE FROM obsidian_settings;
+DELETE FROM browser_runs;
+DELETE FROM browser_recipes;
+DELETE FROM browser_profiles;
+DELETE FROM farin_settings;
 DELETE FROM automation_policies;
 DELETE FROM ai_profiles;
     DELETE FROM oauth_providers;

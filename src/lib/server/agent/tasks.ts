@@ -49,6 +49,8 @@ import {
   resolveTemplates,
   type WorkflowContext
 } from './runtime';
+import { listBrowserRecipes, runBrowserRecipe } from '../browser';
+import { uploadFarinFile } from '../farin';
 
 const BUILTIN_MAILBOX_SEARCH_TOOL = {
   name: 'mailbox_search',
@@ -165,6 +167,24 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     (folder) => folder.path
   );
   const tools = listAvailableAgentTools().filter((tool) => tool.isEnabled);
+  const browserTools = listBrowserRecipes()
+    .filter((recipe) => recipe.enabled)
+    .map((recipe) => ({
+      name: `browser_recipe:${recipe.id}`,
+      description: `${recipe.description || recipe.name} (downloads a report from ${recipe.startUrl})`,
+      kind: 'browser_recipe',
+      readOnly: false,
+      skillsMarkdown:
+        'Replays only the saved allowlisted actions. Password fields are never replayed; the user must log in once while recording.'
+    }));
+  const farinTool = {
+    name: 'farin_upload',
+    description: 'Upload a browser-downloaded report to the configured Farin company after explicit review.',
+    kind: 'farin_upload',
+    readOnly: false,
+    skillsMarkdown:
+      'Requires an approved browser download path. This is always a high-risk external write.'
+  };
   const unifiedContext = buildUnifiedAgentContext(messageId, {
     note: parsed.note || null,
     includeBody: false,
@@ -191,7 +211,7 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
     obligations: unifiedContext?.openObligations || [],
     recentOutcomes: unifiedContext?.recentOutcomes || [],
     threadSummary: unifiedContext?.threadSummary || null,
-    tools: [BUILTIN_MAILBOX_SEARCH_TOOL, ...tools].map((tool) => ({
+    tools: [BUILTIN_MAILBOX_SEARCH_TOOL, ...tools, ...browserTools, farinTool].map((tool) => ({
       name: tool.name,
       description: tool.description || 'No description',
       kind: tool.kind,
@@ -773,10 +793,29 @@ async function executeStep(
     : null;
   if (
     workflow?.dryRun &&
-    ['draft_reply', 'send_reply', 'move_to_folder', 'delegate', 'mark_done', 'notify'].includes(step.kind)
+    [
+      'draft_reply',
+      'send_reply',
+      'move_to_folder',
+      'browser_recipe',
+      'farin_upload',
+      'delegate',
+      'mark_done',
+      'notify'
+    ].includes(step.kind)
   ) {
     const preview = step.kind === 'draft_reply' ? String(input.draft || step.details) : null;
-    return { dryRun: true, action: step.kind, preview };
+    return {
+      dryRun: true,
+      action: step.kind,
+      preview,
+      ...(step.kind === 'browser_recipe'
+        ? { recipeId: parseRecipeId(step.toolName, input) }
+        : {}),
+      ...(step.kind === 'farin_upload'
+        ? { filePath: typeof input.file_path === 'string' ? input.file_path : input.filePath || null }
+        : {})
+    };
   }
   if (step.kind === 'draft_reply') {
     const body = String(input.draft || step.details);
@@ -851,6 +890,32 @@ async function executeStep(
     if (!executed.ok) throw new Error(JSON.stringify(executed.output));
     return executed.output;
   }
+  if (step.kind === 'browser_recipe') {
+    const recipeId = parseRecipeId(step.toolName, input);
+    if (!recipeId) throw new Error('browser_recipe step requires tool_name browser_recipe:<id> or recipeId');
+    return runBrowserRecipe(recipeId, {
+      taskRunId: run.id,
+      taskStepId: step.id,
+      headless: true
+    });
+  }
+  if (step.kind === 'farin_upload') {
+    const filePath =
+      typeof input.file_path === 'string'
+        ? input.file_path
+        : typeof input.filePath === 'string'
+          ? input.filePath
+          : null;
+    if (!filePath) throw new Error('farin_upload step requires file_path from a browser_recipe output');
+    return uploadFarinFile({
+      filePath,
+      filename: typeof input.filename === 'string' ? input.filename : undefined,
+      companyId: typeof input.company_id === 'string' ? input.company_id : undefined,
+      force: input.force === true,
+      taskRunId: run.id,
+      taskStepId: step.id
+    });
+  }
   if (step.kind === 'delegate') {
     return dispatchDelegateForAgent(message.id, run.suggestionId || 0, String(input.instructions || step.details));
   }
@@ -879,6 +944,13 @@ async function executeStep(
     return { done: true, obligations, reminders, note: step.details };
   }
   throw new Error(`Unsupported task step kind: ${step.kind}`);
+}
+
+function parseRecipeId(toolName: string | null, input: Record<string, unknown>) {
+  const fromTool = toolName?.match(/^browser_recipe:(\d+)$/)?.[1];
+  const raw = fromTool || input.recipeId || input.recipe_id;
+  const recipeId = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  return Number.isInteger(recipeId) && recipeId > 0 ? recipeId : null;
 }
 
 function classifyComplexity(subject: string, bodyText: string, note: string | null) {

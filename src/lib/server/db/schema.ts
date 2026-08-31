@@ -483,6 +483,91 @@ export const obsidianSettings = sqliteTable('obsidian_settings', {
 });
 
 /**
+ * Browser automation is intentionally represented as small, inspectable
+ * records. Chromium profiles live under DATA_DIR and are addressed by id;
+ * arbitrary filesystem paths and executable scripts never enter recipe JSON.
+ */
+export const browserProfiles = sqliteTable(
+  'browser_profiles',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    startUrl: text('start_url').notNull(),
+    allowedHostsJson: text('allowed_hosts_json').notNull().default('[]'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    lastUsedAt: text('last_used_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    enabledIdx: index('browser_profiles_enabled_idx').on(table.enabled)
+  })
+);
+
+export const browserRecipes = sqliteTable(
+  'browser_recipes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    profileId: integer('profile_id')
+      .notNull()
+      .references(() => browserProfiles.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    startUrl: text('start_url').notNull(),
+    actionsJson: text('actions_json').notNull().default('[]'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    lastRunAt: text('last_run_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull()
+  },
+  (table) => ({
+    profileUpdatedIdx: index('browser_recipes_profile_updated_idx').on(
+      table.profileId,
+      table.updatedAt
+    ),
+    enabledIdx: index('browser_recipes_enabled_idx').on(table.enabled)
+  })
+);
+
+export const browserRuns = sqliteTable(
+  'browser_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    recipeId: integer('recipe_id').references(() => browserRecipes.id, { onDelete: 'set null' }),
+    profileId: integer('profile_id').references(() => browserProfiles.id, { onDelete: 'set null' }),
+    status: text('status', {
+      enum: ['recording', 'running', 'needs_attention', 'completed', 'failed', 'cancelled']
+    })
+      .notNull()
+      .default('running'),
+    triggerType: text('trigger_type').notNull().default('manual'),
+    currentActionIndex: integer('current_action_index').notNull().default(0),
+    downloadPath: text('download_path'),
+    downloadFilename: text('download_filename'),
+    logsJson: text('logs_json').notNull().default('[]'),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    startedAt: text('started_at'),
+    finishedAt: text('finished_at')
+  },
+  (table) => ({
+    recipeCreatedIdx: index('browser_runs_recipe_created_idx').on(table.recipeId, table.createdAt),
+    statusCreatedIdx: index('browser_runs_status_created_idx').on(table.status, table.createdAt)
+  })
+);
+
+export const farinSettings = sqliteTable('farin_settings', {
+  id: integer('id').primaryKey(),
+  host: text('host').notNull().default('https://farin.app'),
+  companyId: text('company_id'),
+  apiKeyEncrypted: text('api_key_encrypted'),
+  automationSecretEncrypted: text('automation_secret_encrypted'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull()
+});
+
+/**
  * Durable, user-defined automation rules.  Rules intentionally stay small and
  * inspectable: matching is expressed as JSON filters and the plan is stored as
  * a validated task template.  A rule can be run manually or by the durable
@@ -589,6 +674,8 @@ export const taskSteps = sqliteTable(
         'send_reply',
         'move_to_folder',
         'tool_call',
+        'browser_recipe',
+        'farin_upload',
         'delegate',
         'mark_done',
         'notify'
@@ -879,3 +966,7 @@ export type AutomationWorkflow = typeof automationWorkflows.$inferSelect;
 export type AgentAuditEvent = typeof agentAuditEvents.$inferSelect;
 export type AgentNotification = typeof agentNotifications.$inferSelect;
 export type AgentLoopSession = typeof agentLoopSessions.$inferSelect;
+export type BrowserProfile = typeof browserProfiles.$inferSelect;
+export type BrowserRecipe = typeof browserRecipes.$inferSelect;
+export type BrowserRun = typeof browserRuns.$inferSelect;
+export type FarinSettings = typeof farinSettings.$inferSelect;

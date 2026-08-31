@@ -10,6 +10,8 @@ export function assessAgentAction(input: {
   action:
     | RecommendedAction
     | 'tool_call'
+    | 'browser_recipe'
+    | 'farin_upload'
     | 'draft_reply'
     | 'send_reply'
     | 'mark_done'
@@ -40,6 +42,16 @@ export function assessAgentAction(input: {
     riskLevel = riskLevel === 'high' ? 'high' : 'medium';
     reasons.push('Write-capable tool call requires review.');
   }
+  if (input.action === 'browser_recipe') {
+    // A browser can navigate, expose a logged-in session, and download data.
+    // Keep the action reviewable even when the recipe itself is read-only.
+    riskLevel = riskLevel === 'high' ? 'high' : 'medium';
+    reasons.push('Browser automation can access authenticated third-party data and download files.');
+  }
+  if (input.action === 'farin_upload') {
+    riskLevel = 'high';
+    reasons.push('Uploading a file to Farin is an external write and requires review.');
+  }
   if (typeof input.confidence === 'number' && input.confidence < 0.72) {
     riskLevel = riskLevel === 'low' ? 'medium' : riskLevel;
     reasons.push('Low confidence recommendation.');
@@ -49,7 +61,9 @@ export function assessAgentAction(input: {
     requiresApproval:
       riskLevel !== 'low' ||
       ['reply', 'forward', 'delegate', 'send_reply', 'delete'].includes(input.action) ||
-      (input.action === 'tool_call' && !input.toolReadOnly),
+      (input.action === 'tool_call' && !input.toolReadOnly) ||
+      input.action === 'browser_recipe' ||
+      input.action === 'farin_upload',
     reasons: reasons.length ? reasons : ['Low-risk reversible action.']
   } satisfies AgentPolicyDecision;
 }

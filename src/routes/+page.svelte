@@ -38,6 +38,7 @@
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
   import WorkflowManager from '$lib/components/WorkflowManager.svelte';
+  import BrowserAutomationManager from '$lib/components/BrowserAutomationManager.svelte';
 
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
@@ -3564,6 +3565,13 @@
                 onStatus={(value: string) => (status = value)}
               />
             </Card>
+          </section>
+
+          <section class="mt-6">
+            <BrowserAutomationManager
+              csrfToken={data.csrfToken}
+              onStatus={(value: string) => (status = value)}
+            />
           </section>
 
           <section class="mt-6">

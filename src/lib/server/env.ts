@@ -69,6 +69,21 @@ const EnvSchema = z.object({
     .transform((value) => value === 'true'),
   API_RATE_LIMIT_PER_MINUTE: z.coerce.number().default(180),
   MAILBOX_OP_MIN_INTERVAL_MS: z.coerce.number().default(120),
+  /**
+   * Browser automations run in isolated persistent Chromium profiles under
+   * DATA_DIR.  Headed mode is useful while recording a recipe; production
+   * replays should stay headless unless a run needs attention.
+   */
+  BROWSER_HEADLESS: z
+    .string()
+    .default('true')
+    .transform((value) => value !== 'false'),
+  BROWSER_MAX_RUNTIME_MS: z.coerce.number().default(180000),
+  BROWSER_MAX_DOWNLOAD_BYTES: z.coerce.number().default(30 * 1024 * 1024),
+  FARIN_API_HOST: z.string().url().default('https://farin.app'),
+  FARIN_API_KEY: z.string().optional(),
+  FARIN_COMPANY_ID: z.string().optional(),
+  FARIN_AUTOMATION_SECRET: z.string().optional(),
   RUN_LIVE_PROVIDER_TESTS: z
     .string()
     .optional()

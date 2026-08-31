@@ -24,6 +24,8 @@ export const AgentStepSchema = z
       'send_reply',
       'move_to_folder',
       'tool_call',
+      'browser_recipe',
+      'farin_upload',
       'delegate',
       'mark_done',
       'notify'

@@ -33,11 +33,17 @@ export function getPath(source: unknown, path: string) {
     typeof source === 'object' &&
     'outputs' in source
   ) {
-    const outputs = (source as Record<string, unknown>).outputs;
-    const key = normalized.slice('outputs.'.length);
-    if (outputs && typeof outputs === 'object' && key in outputs) {
-      return (outputs as Record<string, unknown>)[key];
+    let current: unknown = (source as Record<string, unknown>).outputs;
+    for (const part of normalized.slice('outputs.'.length).split('.').filter(Boolean)) {
+      if (current && typeof current === 'object' && part in current) {
+        current = (current as Record<string, unknown>)[part];
+      } else if (Array.isArray(current) && /^\d+$/.test(part)) {
+        current = current[Number(part)];
+      } else {
+        return undefined;
+      }
     }
+    return current;
   }
   const parts = normalized.split('.').filter(Boolean);
   let current: unknown = source;

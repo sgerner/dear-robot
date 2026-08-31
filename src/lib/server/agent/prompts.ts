@@ -90,7 +90,7 @@ JSON schema:
   "steps": [
     {
       "title": "string",
-      "kind": "draft_reply|send_reply|move_to_folder|tool_call|delegate|mark_done|notify",
+      "kind": "draft_reply|send_reply|move_to_folder|tool_call|browser_recipe|farin_upload|delegate|mark_done|notify",
       "details": "string",
       "tool_name": "string|null",
       "tool_input": {},
@@ -110,6 +110,8 @@ Safety:
 - never auto-send.
 - never permanently delete.
 - use dependencies and output_key when one step needs the result of another.
+- browser_recipe may replay a saved, user-recorded browser recipe to collect a download; use tool_name browser_recipe:<id> and keep it reviewable.
+- farin_upload uploads a downloaded report to Farin; it is always high-risk and requires explicit approval. Use a templated file_path from the prior browser_recipe output.
 - use conditions only for deterministic checks against prior step outputs; never invent executable expressions.
 - if uncertain, ask for approval in the plan.
 - for advanced tasks, use related emails outside the thread when relevant.

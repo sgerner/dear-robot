@@ -177,7 +177,25 @@ export function deleteAutomationWorkflow(id: number) {
 export async function runAutomationWorkflow(id: number, messageId?: number | null, actor = 'user') {
   const workflow = db.select().from(automationWorkflows).where(eq(automationWorkflows.id, id)).get();
   if (!workflow) throw new Error('Automation workflow not found');
-  const candidates = await findCandidates(workflow, messageId ?? null);
+  let candidates = await findCandidates(workflow, messageId ?? null);
+  // A scheduled browser recipe is independent of whether a new email arrived.
+  // Task runs still carry a message id for audit/context, so use the latest
+  // mailbox message as an inspectable anchor when the schedule has no new mail.
+  const templatePreview = parseJson(workflow.planTemplateJson, null);
+  const browserSchedule =
+    workflow.triggerType === 'schedule' &&
+    templatePreview &&
+    typeof templatePreview === 'object' &&
+    Array.isArray((templatePreview as Record<string, unknown>).steps) &&
+    ((templatePreview as Record<string, unknown>).steps as unknown[]).some(
+      (step: unknown) =>
+        step &&
+        typeof step === 'object' &&
+        ['browser_recipe', 'farin_upload'].includes(String((step as Record<string, unknown>).kind))
+    );
+  if (!candidates.length && browserSchedule) {
+    candidates = db.select().from(messages).orderBy(desc(messages.updatedAt)).limit(1).all();
+  }
   if (!candidates.length) {
     const now = nowIso();
     db.update(automationWorkflows)
@@ -220,7 +238,9 @@ export async function runAutomationWorkflow(id: number, messageId?: number | nul
   for (const message of candidates.slice(0, remaining)) {
     if (!matchesFilters(message, parseJson(workflow.filtersJson, {}))) continue;
     const template = AgentPlanSchema.safeParse(parseJson(workflow.planTemplateJson, {}));
-    const idempotencyKey = `workflow:${workflow.id}:message:${message.id}:${message.updatedAt}`;
+    const idempotencyKey = browserSchedule
+      ? `workflow:${workflow.id}:schedule:${workflow.lastRunAt || nowIso()}`
+      : `workflow:${workflow.id}:message:${message.id}:${message.updatedAt}`;
     const detail = getMessageDetail(message.id);
     const plan = template.success
       ? createTaskRunFromPlan(message.id, template.data as AgentPlan, {
