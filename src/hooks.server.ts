@@ -13,7 +13,6 @@ let booted = false;
 
 function boot() {
   if (booted) return;
-  booted = true;
   bootstrapDatabase();
   if (env.NODE_ENV !== 'test') {
     startSyncEngine();
@@ -21,6 +20,7 @@ function boot() {
     startWorkflowScheduler();
     applyCliManifestOnStartup();
   }
+  booted = true;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {

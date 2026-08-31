@@ -52,7 +52,6 @@ let bootstrapped = false;
 
 export function bootstrapDatabase() {
   if (bootstrapped) return;
-  bootstrapped = true;
 
   sqlite.exec(`
 CREATE TABLE IF NOT EXISTS accounts (
@@ -432,8 +431,6 @@ CREATE TABLE IF NOT EXISTS task_runs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS task_runs_idempotency_unique ON task_runs(idempotency_key);
-CREATE INDEX IF NOT EXISTS task_runs_workflow_status_idx ON task_runs(workflow_id, status);
 CREATE TABLE IF NOT EXISTS task_steps (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   task_run_id INTEGER NOT NULL REFERENCES task_runs(id) ON DELETE CASCADE,
@@ -634,6 +631,7 @@ CREATE TABLE IF NOT EXISTS memory_examples (
   seedAutomationDefaults();
   seedAiDefaults();
   seedObsidianSettings();
+  bootstrapped = true;
 }
 
 function ensurePerformanceIndexes() {
