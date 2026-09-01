@@ -14,7 +14,8 @@
     Moon,
     Reply,
     ReplyAll,
-    Forward
+    Forward,
+    Globe2
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
@@ -57,7 +58,8 @@
     recordMessageOutcome: _recordMessageOutcome,
     createTaskPlan: _createTaskPlan,
     approveTask: _approveTask,
-    executeTask: _executeTask
+    executeTask: _executeTask,
+    openBrowserAutomation
   }: {
     message: any;
     selectedId: number | null;
@@ -94,6 +96,7 @@
     createTaskPlan: () => void | Promise<void>;
     approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
     executeTask: (_id: number) => void | Promise<void>;
+    openBrowserAutomation: (_messageId: number) => void | Promise<void>;
   } = $props();
 
   let detail = $state<any>(null);
@@ -140,6 +143,11 @@
       hour: 'numeric',
       minute: '2-digit'
     });
+  }
+
+  function isBrowserAutomationCandidate() {
+    const text = `${detail?.message?.subject || message.subject || ''}\n${detail?.message?.bodyText || message.snippet || ''}`;
+    return /report|dashboard|download|statement|payout|csv|doordash|uber\s*eats/i.test(text);
   }
 
   async function loadDetail() {
@@ -408,6 +416,13 @@
                   {/each}
                 </div>
               </details>
+            </div>
+          {/if}
+
+          {#if isBrowserAutomationCandidate()}
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-3" transition:fade={{ duration: 140 }}>
+              <div class="flex min-w-0 items-start gap-2"><Globe2 size={14} class="mt-0.5 shrink-0 text-primary" /><p class="text-xs leading-5 text-muted-foreground">Need to download a report from this email?</p></div>
+              <Button size="sm" onclick={() => openBrowserAutomation(message.id)}><Globe2 size={12} /> Automate</Button>
             </div>
           {/if}
 

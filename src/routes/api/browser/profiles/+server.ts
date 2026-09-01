@@ -12,6 +12,8 @@ const BrowserProfileInputSchema = z.object({
     .array(z.string().trim().min(1).max(253))
     .max(32)
     .default([]),
+  username: z.string().trim().max(500).optional(),
+  password: z.string().max(4000).optional(),
   enabled: z.boolean().default(true)
 });
 

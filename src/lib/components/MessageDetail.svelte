@@ -26,8 +26,9 @@
     Pause,
     Pencil,
     WandSparkles,
+    Globe2,
   } from 'lucide-svelte';
-  import { slide, fade } from 'svelte/transition';
+  import { slide, fade, fly } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
@@ -70,7 +71,8 @@
     cancelAgentLoop,
     agentLoopPrompt = $bindable(''),
     agentLoopResult = null,
-    agentLoopBusy = false
+    agentLoopBusy = false,
+    openBrowserAutomation
   }: {
     selected: any;
     view: string;
@@ -116,6 +118,7 @@
     agentLoopPrompt: string;
     agentLoopResult: any;
     agentLoopBusy: boolean;
+    openBrowserAutomation: (_messageId: number) => void | Promise<void>;
   } = $props();
 
   let isGenerating = $state(false);
@@ -221,6 +224,11 @@
     return openMessageIds.has(id);
   }
 
+  function isBrowserAutomationCandidate() {
+    const text = `${selected?.message?.subject || ''}\n${selected?.message?.bodyText || ''}`;
+    return /report|dashboard|download|statement|payout|csv|doordash|uber\s*eats/i.test(text);
+  }
+
   $effect(() => {
     const conversationKey = selected?.conversationKey || null;
     if (conversationKey === lastConversationKey) return;
@@ -284,6 +292,16 @@
             <time class="text-muted-foreground">{formatDate(selected.message.date)}</time>
           </div>
         </header>
+
+        {#if isBrowserAutomationCandidate()}
+          <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3" in:fly={{ y: 6, duration: 160 }}>
+            <div class="flex min-w-0 items-start gap-2.5">
+              <Globe2 size={16} class="mt-0.5 shrink-0 text-primary" />
+              <div class="min-w-0"><p class="text-sm font-medium text-foreground">This email may need a dashboard download</p><p class="mt-0.5 text-xs leading-5 text-muted-foreground">Set it up from here. Dear Robot will remember the safe steps and run them on the server.</p></div>
+            </div>
+            <Button size="sm" onclick={() => openBrowserAutomation(selected.message.id)}><Globe2 size={13} /> Automate this report</Button>
+          </div>
+        {/if}
 
         <!-- Quick Actions Toolbar -->
         <div class="sticky top-0 z-10 hidden flex-nowrap items-center gap-1.5 overflow-x-auto rounded-lg border border-border/50 bg-background/85 px-2 py-2.5 shadow-sm backdrop-blur-md scrollbar-thin lg:flex">

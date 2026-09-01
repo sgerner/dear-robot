@@ -13,6 +13,7 @@ const BrowserRecipeUpdateSchema = z
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(1000).nullable().optional(),
     profileId: z.coerce.number().int().positive().optional(),
+    sourceMessageId: z.coerce.number().int().positive().nullable().optional(),
     startUrl: z.string().trim().url().max(2048).optional(),
     actions: z.array(ActionSchema).max(200).optional(),
     enabled: z.boolean().optional()

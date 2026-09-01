@@ -1,10 +1,13 @@
 <script lang="ts">
   import { Copy, Eye, EyeOff } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
+  import SettingsFarin from '$lib/components/settings/SettingsFarin.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
   let {
     data,
+    csrfToken = '',
+    onStatus = (_value: string) => {},
     copyToClipboard,
     testAgentTool,
     toggleAgentTool,
@@ -21,6 +24,8 @@
     webhookTarget = $bindable()
   } = $props<{
     data: any;
+    csrfToken?: string;
+    onStatus?: (_value: string) => void;
     copyToClipboard: (_value: string, _label?: string) => void | Promise<void>;
     testAgentTool: (_id: number) => void | Promise<void>;
     toggleAgentTool: (_id: number, _enabled: boolean) => void | Promise<void>;
@@ -132,6 +137,7 @@
 </script>
 
 <div class="mt-4 space-y-4" in:fade={{ duration: 180 }}>
+<SettingsFarin {csrfToken} {onStatus} />
 <div class="surface-section rounded-lg p-5">
   <h3 class="font-medium">Obsidian Vault</h3>
   <p class="mt-2 text-sm text-zinc-400">

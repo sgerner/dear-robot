@@ -10,6 +10,7 @@ const BrowserRecipeInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).nullable().optional(),
   profileId: z.coerce.number().int().positive(),
+  sourceMessageId: z.coerce.number().int().positive().nullable().optional(),
   startUrl: z.string().trim().url().max(2048),
   actions: z.array(ActionSchema).max(200).default([]),
   enabled: z.boolean().default(true)

@@ -25,7 +25,7 @@ At a glance, Dear Robot gives you:
 - PWA support for a more app-like browser experience
 - Optional Obsidian vault mount for long-lived notes and handoffs
 - Optional live-provider test paths for IMAP, SMTP, and AI integrations
-- Server-side browser recipes that can collect dashboard reports and queue reviewed Farin uploads
+- Email-first browser automations that can collect dashboard reports and queue reviewed Farin uploads
 
 ## What It Is Good At
 
@@ -49,31 +49,53 @@ At a glance, Dear Robot gives you:
 
 Dear Robot can teach an agent a repeatable, multi-step dashboard task such as
 signing in to DoorDash or Uber Eats, opening the latest report, and downloading
-the CSV. Open **AI Operations -> Browser automations**, create a profile and
-recipe, then choose **Record**. A headed Chromium window opens on the host so
-you can complete the login and report flow. Password fields are not recorded;
-the encrypted, isolated browser profile keeps the authenticated session.
+the CSV. Start from the email that requests the report: open it and choose
+**Automate this report**. Dear Robot finds the links in that message, creates
+the isolated server profile and recipe behind the scenes, and opens a guided
+tab in the browser you are already using through the optional Dear Robot
+Browser Bridge. Complete the login and report download there, then return to
+the email and choose **Done — save automation**. The bridge is a small
+Chrome/Firefox extension installed once from
+[`static/browser-bridge/extension`](static/browser-bridge/extension); the
+launcher explains the install in context.
 
 Runs replay only allowlisted HTTP(S) URLs and store downloads beneath
-`DATA_DIR/browser/downloads`. Review the downloaded file, then choose **Upload to
-Farin**. Uploads are explicit and approval-gated in workflows. The Farin tenant
+`DATA_DIR/browser/downloads`. Review the downloaded file before approving the
+separate Farin upload step in the generated workflow. Uploads are explicit and
+approval-gated in workflows. The Farin tenant
 CLI currently accepts JSON request bodies but does not expose a multipart file
 upload command, so the app uses Farin's authenticated multipart upload endpoint
 for the final file transfer (or its accounting automation secret endpoint when
 configured). No iframe or shared default Chrome profile is used.
 
+If the bridge is not installed, the launcher clearly labels the server-window
+fallback. That fallback is useful for local development only: the headed
+window appears on the machine running Dear Robot, not inside a remote browser.
+
+The setup dialog can save an encrypted username and password on the server.
+During recording, common username/email fields and password fields are saved
+only as `username`/`password` references; the typed values never enter recipe
+JSON. This lets a server-side replay renew an expired dashboard session. MFA,
+CAPTCHA, and other interactive challenges still require a fresh headed login.
+
+Browser automations are intentionally not a separate Operations setup screen.
+After the email-first setup, the generated workflow appears with the other
+reviewable workflows in **AI Operations**. Configure the optional Farin
+destination under **Settings -> Agent Tools**; the inbox flow remains the only
+place to create a browser automation.
+
 Recipes can create a paused, dry-run **every 7d** workflow. Enable it only after
 reviewing the generated steps; the browser collection and Farin upload remain
 separate, inspectable actions.
 
-For local development, install the browser once:
+For server-side replay (and the local-only fallback), install Chromium once:
 
 ```bash
 npx playwright install chromium
 ```
 
 Set `FARIN_API_KEY` and `FARIN_COMPANY_ID` in the server environment, or enter
-them in the Browser automations panel. Secrets are encrypted with
+them under **Settings -> Agent Tools**. Secrets are encrypted with
 `ENCRYPTION_KEY` and are never serialized to the client.
 
 ## Cloudflare Worker Proxy (for VPS users)

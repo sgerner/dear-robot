@@ -334,6 +334,8 @@ CREATE TABLE IF NOT EXISTS browser_profiles (
   name TEXT NOT NULL,
   start_url TEXT NOT NULL,
   allowed_hosts_json TEXT NOT NULL DEFAULT '[]',
+  username_encrypted TEXT,
+  password_encrypted TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
   last_used_at TEXT,
   created_at TEXT NOT NULL,
@@ -343,6 +345,7 @@ CREATE INDEX IF NOT EXISTS browser_profiles_enabled_idx ON browser_profiles(enab
 CREATE TABLE IF NOT EXISTS browser_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   profile_id INTEGER NOT NULL REFERENCES browser_profiles(id) ON DELETE CASCADE,
+  source_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   description TEXT,
   start_url TEXT NOT NULL,
@@ -354,6 +357,7 @@ CREATE TABLE IF NOT EXISTS browser_recipes (
 );
 CREATE INDEX IF NOT EXISTS browser_recipes_profile_updated_idx ON browser_recipes(profile_id, updated_at);
 CREATE INDEX IF NOT EXISTS browser_recipes_enabled_idx ON browser_recipes(enabled);
+CREATE INDEX IF NOT EXISTS browser_recipes_source_message_idx ON browser_recipes(source_message_id);
 CREATE TABLE IF NOT EXISTS browser_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   recipe_id INTEGER REFERENCES browser_recipes(id) ON DELETE SET NULL,
@@ -1140,6 +1144,8 @@ CREATE TABLE IF NOT EXISTS browser_profiles (
   name TEXT NOT NULL,
   start_url TEXT NOT NULL,
   allowed_hosts_json TEXT NOT NULL DEFAULT '[]',
+  username_encrypted TEXT,
+  password_encrypted TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
   last_used_at TEXT,
   created_at TEXT NOT NULL,
@@ -1149,6 +1155,7 @@ CREATE INDEX IF NOT EXISTS browser_profiles_enabled_idx ON browser_profiles(enab
 CREATE TABLE IF NOT EXISTS browser_recipes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   profile_id INTEGER NOT NULL REFERENCES browser_profiles(id) ON DELETE CASCADE,
+  source_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   description TEXT,
   start_url TEXT NOT NULL,
@@ -1160,6 +1167,7 @@ CREATE TABLE IF NOT EXISTS browser_recipes (
 );
 CREATE INDEX IF NOT EXISTS browser_recipes_profile_updated_idx ON browser_recipes(profile_id, updated_at);
 CREATE INDEX IF NOT EXISTS browser_recipes_enabled_idx ON browser_recipes(enabled);
+CREATE INDEX IF NOT EXISTS browser_recipes_source_message_idx ON browser_recipes(source_message_id);
 CREATE TABLE IF NOT EXISTS browser_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   recipe_id INTEGER REFERENCES browser_recipes(id) ON DELETE SET NULL,
@@ -1188,6 +1196,33 @@ CREATE TABLE IF NOT EXISTS farin_settings (
   updated_at TEXT NOT NULL
 );
 `);
+  migrateBrowserProfileCredentialColumns();
+  migrateBrowserRecipeSourceColumn();
+}
+
+function migrateBrowserProfileCredentialColumns() {
+  const columns = sqlite
+    .prepare(`PRAGMA table_info(browser_profiles)`)
+    .all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  for (const [name, definition] of [
+    ['username_encrypted', 'TEXT'],
+    ['password_encrypted', 'TEXT']
+  ] as const) {
+    if (!existing.has(name)) sqlite.exec(`ALTER TABLE browser_profiles ADD COLUMN "${name}" ${definition};`);
+  }
+}
+
+function migrateBrowserRecipeSourceColumn() {
+  const columns = sqlite
+    .prepare(`PRAGMA table_info(browser_recipes)`)
+    .all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((column) => column.name));
+  if (!existing.has('source_message_id')) {
+    sqlite.exec(
+      'ALTER TABLE browser_recipes ADD COLUMN source_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL;'
+    );
+  }
 }
 
 function migrateAiProfileColumns() {

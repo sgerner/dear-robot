@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Dear Robot Browser Bridge",
+  "version": "0.1.0",
+  "description": "Record a dashboard report workflow in the browser you are already using.",
+  "permissions": ["tabs", "downloads"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Dear Robot Browser Bridge"
+  }
+}

@@ -494,6 +494,8 @@ export const browserProfiles = sqliteTable(
     name: text('name').notNull(),
     startUrl: text('start_url').notNull(),
     allowedHostsJson: text('allowed_hosts_json').notNull().default('[]'),
+    usernameEncrypted: text('username_encrypted'),
+    passwordEncrypted: text('password_encrypted'),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     lastUsedAt: text('last_used_at'),
     createdAt: text('created_at').notNull(),
@@ -511,6 +513,9 @@ export const browserRecipes = sqliteTable(
     profileId: integer('profile_id')
       .notNull()
       .references(() => browserProfiles.id, { onDelete: 'cascade' }),
+    sourceMessageId: integer('source_message_id').references(() => messages.id, {
+      onDelete: 'set null'
+    }),
     name: text('name').notNull(),
     description: text('description'),
     startUrl: text('start_url').notNull(),
@@ -525,7 +530,8 @@ export const browserRecipes = sqliteTable(
       table.profileId,
       table.updatedAt
     ),
-    enabledIdx: index('browser_recipes_enabled_idx').on(table.enabled)
+    enabledIdx: index('browser_recipes_enabled_idx').on(table.enabled),
+    sourceMessageIdx: index('browser_recipes_source_message_idx').on(table.sourceMessageId)
   })
 );
 

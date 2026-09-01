@@ -12,6 +12,8 @@ const BrowserProfileUpdateSchema = z
     name: z.string().trim().min(1).max(120).optional(),
     startUrl: z.string().trim().url().max(2048).optional(),
     allowedHosts: z.array(z.string().trim().min(1).max(253)).max(32).optional(),
+    username: z.string().trim().max(500).optional(),
+    password: z.string().max(4000).optional(),
     enabled: z.boolean().optional()
   })
   .strict();

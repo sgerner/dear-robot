@@ -21,8 +21,25 @@ afterEach(() => {
 });
 
 describe('browser automation recipes', () => {
+  it('extracts safe report links without following email content', async () => {
+    const { extractBrowserLinks, browserReportWorkflowPlan } = await import('../src/lib/server/browser');
+    expect(
+      extractBrowserLinks(
+        'Download https://reports.example.test/latest.csv.',
+        '<a href="https://dashboard.example.test/reports?period=latest&amp;format=csv">View report</a>'
+      )
+    ).toEqual([
+      'https://dashboard.example.test/reports?period=latest&format=csv',
+      'https://reports.example.test/latest.csv'
+    ]);
+    expect(extractBrowserLinks('mailto:reports@example.test', null)).toEqual([]);
+    expect(browserReportWorkflowPlan({ id: 42, name: 'Weekly report' }).steps).toHaveLength(2);
+  });
+
   it('stores an isolated profile and rejects navigation outside its allowlist', async () => {
-    const { createBrowserProfile, createBrowserRecipe } = await import('../src/lib/server/browser');
+    const { createBrowserProfile, createBrowserRecipe, getBrowserRecipeForMessage } = await import('../src/lib/server/browser');
+    const { listMessages } = await import('../src/lib/server/services/messages');
+    const sourceMessageId = listMessages({ limit: 1 })[0].id;
     const profile = createBrowserProfile({
       name: 'DoorDash',
       startUrl: 'https://merchant.doordash.com/reports',
@@ -39,6 +56,15 @@ describe('browser automation recipes', () => {
         actions: []
       })
     ).toThrow(/allowlist/i);
+    const linked = createBrowserRecipe({
+      profileId: profile.id,
+      sourceMessageId,
+      name: 'Linked report',
+      startUrl: 'https://merchant.doordash.com/reports',
+      actions: []
+    });
+    expect(linked.sourceMessageId).toBe(sourceMessageId);
+    expect(getBrowserRecipeForMessage(sourceMessageId)?.id).toBe(linked.id);
   });
 
   it('requires review for browser collection and Farin upload steps', async () => {
@@ -156,5 +182,115 @@ describe('browser automation recipes', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+
+  it('replays encrypted profile credentials without storing their values in the recipe', async () => {
+    const server = createServer(async (request, response) => {
+      if (request.url === '/login' && request.method === 'POST') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+        if (form.get('username') !== 'reports@example.test' || form.get('password') !== 'secret-value') {
+          response.writeHead(401);
+          response.end('invalid credentials');
+          return;
+        }
+        response.writeHead(302, { location: '/dashboard', 'set-cookie': 'session=valid; Path=/' });
+        response.end();
+        return;
+      }
+      if (request.url === '/dashboard' && request.headers.cookie?.includes('session=valid')) {
+        response.writeHead(200, { 'content-type': 'text/html' });
+        response.end('<!doctype html><a id="download" href="/report.csv">Download report</a>');
+        return;
+      }
+      if (request.url === '/report.csv' && request.headers.cookie?.includes('session=valid')) {
+        response.writeHead(200, {
+          'content-type': 'text/csv',
+          'content-disposition': 'attachment; filename="report.csv"'
+        });
+        response.end('date,total\n2026-08-30,99.00\n');
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(
+        '<!doctype html><form method="post" action="/login"><input id="username" name="username" autocomplete="username"><input id="password" name="password" type="password"><button id="submit" type="submit">Sign in</button></form>'
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Test server did not bind');
+    const url = `http://127.0.0.1:${address.port}/login`;
+    try {
+      const { createBrowserProfile, createBrowserRecipe, runBrowserRecipe } = await import('../src/lib/server/browser');
+      const profile = createBrowserProfile({
+        name: 'Credential test',
+        startUrl: url,
+        username: 'reports@example.test',
+        password: 'secret-value'
+      });
+      expect(profile).toMatchObject({ hasUsername: true, hasPassword: true });
+      expect(profile).not.toHaveProperty('passwordEncrypted');
+      const recipe = createBrowserRecipe({
+        profileId: profile.id,
+        name: 'Login and download',
+        startUrl: url,
+        actions: [
+          { type: 'fill', selector: '#username', secretRef: 'username' },
+          { type: 'fill', selector: '#password', secretRef: 'password' },
+          { type: 'click', selector: '#submit' },
+          { type: 'click', selector: '#download' },
+          { type: 'download', timeoutMs: 5000 }
+        ]
+      });
+      expect(JSON.stringify(recipe.actions)).not.toContain('secret-value');
+      expect(recipe.actions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'fill', selector: '#username', secretRef: 'username', value: null }),
+          expect.objectContaining({ type: 'fill', selector: '#password', secretRef: 'password', value: null })
+        ])
+      );
+      const run = await runBrowserRecipe(recipe.id, { headless: true });
+      expect(run?.status).toBe('completed');
+      expect(run?.downloadFilename).toBe('report.csv');
+      expect(await fs.readFile(run!.downloadPath!, 'utf8')).toContain('99.00');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('finalizes a browser-bridge recording without launching a server desktop window', async () => {
+    const { listMessages } = await import('../src/lib/server/services/messages');
+    const message = listMessages({ limit: 1 })[0];
+    const {
+      finishClientBrowserRecording,
+      getBrowserRecipe,
+      startEmailBrowserAutomationClient
+    } = await import('../src/lib/server/browser');
+    const started = startEmailBrowserAutomationClient(message.id, {
+      startUrl: 'https://reports.example.test/dashboard',
+      name: 'Client bridge report',
+      username: 'reports@example.test',
+      password: 'server-secret'
+    });
+    expect(started.run).toMatchObject({ status: 'recording', triggerType: 'client_recording' });
+    const finished = finishClientBrowserRecording({
+      runId: started.run!.id,
+      downloadFilename: 'latest-report.csv',
+      actions: [
+        { type: 'goto', url: 'https://reports.example.test/dashboard' },
+        { type: 'click', selector: '#download' },
+        { type: 'download' }
+      ]
+    });
+    expect(finished.run).toMatchObject({ status: 'completed', downloadFilename: 'latest-report.csv' });
+    expect(finished.recipe?.actions).toEqual(
+      expect.arrayContaining([
+        { type: 'goto', url: 'https://reports.example.test/dashboard' },
+        { type: 'click', selector: '#download' },
+        { type: 'download' }
+      ])
+    );
+    expect(getBrowserRecipe(started.recipe!.id)?.actions).toHaveLength(3);
   });
 });

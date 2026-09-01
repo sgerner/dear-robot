@@ -40,6 +40,7 @@
     createTaskPlan,
     approveTask,
     executeTask,
+    openBrowserAutomation,
     isMobileViewport = false
   }: {
     messages: any[];
@@ -77,6 +78,7 @@
     createTaskPlan: () => void | Promise<void>;
     approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
     executeTask: (_id: number) => void | Promise<void>;
+    openBrowserAutomation: (_messageId: number) => void | Promise<void>;
     isMobileViewport: boolean;
   } = $props();
 </script>
@@ -125,6 +127,7 @@
       {createTaskPlan}
       {approveTask}
       {executeTask}
+      {openBrowserAutomation}
     />
     </div>
   {/each}

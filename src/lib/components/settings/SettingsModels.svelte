@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly, fade } from 'svelte/transition';
-  import { ChevronDown, Mic, PenLine, Search, Zap, Check, Loader2 } from 'lucide-svelte';
+  import { ChevronDown, Mic, PenLine, Search, Zap, Check, Copy, Loader2 } from 'lucide-svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
   import Badge from '$lib/components/ui/Badge.svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -72,6 +72,7 @@
   let audioTestError = $state<string>('');
   let audioSaveState = $state<ButtonState>('idle');
   let openAiLoginStates = $state<Record<string, any>>({});
+  let copiedOpenAiCodes = $state<Record<string, boolean>>({});
 
   const allModels = $derived(
     modelsDevProviders.flatMap((p: ModelsDevProvider) =>
@@ -241,6 +242,20 @@
         status: 'error',
         error: err.message || 'Unable to start OpenAI login'
       };
+    }
+  }
+
+  async function copyOpenAiCode(profileKey: 'primary' | 'fallback' | 'advanced') {
+    const code = openAiLoginStates[profileKey]?.code;
+    if (!code || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      copiedOpenAiCodes[profileKey] = true;
+      setTimeout(() => {
+        copiedOpenAiCodes[profileKey] = false;
+      }, 2200);
+    } catch {
+      copiedOpenAiCodes[profileKey] = false;
     }
   }
 </script>
@@ -539,16 +554,35 @@
                               </Button>
                             </div>
                             {#if openAiLoginStates[profileKey]?.status === 'pending'}
-                              <div class="mt-3 space-y-1 text-xs text-muted-foreground">
+                              <div class="mt-4 space-y-3 text-sm text-muted-foreground">
                                 <a
                                   class="text-primary underline underline-offset-2"
                                   href={openAiLoginStates[profileKey].authorizationUrl}
                                   target="_blank"
                                   rel="noreferrer">Open OpenAI authorization</a
                                 >
-                                <p>
-                                  Enter code <code class="font-mono text-foreground">{openAiLoginStates[profileKey].code}</code> when prompted.
-                                </p>
+                                <div class="rounded-lg border border-primary/25 bg-background/50 p-3">
+                                  <div class="flex flex-wrap items-center gap-3">
+                                    <span class="text-sm font-medium text-foreground">Enter code</span>
+                                    <code class="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 font-mono text-lg font-semibold tracking-[0.16em] text-foreground sm:text-xl">
+                                      {openAiLoginStates[profileKey].code}
+                                    </code>
+                                    <span class="text-sm font-medium text-foreground">when prompted.</span>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      class="h-9"
+                                      aria-label="Copy OpenAI device login code"
+                                      onclick={() => copyOpenAiCode(profileKey as 'primary' | 'fallback' | 'advanced')}
+                                    >
+                                      {#if copiedOpenAiCodes[profileKey]}
+                                        <Check size={14} /> Copied
+                                      {:else}
+                                        <Copy size={14} /> Copy code
+                                      {/if}
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
                             {:else if openAiLoginStates[profileKey]?.status === 'error'}
                               <p class="mt-2 text-xs text-destructive">{openAiLoginStates[profileKey].error}</p>

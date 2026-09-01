@@ -4,10 +4,12 @@ import { z } from 'zod';
 import { desc, eq } from 'drizzle-orm';
 import { env } from './env';
 import { db, nowIso } from './db';
+import { decryptSecret, encryptSecret } from './security';
 import {
   browserProfiles,
   browserRecipes,
   browserRuns,
+  messages,
   type BrowserRecipe,
   type BrowserRun
 } from './db/schema';
@@ -16,17 +18,39 @@ import { recordAgentAudit, parseJson } from './agent/runtime';
 /** Browser recipes deliberately contain no arbitrary JavaScript. */
 export const BrowserActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('goto'), url: z.string().url() }).strict(),
-  z.object({ type: z.literal('click'), selector: z.string().min(1).max(500) }).strict(),
+  z
+    .object({
+      type: z.literal('click'),
+      selector: z.string().min(1).max(500),
+      optional: z.boolean().optional()
+    })
+    .strict(),
   z
     .object({
       type: z.literal('fill'),
       selector: z.string().min(1).max(500),
       value: z.string().max(4000).nullable().optional(),
-      secret: z.boolean().optional()
+      secret: z.boolean().optional(),
+      secretRef: z.enum(['username', 'password']).optional(),
+      optional: z.boolean().optional()
     })
     .strict(),
-  z.object({ type: z.literal('press'), selector: z.string().min(1).max(500), key: z.string().min(1).max(80) }).strict(),
-  z.object({ type: z.literal('select'), selector: z.string().min(1).max(500), value: z.string().max(1000) }).strict(),
+  z
+    .object({
+      type: z.literal('press'),
+      selector: z.string().min(1).max(500),
+      key: z.string().min(1).max(80),
+      optional: z.boolean().optional()
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('select'),
+      selector: z.string().min(1).max(500),
+      value: z.string().max(1000),
+      optional: z.boolean().optional()
+    })
+    .strict(),
   z.object({ type: z.literal('wait'), milliseconds: z.number().int().min(50).max(30000) }).strict(),
   z.object({ type: z.literal('download'), timeoutMs: z.number().int().min(500).max(30000).optional() }).strict()
 ]);
@@ -37,11 +61,14 @@ const BrowserProfileInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   startUrl: z.string().url().max(2000),
   allowedHosts: z.array(z.string().trim().min(1).max(255)).max(50).default([]),
+  username: z.string().trim().max(500).optional(),
+  password: z.string().max(4000).optional(),
   enabled: z.boolean().default(true)
 });
 
 const BrowserRecipeInputSchema = z.object({
   profileId: z.coerce.number().int().positive(),
+  sourceMessageId: z.coerce.number().int().positive().nullable().optional(),
   name: z.string().trim().min(1).max(160),
   description: z.string().trim().max(1200).nullable().optional(),
   startUrl: z.string().url().max(2000),
@@ -115,8 +142,21 @@ function parseHosts(value: string | null | undefined) {
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function profileSecrets(row: typeof browserProfiles.$inferSelect) {
+  return {
+    username: row.usernameEncrypted ? decryptSecret(row.usernameEncrypted) : '',
+    password: row.passwordEncrypted ? decryptSecret(row.passwordEncrypted) : ''
+  };
+}
+
 function toProfile(row: typeof browserProfiles.$inferSelect) {
-  return { ...row, allowedHosts: parseHosts(row.allowedHostsJson) };
+  const { usernameEncrypted: _usernameEncrypted, passwordEncrypted: _passwordEncrypted, ...safeRow } = row;
+  return {
+    ...safeRow,
+    allowedHosts: parseHosts(row.allowedHostsJson),
+    hasUsername: Boolean(row.usernameEncrypted),
+    hasPassword: Boolean(row.passwordEncrypted)
+  };
 }
 
 function toRecipe(row: BrowserRecipe) {
@@ -158,6 +198,8 @@ export function createBrowserProfile(input: unknown) {
       name: parsed.name,
       startUrl: start.toString(),
       allowedHostsJson: JSON.stringify(hosts),
+      usernameEncrypted: parsed.username ? encryptSecret(parsed.username) : null,
+      passwordEncrypted: parsed.password ? encryptSecret(parsed.password) : null,
       enabled: parsed.enabled,
       createdAt: now,
       updatedAt: now
@@ -181,6 +223,8 @@ export function updateBrowserProfile(id: number, input: unknown) {
       name: parsed.name ?? existing.name,
       startUrl: start.toString(),
       allowedHostsJson: JSON.stringify(hosts),
+      ...(parsed.username ? { usernameEncrypted: encryptSecret(parsed.username) } : {}),
+      ...(parsed.password ? { passwordEncrypted: encryptSecret(parsed.password) } : {}),
       enabled: parsed.enabled ?? existing.enabled,
       updatedAt: nowIso()
     })
@@ -188,6 +232,16 @@ export function updateBrowserProfile(id: number, input: unknown) {
     .returning()
     .get();
   return toProfile(row);
+}
+
+function getBrowserProfileRow(id: number) {
+  return db.select().from(browserProfiles).where(eq(browserProfiles.id, id)).get();
+}
+
+function getBrowserProfileSecrets(id: number) {
+  const row = getBrowserProfileRow(id);
+  if (!row) return null;
+  return profileSecrets(row);
 }
 
 export async function deleteBrowserProfile(id: number) {
@@ -222,6 +276,7 @@ export function createBrowserRecipe(input: unknown) {
     .insert(browserRecipes)
     .values({
       profileId: parsed.profileId,
+      sourceMessageId: parsed.sourceMessageId ?? null,
       name: parsed.name,
       description: parsed.description || null,
       startUrl: start.toString(),
@@ -248,6 +303,9 @@ export function updateBrowserRecipe(id: number, input: unknown) {
     .update(browserRecipes)
     .set({
       profileId: profile.id,
+      ...(parsed.sourceMessageId !== undefined
+        ? { sourceMessageId: parsed.sourceMessageId ?? null }
+        : {}),
       name: parsed.name ?? existing.name,
       description: parsed.description === undefined ? existing.description : parsed.description || null,
       startUrl: start.toString(),
@@ -265,6 +323,283 @@ export async function deleteBrowserRecipe(id: number) {
   await closeSessionsForRecipe(id);
   const result = db.delete(browserRecipes).where(eq(browserRecipes.id, id)).run();
   return result.changes > 0;
+}
+
+/** Return the user-facing automation created from a particular report email. */
+export function getBrowserRecipeForMessage(messageId: number) {
+  const row = db
+    .select()
+    .from(browserRecipes)
+    .where(eq(browserRecipes.sourceMessageId, messageId))
+    .orderBy(desc(browserRecipes.updatedAt))
+    .get();
+  return row ? toRecipe(row) : null;
+}
+
+/**
+ * Extract candidate dashboard links without following them. The user still
+ * chooses the link in the guided setup, which keeps email content from
+ * silently initiating a browser session.
+ */
+export function extractBrowserLinks(bodyText: string | null | undefined, bodyHtml: string | null | undefined) {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: string) => {
+    const decoded = raw
+      .replace(/&amp;/gi, '&')
+      .replace(/&#x2F;|&#47;/gi, '/')
+      .trim()
+      .replace(/[),.;!?]+$/g, '');
+    try {
+      const url = safeUrl(decoded).toString();
+      if (!seen.has(url)) {
+        seen.add(url);
+        candidates.push(url);
+      }
+    } catch {
+      // Ignore mailto links, malformed URLs, and credential-bearing URLs.
+    }
+  };
+  for (const match of String(bodyHtml || '').matchAll(/href\s*=\s*["']([^"']+)["']/gi)) add(match[1]);
+  for (const match of String(bodyText || '').matchAll(/https?:\/\/[^\s<>"']+/gi)) add(match[0]);
+  return candidates.slice(0, 20);
+}
+
+export function getBrowserAutomationForMessage(messageId: number) {
+  const recipe = getBrowserRecipeForMessage(messageId);
+  if (!recipe) return null;
+  return {
+    recipe,
+    profile: getBrowserProfile(recipe.profileId),
+    latestRun: listBrowserRuns(recipe.id, 1)[0] || null
+  };
+}
+
+function reportLabel(message: { subject: string; from: string }) {
+  const subject = message.subject.trim().replace(/^(re|fw|fwd):\s*/i, '');
+  const sender = message.from.match(/<([^>]+)>/)?.[1] || message.from.split(/\s+/)[0] || 'provider';
+  return `${subject || 'Report'} · ${sender}`.slice(0, 120);
+}
+
+function prepareEmailBrowserAutomation(messageId: number, input: {
+  startUrl?: string;
+  name?: string;
+  username?: string;
+  password?: string;
+}) {
+  const message = db
+    .select({ id: messages.id, subject: messages.subject, from: messages.from, bodyText: messages.bodyText, bodyHtml: messages.bodyHtml })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .get();
+  if (!message) throw new Error('Message not found');
+  const links = extractBrowserLinks(message.bodyText, message.bodyHtml);
+  const selectedUrl = input.startUrl?.trim() || links[0];
+  if (!selectedUrl) throw new Error('This email has no safe dashboard link. Paste the report URL to continue.');
+  const start = safeUrl(selectedUrl);
+  const existing = getBrowserRecipeForMessage(messageId);
+  let profile = existing ? getBrowserProfile(existing.profileId) : null;
+  let recipe = existing;
+  if (!profile || !recipe) {
+    profile = createBrowserProfile({
+      name: input.name?.trim() || reportLabel(message),
+      startUrl: start.toString(),
+      username: input.username?.trim() || undefined,
+      password: input.password || undefined,
+      enabled: true
+    });
+    recipe = createBrowserRecipe({
+      profileId: profile.id,
+      sourceMessageId: messageId,
+      name: input.name?.trim() || `Download ${reportLabel(message)}`,
+      description: `Guided report download started from “${message.subject}”.`,
+      startUrl: start.toString(),
+      actions: [],
+      enabled: true
+    });
+  } else {
+    const profileUpdates = {
+      ...(!profile.allowedHosts.some((host) => host === start.hostname || start.hostname.endsWith(`.${host}`))
+        ? { allowedHosts: [...profile.allowedHosts, start.hostname] }
+        : {}),
+      ...(input.username?.trim() ? { username: input.username.trim() } : {}),
+      ...(input.password ? { password: input.password } : {})
+    };
+    if (Object.keys(profileUpdates).length) {
+      profile = updateBrowserProfile(profile.id, profileUpdates);
+    }
+    if (recipe.startUrl !== start.toString()) {
+      recipe = updateBrowserRecipe(recipe.id, {
+        startUrl: start.toString(),
+        sourceMessageId: messageId
+      });
+    }
+  }
+  if (!profile || !recipe) throw new Error('Could not prepare the browser automation');
+  return { message, links, profile, recipe };
+}
+
+/**
+ * One-click email-first setup. Profiles and empty recipes are implementation
+ * details; the user only sees the guided browser session launched from mail.
+ */
+export async function startEmailBrowserAutomation(messageId: number, input: {
+  startUrl?: string;
+  name?: string;
+  username?: string;
+  password?: string;
+}) {
+  const { links, profile, recipe } = prepareEmailBrowserAutomation(messageId, input);
+  const started = await startBrowserRecording({
+    profileId: profile.id,
+    recipeId: recipe.id,
+    startUrl: recipe.startUrl
+  });
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_email_automation_started',
+    payload: { messageId, profileId: profile.id, recipeId: recipe.id, runId: started.run?.id }
+  });
+  return {
+    messageId,
+    links,
+    profile: getBrowserProfile(profile.id),
+    recipe: getBrowserRecipe(recipe.id),
+    run: started.run
+  };
+}
+
+/**
+ * Prepare a client-side recording without opening a server desktop window.
+ * The browser bridge records actions in the user's own browser and sends the
+ * sanitized actions back through the authenticated app page when finished.
+ */
+export function startEmailBrowserAutomationClient(messageId: number, input: {
+  startUrl?: string;
+  name?: string;
+  username?: string;
+  password?: string;
+}) {
+  const { links, profile, recipe } = prepareEmailBrowserAutomation(messageId, input);
+  const now = nowIso();
+  const run = db
+    .insert(browserRuns)
+    .values({
+      recipeId: recipe.id,
+      profileId: profile.id,
+      status: 'recording',
+      triggerType: 'client_recording',
+      currentActionIndex: 0,
+      logsJson: JSON.stringify([{ at: now, event: 'client_recording_started', url: recipe.startUrl }]),
+      createdAt: now,
+      startedAt: now
+    })
+    .returning()
+    .get();
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_client_recording_started',
+    payload: { messageId, profileId: profile.id, recipeId: recipe.id, runId: run.id }
+  });
+  return {
+    messageId,
+    links,
+    profile: getBrowserProfile(profile.id),
+    recipe: getBrowserRecipe(recipe.id),
+    run: getBrowserRun(run.id)
+  };
+}
+
+export function finishClientBrowserRecording(input: {
+  runId: number;
+  actions: unknown[];
+  downloadFilename?: string;
+}) {
+  const run = getBrowserRun(input.runId);
+  if (!run) throw new Error('Browser run not found');
+  if (run.status !== 'recording') throw new Error('This browser recording is no longer active');
+  if (!run.recipeId || !run.profileId) throw new Error('Browser recording is missing its recipe');
+  const recipe = getBrowserRecipe(run.recipeId);
+  const profile = getBrowserProfile(run.profileId);
+  if (!recipe || !profile) throw new Error('Browser recording is missing its profile or recipe');
+  const parsedActions = z.array(BrowserActionSchema).max(100).parse(input.actions);
+  const actions = normalizeActions(parsedActions, profile.allowedHosts);
+  const finished = nowIso();
+  const priorLogs = parseLogs(input.runId);
+  const updatedRecipe = db
+    .update(browserRecipes)
+    .set({
+      actionsJson: JSON.stringify(actions),
+      lastRunAt: finished,
+      updatedAt: finished
+    })
+    .where(eq(browserRecipes.id, recipe.id))
+    .returning()
+    .get();
+  db.update(browserRuns)
+    .set({
+      status: 'completed',
+      currentActionIndex: actions.length,
+      downloadFilename: input.downloadFilename ? safeFilename(input.downloadFilename) : null,
+      finishedAt: finished,
+      logsJson: JSON.stringify([
+        ...(Array.isArray(priorLogs) ? priorLogs : []),
+        { at: finished, event: 'client_recording_stopped', actionCount: actions.length }
+      ])
+    })
+    .where(eq(browserRuns.id, input.runId))
+    .run();
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_client_recording_stopped',
+    payload: { runId: input.runId, recipeId: recipe.id, actionCount: actions.length }
+  });
+  return { run: getBrowserRun(input.runId), recipe: toRecipe(updatedRecipe) };
+}
+
+export function browserReportWorkflowPlan(recipe: { id: number; name: string }) {
+  return {
+    summary: `Download ${recipe.name} and submit the report to Farin after review.`,
+    complexity: 'advanced',
+    requires_user_approval: true,
+    final_reply_draft: null,
+    max_turns: 8,
+    steps: [
+      {
+        title: `Download ${recipe.name}`,
+        kind: 'browser_recipe',
+        details: 'Replay the saved browser session and wait for the report download.',
+        tool_name: `browser_recipe:${recipe.id}`,
+        tool_input: {},
+        depends_on: [],
+        condition: null,
+        output_key: 'report',
+        max_attempts: 2,
+        retry_delay_ms: 2000,
+        approval_reason: 'Review the authenticated browser download before sending it to Farin.',
+        requires_approval: true,
+        risk_level: 'medium'
+      },
+      {
+        title: 'Upload report to Farin',
+        kind: 'farin_upload',
+        details: 'Upload the downloaded report to the configured Farin company.',
+        tool_name: null,
+        tool_input: {
+          file_path: '{{outputs.report.downloadPath}}',
+          filename: '{{outputs.report.downloadFilename}}'
+        },
+        depends_on: [1],
+        condition: { path: 'steps.1.output.downloadPath', operator: 'exists' },
+        output_key: 'farin',
+        max_attempts: 2,
+        retry_delay_ms: 2000,
+        approval_reason: 'Uploading creates an external accounting document in Farin.',
+        requires_approval: true,
+        risk_level: 'high'
+      }
+    ]
+  };
 }
 
 export function listBrowserRuns(recipeId?: number, limit = 30) {
@@ -429,7 +764,7 @@ export async function runBrowserRecipe(
       const current = getBrowserRun(run.id);
       if (current?.status === 'cancelled') throw new Error('Browser run cancelled');
       db.update(browserRuns).set({ currentActionIndex: index }).where(eq(browserRuns.id, run.id)).run();
-      await executeAction(page, action, profile.allowedHosts, run.id);
+      await executeAction(page, action, profile.allowedHosts, run.id, profile.id);
       appendRunLog(run.id, { event: 'action_completed', index, type: action.type });
     }
     await waitForDownload(run.id, 1800).catch(() => null);
@@ -551,7 +886,13 @@ async function saveDownload(download: import('playwright').Download, session: Ac
   appendRunLog(session.runId, { event: 'download_saved', path: target, filename: suggested, bytes: stat.size });
 }
 
-async function executeAction(page: import('playwright').Page, action: BrowserAction, hosts: string[], runId: number) {
+async function executeAction(
+  page: import('playwright').Page,
+  action: BrowserAction,
+  hosts: string[],
+  runId: number,
+  profileId: number
+) {
   if (action.type === 'goto') {
     await page.goto(assertAllowedUrl(action.url, hosts).toString(), { waitUntil: 'domcontentloaded', timeout: env.BROWSER_MAX_RUNTIME_MS });
     return;
@@ -565,12 +906,35 @@ async function executeAction(page: import('playwright').Page, action: BrowserAct
     return;
   }
   const locator = page.locator(action.selector).first();
-  await locator.waitFor({ state: 'visible', timeout: env.BROWSER_MAX_RUNTIME_MS });
+  try {
+    await locator.waitFor({
+      state: 'visible',
+      timeout: action.optional ? Math.min(env.BROWSER_MAX_RUNTIME_MS, 1800) : env.BROWSER_MAX_RUNTIME_MS
+    });
+  } catch (error) {
+    if (action.optional) return;
+    throw error;
+  }
   if (action.type === 'click') {
     await locator.click({ timeout: env.BROWSER_MAX_RUNTIME_MS });
   } else if (action.type === 'fill') {
-    if (action.secret || action.value === null || action.value === undefined) throw new Error('Recipe contains a secret field. Log in once while recording; secrets are never replayed.');
-    await locator.fill(action.value, { timeout: env.BROWSER_MAX_RUNTIME_MS });
+    if (action.secretRef) {
+      const secrets = getBrowserProfileSecrets(profileId);
+      const value = secrets?.[action.secretRef] || '';
+      if (!value) {
+        throw new Error(
+          `Browser profile is missing its saved ${action.secretRef} credential. Add it in Browser automations.`
+        );
+      }
+      await locator.fill(value, { timeout: env.BROWSER_MAX_RUNTIME_MS });
+    } else {
+      if (action.secret || action.value === null || action.value === undefined) {
+        throw new Error(
+          'Recipe contains an unconfigured secret field. Save the profile credential and record the login again.'
+        );
+      }
+      await locator.fill(action.value, { timeout: env.BROWSER_MAX_RUNTIME_MS });
+    }
   } else if (action.type === 'press') {
     await locator.press(action.key, { timeout: env.BROWSER_MAX_RUNTIME_MS });
   } else if (action.type === 'select') {
@@ -610,12 +974,21 @@ function normalizeActions(actions: BrowserAction[], hosts: string[]) {
     if (!parsed.success) continue;
     const action = parsed.data;
     if (action.type === 'goto') assertAllowedUrl(action.url, hosts);
-    // Never persist secret values. Recording intentionally drops password fills;
-    // the persistent browser profile keeps the authenticated session instead.
-    if (action.type === 'fill' && (action.secret || action.value === null || action.value === undefined)) continue;
+    // Never persist secret values. A recognized credential field stores only a
+    // reference to the encrypted profile credential, never the typed value.
+    if (
+      action.type === 'fill' &&
+      (action.secret || action.value === null || action.value === undefined) &&
+      !action.secretRef
+    )
+      continue;
+    const normalizedAction =
+      action.type === 'fill' && action.secretRef
+        ? { ...action, value: null, secret: true, optional: true }
+        : action;
     const previous = result[result.length - 1];
-    if (previous && JSON.stringify(previous) === JSON.stringify(action)) continue;
-    result.push(action);
+    if (previous && JSON.stringify(previous) === JSON.stringify(normalizedAction)) continue;
+    result.push(normalizedAction);
   }
   return result.slice(0, 100);
 }
@@ -663,10 +1036,27 @@ const recorderScript = `
     }
     return parts.join(' > ');
   };
+  const credentialRef = (target) => {
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return null;
+    if (target instanceof HTMLInputElement && target.type === 'password') return 'password';
+    const hint = [target.autocomplete, target.name, target.id, target.getAttribute('aria-label') || '']
+      .join(' ')
+      .toLowerCase();
+    if (/(^|[\\s_-])(user(name)?|login|email)([\\s_-]|$)/.test(hint)) return 'username';
+    return null;
+  };
+  const isLoginControl = (target) => {
+    if (!(target instanceof Element)) return false;
+    const form = target.closest('form');
+    return Boolean(form && form.querySelector('input[type="password"], input[autocomplete="current-password"], input[autocomplete="password"]'));
+  };
   const recordFill = (target) => {
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
-    const value = target.type === 'password' ? null : target.value.slice(0, 4000);
-    const item = { type: 'fill', selector: selector(target), value, secret: target.type === 'password' };
+    const secretRef = credentialRef(target);
+    const value = secretRef ? null : target.value.slice(0, 4000);
+    const item = secretRef
+      ? { type: 'fill', selector: selector(target), value: null, secret: true, secretRef }
+      : { type: 'fill', selector: selector(target), value, secret: false };
     const previous = events[events.length - 1];
     if (previous && previous.type === 'fill' && previous.selector === item.selector) events[events.length - 1] = item;
     else events.push(item);
@@ -679,11 +1069,17 @@ const recorderScript = `
   document.addEventListener('blur', (event) => recordFill(event.target), true);
   document.addEventListener('click', (event) => {
     const target = event.target instanceof Element ? event.target.closest('button,a,[role="button"],input[type="submit"]') : null;
-    if (target) events.push({ type: 'click', selector: selector(target) });
+    if (target) {
+      const item = { type: 'click', selector: selector(target), optional: isLoginControl(target) };
+      events.push(item.optional ? item : { type: 'click', selector: item.selector });
+    }
   }, true);
   document.addEventListener('keydown', (event) => {
     const target = event.target;
-    if (event.key === 'Enter' && target instanceof Element) events.push({ type: 'press', selector: selector(target), key: 'Enter' });
+    if (event.key === 'Enter' && target instanceof Element) {
+      const item = { type: 'press', selector: selector(target), key: 'Enter', optional: isLoginControl(target) };
+      events.push(item.optional ? item : { type: 'press', selector: item.selector, key: item.key });
+    }
   }, true);
 })();
 `;

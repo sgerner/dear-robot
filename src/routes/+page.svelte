@@ -38,7 +38,7 @@
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
   import WorkflowManager from '$lib/components/WorkflowManager.svelte';
-  import BrowserAutomationManager from '$lib/components/BrowserAutomationManager.svelte';
+  import BrowserAutomationLauncher from '$lib/components/BrowserAutomationLauncher.svelte';
 
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
@@ -373,6 +373,7 @@
   let isMobileViewport = $state(false);
   let mobileSettingsDetailOpen = $state(false);
   let optimisticHiddenMessageIds = $state<number[]>([]);
+  let browserAutomationMessageId = $state<number | null>(null);
 
   let localFilteredMessages = $derived.by(() => {
     if (!search.trim()) return data.messages || [];
@@ -1045,6 +1046,16 @@
 
     void hydrateMessageDetail(id);
   }
+
+  function openBrowserAutomation(messageId: number) {
+    browserAutomationMessageId = messageId;
+  }
+
+  const browserAutomationMessage = $derived.by(() => {
+    if (!browserAutomationMessageId) return null;
+    if (data.selected?.message?.id === browserAutomationMessageId) return data.selected.message;
+    return data.messages.find((message: { id: number }) => message.id === browserAutomationMessageId) || null;
+  });
 
   function toggleMessage(id: number) {
     const next = new Set(openMessageIds);
@@ -3301,6 +3312,7 @@
         {createTaskPlan}
         {approveTask}
         {executeTask}
+        {openBrowserAutomation}
         {isMobileViewport}
       />
     {:else if view === 'operations'}
@@ -3408,6 +3420,7 @@
         bind:agentLoopPrompt
         {agentLoopResult}
         {agentLoopBusy}
+        {openBrowserAutomation}
       />
     </section>
   {/if}
@@ -3565,13 +3578,6 @@
                 onStatus={(value: string) => (status = value)}
               />
             </Card>
-          </section>
-
-          <section class="mt-6">
-            <BrowserAutomationManager
-              csrfToken={data.csrfToken}
-              onStatus={(value: string) => (status = value)}
-            />
           </section>
 
           <section class="mt-6">
@@ -3850,6 +3856,8 @@
                   {@const SettingsTools = module.default}
                   <SettingsTools
                     {data}
+                    csrfToken={data.csrfToken}
+                    onStatus={(value: string) => (status = value)}
                     {copyToClipboard}
                     {testAgentTool}
                     {toggleAgentTool}
@@ -3957,6 +3965,17 @@
       {saveDraft}
       {sendCompose}
       onClose={() => (composeOpen = false)}
+    />
+  {/if}
+
+  {#if browserAutomationMessage}
+    <BrowserAutomationLauncher
+      message={browserAutomationMessage}
+      csrfToken={data.csrfToken}
+      onChanged={invalidateAll}
+      onStatus={(value: string) => (status = value)}
+      onClosed={() => (browserAutomationMessageId = null)}
+      onReview={() => openOperations('autopilot')}
     />
   {/if}
 </main>
