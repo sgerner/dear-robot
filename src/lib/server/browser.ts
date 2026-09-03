@@ -217,20 +217,37 @@ export function updateBrowserProfile(id: number, input: unknown) {
   const start = parsed.startUrl ? safeUrl(parsed.startUrl) : safeUrl(existing.startUrl);
   const suppliedHosts = parsed.allowedHosts ?? parseHosts(existing.allowedHostsJson);
   const hosts = [...new Set([start.hostname.toLowerCase(), ...suppliedHosts.map(normalizeHost)])];
+  const credentialUpdates = {
+    ...(parsed.username !== undefined
+      ? { usernameEncrypted: parsed.username ? encryptSecret(parsed.username) : null }
+      : {}),
+    ...(parsed.password !== undefined
+      ? { passwordEncrypted: parsed.password ? encryptSecret(parsed.password) : null }
+      : {})
+  };
   const row = db
     .update(browserProfiles)
     .set({
       name: parsed.name ?? existing.name,
       startUrl: start.toString(),
       allowedHostsJson: JSON.stringify(hosts),
-      ...(parsed.username ? { usernameEncrypted: encryptSecret(parsed.username) } : {}),
-      ...(parsed.password ? { passwordEncrypted: encryptSecret(parsed.password) } : {}),
+      ...credentialUpdates,
       enabled: parsed.enabled ?? existing.enabled,
       updatedAt: nowIso()
     })
     .where(eq(browserProfiles.id, id))
     .returning()
     .get();
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_profile_updated',
+    payload: {
+      profileId: id,
+      changedCredentials: Object.keys(credentialUpdates).map((key) => key.replace('Encrypted', '')),
+      allowedHosts: hosts,
+      enabled: row.enabled
+    }
+  });
   return toProfile(row);
 }
 

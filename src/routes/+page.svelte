@@ -42,7 +42,14 @@
 
   let { data } = $props();
   type AppView = 'inbox' | 'unread' | 'starred' | 'pending' | 'operations' | 'settings';
-  type SettingsCategory = 'accounts' | 'models' | 'memory' | 'tools' | 'interface' | 'advanced';
+  type SettingsCategory =
+    | 'accounts'
+    | 'models'
+    | 'memory'
+    | 'tools'
+    | 'browser'
+    | 'interface'
+    | 'advanced';
   type QuickActionId =
     | 'reply'
     | 'reply_all'
@@ -102,6 +109,7 @@
     { key: 'models', label: 'Models', detail: 'Primary, fallback, advanced, audio' },
     { key: 'memory', label: 'Memory', detail: 'Core profile and learned rules' },
     { key: 'tools', label: 'Agent Tools', detail: 'MCP, CLI, delegate hooks' },
+    { key: 'browser', label: 'Browser automations', detail: 'Saved profiles, recipes, and runs' },
     { key: 'interface', label: 'Interface', detail: 'Quick actions, swipes, folder roles' },
     { key: 'advanced', label: 'Advanced', detail: 'Cache, backups, audit, contacts' }
   ] as const;
@@ -3872,6 +3880,19 @@
                     bind:agentToolForm
                     bind:cliInstallForm
                     bind:webhookTarget
+                  />
+                {/await}
+              {/if}
+              {#if settingsCategory === 'browser'}
+                {#await import('$lib/components/settings/SettingsBrowserAutomations.svelte')}
+                  <div class="surface-section flex min-h-32 items-center justify-center text-sm text-muted-foreground animate-pulse" aria-live="polite">
+                    Loading browser automations…
+                  </div>
+                {:then module}
+                  {@const SettingsBrowserAutomations = module.default}
+                  <SettingsBrowserAutomations
+                    csrfToken={data.csrfToken}
+                    onStatus={(value: string) => (status = value)}
                   />
                 {/await}
               {/if}

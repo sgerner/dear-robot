@@ -80,9 +80,10 @@ CAPTCHA, and other interactive challenges still require a fresh headed login.
 
 Browser automations are intentionally not a separate Operations setup screen.
 After the email-first setup, the generated workflow appears with the other
-reviewable workflows in **AI Operations**. Configure the optional Farin
-destination under **Settings -> Agent Tools**; the inbox flow remains the only
-place to create a browser automation.
+reviewable workflows in **AI Operations**. Manage saved profiles, encrypted
+credentials, recipes, and recent runs under **Settings -> Browser automations**;
+configure the optional Farin destination under **Settings -> Agent Tools**. The
+inbox flow remains the only place to create a browser automation.
 
 Recipes can create a paused, dry-run **every 7d** workflow. Enable it only after
 reviewing the generated steps; the browser collection and Farin upload remain

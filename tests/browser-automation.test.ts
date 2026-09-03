@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createServer } from 'node:http';
+import { eq } from 'drizzle-orm';
 
 beforeEach(async () => {
   process.env.NODE_ENV = 'test';
@@ -257,6 +258,83 @@ describe('browser automation recipes', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+
+  it('updates encrypted profile credentials without returning plaintext or changing omitted secrets', async () => {
+    const { createBrowserProfile, getBrowserProfile, updateBrowserProfile } = await import('../src/lib/server/browser');
+    const { browserProfiles } = await import('../src/lib/server/db/schema');
+    const { db } = await import('../src/lib/server/db');
+    const { decryptSecret } = await import('../src/lib/server/security');
+
+    const profile = createBrowserProfile({
+      name: 'Credential updates',
+      startUrl: 'https://reports.example.test/login',
+      username: 'old-user',
+      password: 'old-password'
+    });
+    const original = db.select().from(browserProfiles).where(eq(browserProfiles.id, profile.id)).get();
+    const updated = updateBrowserProfile(profile.id, {
+      username: 'new-user',
+      password: 'new-password'
+    });
+    const stored = db.select().from(browserProfiles).where(eq(browserProfiles.id, profile.id)).get();
+
+    expect(stored?.usernameEncrypted).not.toBe(original?.usernameEncrypted);
+    expect(stored?.passwordEncrypted).not.toBe(original?.passwordEncrypted);
+    expect(decryptSecret(stored?.usernameEncrypted)).toBe('new-user');
+    expect(decryptSecret(stored?.passwordEncrypted)).toBe('new-password');
+    expect(updated).toMatchObject({ hasUsername: true, hasPassword: true });
+    expect(updated).not.toHaveProperty('usernameEncrypted');
+    expect(updated).not.toHaveProperty('passwordEncrypted');
+    expect(JSON.stringify(updated)).not.toContain('new-password');
+
+    const hostsOnly = updateBrowserProfile(profile.id, { allowedHosts: ['login.example.test'] });
+    expect(hostsOnly).toMatchObject({ hasUsername: true, hasPassword: true });
+    expect(getBrowserProfile(profile.id)).toMatchObject({ hasUsername: true, hasPassword: true });
+    expect(decryptSecret(db.select().from(browserProfiles).where(eq(browserProfiles.id, profile.id)).get()?.passwordEncrypted)).toBe('new-password');
+
+    const cleared = updateBrowserProfile(profile.id, { username: '', password: '' });
+    expect(cleared).toMatchObject({ hasUsername: false, hasPassword: false });
+  });
+
+  it('edits a saved recipe details and normalizes updated credential actions', async () => {
+    const { createBrowserProfile, createBrowserRecipe, updateBrowserRecipe } = await import('../src/lib/server/browser');
+    const profile = createBrowserProfile({
+      name: 'Recipe editing',
+      startUrl: 'https://reports.example.test/dashboard'
+    });
+    const recipe = createBrowserRecipe({
+      profileId: profile.id,
+      name: 'Old report recipe',
+      description: 'Old description',
+      startUrl: 'https://reports.example.test/dashboard',
+      actions: [{ type: 'goto', url: 'https://reports.example.test/dashboard' }]
+    });
+
+    const updated = updateBrowserRecipe(recipe.id, {
+      name: 'Latest report recipe',
+      description: 'Open the latest report and download CSV',
+      startUrl: 'https://reports.example.test/reports/latest',
+      enabled: false,
+      actions: [
+        { type: 'goto', url: 'https://reports.example.test/reports/latest' },
+        { type: 'fill', selector: '#username', secretRef: 'username', value: 'must-not-persist' },
+        { type: 'download', timeoutMs: 5000 }
+      ]
+    });
+
+    expect(updated).toMatchObject({
+      name: 'Latest report recipe',
+      description: 'Open the latest report and download CSV',
+      startUrl: 'https://reports.example.test/reports/latest',
+      enabled: false
+    });
+    expect(updated?.actions).toEqual([
+      { type: 'goto', url: 'https://reports.example.test/reports/latest' },
+      { type: 'fill', selector: '#username', secretRef: 'username', value: null, secret: true, optional: true },
+      { type: 'download', timeoutMs: 5000 }
+    ]);
+    expect(JSON.stringify(updated)).not.toContain('must-not-persist');
   });
 
   it('finalizes a browser-bridge recording without launching a server desktop window', async () => {
