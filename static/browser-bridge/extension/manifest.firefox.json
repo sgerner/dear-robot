@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Dear Robot Browser Bridge",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Record a dashboard report workflow in the browser you are already using.",
-  "permissions": ["tabs", "downloads"],
+  "permissions": ["tabs", "downloads", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"]
@@ -18,7 +18,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "browser-bridge@dear-robot.local",
-      "strict_min_version": "109.0"
+      "strict_min_version": "115.0"
     }
   },
   "action": {

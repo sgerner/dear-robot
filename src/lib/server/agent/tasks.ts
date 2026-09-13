@@ -175,7 +175,7 @@ export async function createTaskPlanForMessage(messageId: number, input: unknown
       kind: 'browser_recipe',
       readOnly: false,
       skillsMarkdown:
-        'Replays only the saved allowlisted actions. Password fields are never replayed; the user must log in once while recording.'
+        'Replays the demonstrated allowlisted login and report actions on the server. Username/password references resolve from encrypted server credentials. Recognized email verification challenges check the source inbox and the connected account matching the saved login for a fresh code. Never put passwords or verification codes in tool inputs, recipes, summaries or logs. SMS, CAPTCHA and unsupported SSO require human help. A completed recording is not proof of successful server replay: only a completed run with a downloaded file can feed Farin.'
     }));
   const farinTool = {
     name: 'farin_upload',

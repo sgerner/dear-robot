@@ -47,9 +47,13 @@ export const handle: Handle = async ({ event, resolve }) => {
   const isWorkflowWebhook = /^\/api\/workflows\/\d+\/webhook$/.test(event.url.pathname);
   const webhookBearer = event.request.headers.get('authorization');
   const webhookTokenAuthorized =
-    isWorkflowWebhook && Boolean(env.MCP_AUTH_TOKEN) && webhookBearer === `Bearer ${env.MCP_AUTH_TOKEN}`;
-  const isOAuth = event.url.pathname.startsWith('/api/accounts/google/start') || 
-                  event.url.pathname.startsWith('/api/accounts/google/callback');
+    isWorkflowWebhook &&
+    Boolean(env.MCP_AUTH_TOKEN) &&
+    webhookBearer === `Bearer ${env.MCP_AUTH_TOKEN}`;
+  const isOAuth =
+    event.url.pathname.startsWith('/api/accounts/google/start') ||
+    event.url.pathname.startsWith('/api/accounts/google/callback');
+  const isBrowserBridgeVerification = event.url.pathname === '/api/browser/bridge/verify';
   const isApi = event.url.pathname.startsWith('/api/');
 
   if (isMcp) {
@@ -65,6 +69,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     !isOAuth &&
     !isMcp &&
     !isWorkflowWebhook &&
+    !isBrowserBridgeVerification &&
     !event.locals.user.authenticated
   ) {
     if (isApi) throw error(401, 'Unauthorized');
@@ -83,7 +88,11 @@ export const handle: Handle = async ({ event, resolve }) => {
       });
       if (!limited.allowed) throw error(429, 'Rate limit exceeded');
     }
-    if (!webhookTokenAuthorized && !sameOriginOrForm(event.request.headers)) {
+    if (
+      !isBrowserBridgeVerification &&
+      !webhookTokenAuthorized &&
+      !sameOriginOrForm(event.request.headers)
+    ) {
       throw error(403, 'Invalid origin');
     }
     const headerToken = event.request.headers.get('x-csrf-token');
@@ -94,6 +103,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       !isLogin &&
       !isMcp &&
       !isWorkflowWebhook &&
+      !isBrowserBridgeVerification &&
       isApi &&
       headerToken !== event.locals.csrfToken &&
       !formHeader

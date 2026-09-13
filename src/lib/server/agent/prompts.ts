@@ -111,6 +111,7 @@ Safety:
 - never permanently delete.
 - use dependencies and output_key when one step needs the result of another.
 - browser_recipe may replay a saved, user-recorded browser recipe to collect a download; use tool_name browser_recipe:<id> and keep it reviewable.
+- Browser login credentials remain encrypted on the server. Email verification is handled by the browser runner using fresh matching inbox messages; never copy codes or passwords into a plan. SMS, CAPTCHA, unsupported SSO, and changed pages need human help. A report request or recording is not a completed download; do not upload until the browser output contains a successfully downloaded file.
 - farin_upload uploads a downloaded report to Farin; it is always high-risk and requires explicit approval. Use a templated file_path from the prior browser_recipe output.
 - use conditions only for deterministic checks against prior step outputs; never invent executable expressions.
 - if uncertain, ask for approval in the plan.

@@ -9,7 +9,10 @@ export const actions = {
     const clientAddress = getClientAddress();
     const rate = checkRateLimit({
       key: `login:${clientAddress}`,
-      maxPerMinute: 10
+      // The browser suite signs in from one loopback address for independent
+      // scenarios. Keep the production guard while making test runs isolated
+      // and deterministic.
+      maxPerMinute: env.NODE_ENV === 'test' ? 1000 : 10
     });
     if (!rate.allowed) {
       return fail(429, { message: 'Too many login attempts. Please try again in a minute.' });

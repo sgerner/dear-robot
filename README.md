@@ -54,10 +54,16 @@ the CSV. Start from the email that requests the report: open it and choose
 the isolated server profile and recipe behind the scenes, and opens a guided
 tab in the browser you are already using through the optional Dear Robot
 Browser Bridge. Complete the login and report download there, then return to
-the email and choose **Done — save automation**. The bridge is a small
+the email and choose **Done — save automation**. Choose **Test on server** in
+the same dialog to verify that the server can repeat the login and download;
+the test never uploads to Farin. Inspect its downloaded file before enabling
+the weekly workflow. A saved recording alone is not a successful server test.
+The bridge is a small
 Chrome/Firefox extension installed once from
 [`static/browser-bridge/extension`](static/browser-bridge/extension); the
-launcher explains the install in context.
+launcher explains the install in context. The current bridge verifies a
+short-lived, server-issued capability before it opens a recording tab, so a
+random webpage cannot impersonate Dear Robot and initiate a capture.
 
 Runs replay only allowlisted HTTP(S) URLs and store downloads beneath
 `DATA_DIR/browser/downloads`. Review the downloaded file before approving the
@@ -75,8 +81,20 @@ window appears on the machine running Dear Robot, not inside a remote browser.
 The setup dialog can save an encrypted username and password on the server.
 During recording, common username/email fields and password fields are saved
 only as `username`/`password` references; the typed values never enter recipe
-JSON. This lets a server-side replay renew an expired dashboard session. MFA,
-CAPTCHA, and other interactive challenges still require a fresh headed login.
+JSON. Record the login as well as the download: the client browser's cookies
+are not copied to the server. Recognizable one-time-code fields use an
+`email_code` reference. On replay, Dear Robot checks the source mailbox and
+the enabled account matching the saved login for a fresh verification message,
+scoped to the recipient and service host. It waits up to two minutes and never
+writes the code to recipes or run logs. SMS, authenticator apps, CAPTCHA,
+unrecognized challenge forms, and unsupported SSO still need human attention.
+
+These automations replay demonstrated actions; they are not an unrestricted
+computer-use agent. A changed portal or a report that takes hours to generate
+may need another recording or a later retry. Prefer a stable dashboard URL,
+choose a relative period or the portal's latest payout, and demonstrate the
+final download rather than stopping at “report requested.” A run cannot pass
+without a server-side downloaded file.
 
 Browser automations are intentionally not a separate Operations setup screen.
 After the email-first setup, the generated workflow appears with the other
@@ -200,7 +218,7 @@ services:
   dear-robot:
     build: .
     ports:
-      - "3000:3000"
+      - '3000:3000'
     env_file:
       - .env
     environment:
@@ -252,86 +270,86 @@ Do not set `DB_PATH` manually in production. The app derives it from `DATA_DIR`.
 
 ### Required in production
 
-| Variable | Purpose |
-| --- | --- |
+| Variable             | Purpose                                                                   |
+| -------------------- | ------------------------------------------------------------------------- |
 | `APP_SESSION_SECRET` | Signs the session cookie and CSRF/session state. Use a long random value. |
-| `APP_PASSWORD` | Password used for app login. |
-| `ENCRYPTION_KEY` | Encrypts stored secrets such as mail and provider credentials. |
-| `MCP_AUTH_TOKEN` | Protects the MCP endpoint from unauthenticated use. |
-| `DATA_DIR` | Absolute path to the persistent runtime directory. |
+| `APP_PASSWORD`       | Password used for app login.                                              |
+| `ENCRYPTION_KEY`     | Encrypts stored secrets such as mail and provider credentials.            |
+| `MCP_AUTH_TOKEN`     | Protects the MCP endpoint from unauthenticated use.                       |
+| `DATA_DIR`           | Absolute path to the persistent runtime directory.                        |
 
 ### App runtime
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `NODE_ENV` | `development` | Runtime mode. Must be `production` in a real deployment. |
-| `PORT` | `3000` | Port the Node server listens on. |
-| `DATA_DIR` | `/data` | Root directory for SQLite, memory, backups, and skills. Must be absolute. |
-| `DB_PATH` | derived from `DATA_DIR` | Not meant to be set manually. The app derives the SQLite path automatically. |
-| `BROWSER_HEADLESS` | `true` | Headless browser replay default. Recording always opens a headed window. |
-| `BROWSER_MAX_RUNTIME_MS` | `180000` | Maximum navigation/action timeout for a browser run. |
-| `BROWSER_MAX_DOWNLOAD_BYTES` | `31457280` | Maximum browser download and Farin upload size. |
-| `FARIN_API_HOST` | `https://farin.app` | Farin tenant API origin (localhost HTTP is allowed for development). |
-| `FARIN_API_KEY` | unset | Optional server bootstrap tenant API key. Prefer the encrypted UI setting. |
-| `FARIN_COMPANY_ID` | unset | Farin company id paired with the tenant key/automation secret. |
-| `FARIN_AUTOMATION_SECRET` | unset | Optional shared accounting automation secret used by the ingest endpoint. |
+| Variable                     | Default                 | Purpose                                                                      |
+| ---------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
+| `NODE_ENV`                   | `development`           | Runtime mode. Must be `production` in a real deployment.                     |
+| `PORT`                       | `3000`                  | Port the Node server listens on.                                             |
+| `DATA_DIR`                   | `/data`                 | Root directory for SQLite, memory, backups, and skills. Must be absolute.    |
+| `DB_PATH`                    | derived from `DATA_DIR` | Not meant to be set manually. The app derives the SQLite path automatically. |
+| `BROWSER_HEADLESS`           | `true`                  | Headless browser replay default. Recording always opens a headed window.     |
+| `BROWSER_MAX_RUNTIME_MS`     | `180000`                | Maximum navigation/action timeout for a browser run.                         |
+| `BROWSER_MAX_DOWNLOAD_BYTES` | `31457280`              | Maximum browser download and Farin upload size.                              |
+| `FARIN_API_HOST`             | `https://farin.app`     | Farin tenant API origin (localhost HTTP is allowed for development).         |
+| `FARIN_API_KEY`              | unset                   | Optional server bootstrap tenant API key. Prefer the encrypted UI setting.   |
+| `FARIN_COMPANY_ID`           | unset                   | Farin company id paired with the tenant key/automation secret.               |
+| `FARIN_AUTOMATION_SECRET`    | unset                   | Optional shared accounting automation secret used by the ingest endpoint.    |
 
 ### AI profiles
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `AI_PROVIDER` | `deepseek` | Primary AI provider preset. |
-| `AI_MODEL` | `deepseek-v4-flash` | Primary AI model. |
-| `AI_BASE_URL` | `https://api.deepseek.com` | Primary AI endpoint. |
-| `AI_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the primary profile. |
-| `AI_API_KEY` | unset | Optional bootstrap API key for the primary profile. |
-| `OPENAI_API_KEY` | unset | Optional OpenAI API key used when an OpenAI profile is selected and no profile key is saved. |
-| `AI_FALLBACK_PROVIDER` | `gemini` | Fallback AI provider preset. |
-| `AI_FALLBACK_MODEL` | `gemini-2.5-flash` | Fallback AI model. |
-| `AI_FALLBACK_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` | Fallback AI endpoint. |
-| `AI_FALLBACK_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the fallback profile. |
-| `AI_FALLBACK_API_KEY` | unset | Optional bootstrap API key for the fallback profile. |
-| `AI_ADVANCED_PROVIDER` | `deepseek` | Advanced planner provider preset. |
-| `AI_ADVANCED_MODEL` | `deepseek-v4-pro` | Advanced planner model. |
-| `AI_ADVANCED_BASE_URL` | `AI_BASE_URL` or `https://api.deepseek.com` | Advanced planner endpoint. |
-| `AI_ADVANCED_PROXY_URL` | unset | Optional Cloudflare Proxy URL for the advanced profile. |
-| `AI_ADVANCED_API_KEY` | unset | Optional bootstrap API key for the advanced profile. |
-| `AI_MAX_REPAIR_ATTEMPTS` | `1` | Number of JSON repair attempts before the AI call fails. |
-| `DEBUG_AI` | `false` | Logs additional AI request and response data in development. |
+| Variable                 | Default                                                    | Purpose                                                                                      |
+| ------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `AI_PROVIDER`            | `deepseek`                                                 | Primary AI provider preset.                                                                  |
+| `AI_MODEL`               | `deepseek-v4-flash`                                        | Primary AI model.                                                                            |
+| `AI_BASE_URL`            | `https://api.deepseek.com`                                 | Primary AI endpoint.                                                                         |
+| `AI_PROXY_URL`           | unset                                                      | Optional Cloudflare Proxy URL for the primary profile.                                       |
+| `AI_API_KEY`             | unset                                                      | Optional bootstrap API key for the primary profile.                                          |
+| `OPENAI_API_KEY`         | unset                                                      | Optional OpenAI API key used when an OpenAI profile is selected and no profile key is saved. |
+| `AI_FALLBACK_PROVIDER`   | `gemini`                                                   | Fallback AI provider preset.                                                                 |
+| `AI_FALLBACK_MODEL`      | `gemini-2.5-flash`                                         | Fallback AI model.                                                                           |
+| `AI_FALLBACK_BASE_URL`   | `https://generativelanguage.googleapis.com/v1beta/openai/` | Fallback AI endpoint.                                                                        |
+| `AI_FALLBACK_PROXY_URL`  | unset                                                      | Optional Cloudflare Proxy URL for the fallback profile.                                      |
+| `AI_FALLBACK_API_KEY`    | unset                                                      | Optional bootstrap API key for the fallback profile.                                         |
+| `AI_ADVANCED_PROVIDER`   | `deepseek`                                                 | Advanced planner provider preset.                                                            |
+| `AI_ADVANCED_MODEL`      | `deepseek-v4-pro`                                          | Advanced planner model.                                                                      |
+| `AI_ADVANCED_BASE_URL`   | `AI_BASE_URL` or `https://api.deepseek.com`                | Advanced planner endpoint.                                                                   |
+| `AI_ADVANCED_PROXY_URL`  | unset                                                      | Optional Cloudflare Proxy URL for the advanced profile.                                      |
+| `AI_ADVANCED_API_KEY`    | unset                                                      | Optional bootstrap API key for the advanced profile.                                         |
+| `AI_MAX_REPAIR_ATTEMPTS` | `1`                                                        | Number of JSON repair attempts before the AI call fails.                                     |
+| `DEBUG_AI`               | `false`                                                    | Logs additional AI request and response data in development.                                 |
 
 ### Mail transport
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `IMAP_HOST` | unset | Optional live IMAP host used by integration tests and live account setup. |
-| `IMAP_PORT` | `993` | IMAP port. |
-| `IMAP_USERNAME` | unset | Optional IMAP username for live-provider testing. |
-| `IMAP_PASSWORD` | unset | Optional IMAP password for live-provider testing. |
-| `SMTP_HOST` | unset | Optional SMTP host used by live-provider testing. |
-| `SMTP_PORT` | `465` | SMTP port. |
-| `SMTP_USERNAME` | unset | Optional SMTP username for live-provider testing. |
-| `SMTP_PASSWORD` | unset | Optional SMTP password for live-provider testing. |
-| `MAILBOX_OP_MIN_INTERVAL_MS` | `120` | Minimum delay between mailbox operations. |
-| `RUN_LIVE_PROVIDER_TESTS` | `false` | Enables live integration test flows that require real provider credentials. |
-| `TEST_EMAIL_FROM` | unset | Optional test sender address. |
-| `TEST_EMAIL_TO` | unset | Optional test recipient address. |
+| Variable                     | Default | Purpose                                                                     |
+| ---------------------------- | ------- | --------------------------------------------------------------------------- |
+| `IMAP_HOST`                  | unset   | Optional live IMAP host used by integration tests and live account setup.   |
+| `IMAP_PORT`                  | `993`   | IMAP port.                                                                  |
+| `IMAP_USERNAME`              | unset   | Optional IMAP username for live-provider testing.                           |
+| `IMAP_PASSWORD`              | unset   | Optional IMAP password for live-provider testing.                           |
+| `SMTP_HOST`                  | unset   | Optional SMTP host used by live-provider testing.                           |
+| `SMTP_PORT`                  | `465`   | SMTP port.                                                                  |
+| `SMTP_USERNAME`              | unset   | Optional SMTP username for live-provider testing.                           |
+| `SMTP_PASSWORD`              | unset   | Optional SMTP password for live-provider testing.                           |
+| `MAILBOX_OP_MIN_INTERVAL_MS` | `120`   | Minimum delay between mailbox operations.                                   |
+| `RUN_LIVE_PROVIDER_TESTS`    | `false` | Enables live integration test flows that require real provider credentials. |
+| `TEST_EMAIL_FROM`            | unset   | Optional test sender address.                                               |
+| `TEST_EMAIL_TO`              | unset   | Optional test recipient address.                                            |
 
 ### Attachments and safety
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `ATTACHMENT_MAX_BYTES` | `15728640` | Maximum attachment size in bytes. |
-| `ATTACHMENT_SCAN_STRICT` | `false` | Fails closed when attachment scanning reports warnings. |
-| `API_RATE_LIMIT_PER_MINUTE` | `180` | API request limit per minute. |
+| Variable                    | Default    | Purpose                                                 |
+| --------------------------- | ---------- | ------------------------------------------------------- |
+| `ATTACHMENT_MAX_BYTES`      | `15728640` | Maximum attachment size in bytes.                       |
+| `ATTACHMENT_SCAN_STRICT`    | `false`    | Fails closed when attachment scanning reports warnings. |
+| `API_RATE_LIMIT_PER_MINUTE` | `180`      | API request limit per minute.                           |
 
 ### Automation and backups
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `AUTOPILOT_INTERVAL_MINUTES` | `15` | Polling interval for autopilot processing. |
-| `BACKUP_RETENTION_DAYS` | `30` | How long backups are kept before cleanup. |
-| `BACKUP_MAX_COUNT` | `30` | Maximum number of retained backups. |
-| `ALLOW_DANGEROUS_DB_RESET` | `false` | Test-only override for destructive local reset paths. Do not use in production. |
+| Variable                     | Default | Purpose                                                                         |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------- |
+| `AUTOPILOT_INTERVAL_MINUTES` | `15`    | Polling interval for autopilot processing.                                      |
+| `BACKUP_RETENTION_DAYS`      | `30`    | How long backups are kept before cleanup.                                       |
+| `BACKUP_MAX_COUNT`           | `30`    | Maximum number of retained backups.                                             |
+| `ALLOW_DANGEROUS_DB_RESET`   | `false` | Test-only override for destructive local reset paths. Do not use in production. |
 
 ## Obsidian Vault Setup
 

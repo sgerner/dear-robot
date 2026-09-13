@@ -10,6 +10,7 @@ import {
   defaultBaseUrlForProvider,
   defaultModelForProvider
 } from '$lib/server/ai/provider';
+import { isOpenAiOAuthConfig, testOpenAiOAuthConnection } from '$lib/server/ai/openai-codex';
 
 const TestSchema = z.object({
   profile: z.enum(['primary', 'fallback', 'advanced', 'audio']),
@@ -161,8 +162,12 @@ export async function POST({ request }) {
   if (profile === 'audio' && config.provider === 'browser_web_speech') {
     return json({ ok: true, message: 'Browser fallback requires no API key.' });
   }
-  if (!config.apiKey) throw error(400, 'Profile has no API key');
   try {
+    if (isOpenAiOAuthConfig(config)) {
+      await testOpenAiOAuthConnection(config);
+      return json({ ok: true, message: `${config.label} connection succeeded.` });
+    }
+    if (!config.apiKey) throw new Error('Profile has no API key');
     if (profile === 'audio' && config.provider === 'deepgram') {
       const res = await fetchWithTimeout('https://api.deepgram.com/v1/projects', {
         headers: { Authorization: `Token ${config.apiKey || ''}` }

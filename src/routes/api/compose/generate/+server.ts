@@ -6,6 +6,7 @@ import { getMessageDetail } from '$lib/server/services/messages';
 import { readAgentInstructions } from '$lib/server/memory';
 import { readGlobalSkillsMarkdown, truncateMarkdown } from '$lib/server/skills';
 import { endpointFor, type ProviderConfig } from '$lib/server/ai/provider';
+import { completeWithOpenAiOAuth, isOpenAiOAuthConfig } from '$lib/server/ai/openai-codex';
 import { buildUnifiedAgentContext, contextForPrompt } from '$lib/server/agent/context';
 
 const GenerateComposeSchema = z.object({
@@ -90,9 +91,12 @@ ${prompt}
 
 Recipient: ${to || 'Unknown'}
 Subject: ${subject || 'None specified'}`;
-  const body = await generateWithOpenAiCompatible(profile, [
+  const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt }
-  ]);
+  ];
+  const body = isOpenAiOAuthConfig(profile)
+    ? await completeWithOpenAiOAuth(profile, messages, { jsonOutput: false })
+    : await generateWithOpenAiCompatible(profile, messages);
   return json({ body, subject: subject || undefined });
 }

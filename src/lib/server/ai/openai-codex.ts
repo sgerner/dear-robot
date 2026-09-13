@@ -24,6 +24,14 @@ async function loadOAuthModule(): Promise<OAuthModule> {
 
 type LoginProfile = Exclude<AiProfileInput['profile'], 'audio'>;
 
+type OpenAiOAuthMessage = {
+  role: string;
+  content: string;
+  toolCallId?: string;
+  name?: string;
+  toolCalls?: AgentToolCall[];
+};
+
 export type AgentToolDefinition = {
   name: string;
   description: string;
@@ -124,16 +132,7 @@ export function isOpenAiOAuthConfig(config: ProviderConfig) {
   return Boolean(oauthTokensFromConfig(config));
 }
 
-export async function completeWithOpenAiOAuth(
-  config: ProviderConfig,
-  messages: Array<{
-    role: string;
-    content: string;
-    toolCallId?: string;
-    name?: string;
-    toolCalls?: AgentToolCall[];
-  }>
-) {
+async function createOAuthClient(config: ProviderConfig) {
   const tokens = oauthTokensFromConfig(config);
   if (!tokens) throw new Error('OpenAI OAuth is not connected for this profile');
   if (!config.profile || config.profile === 'audio') {
@@ -141,12 +140,53 @@ export async function completeWithOpenAiOAuth(
   }
 
   const { createCodexOAuthClient } = await loadOAuthModule();
-  const client = createCodexOAuthClient({
+  return createCodexOAuthClient({
     tokens,
     onTokens: async (refreshed: OpenAIOAuthTokens) => {
       await saveOpenAiOAuthTokens(config.profile as LoginProfile, refreshed);
     }
   });
+}
+
+/**
+ * Verify an OAuth profile with the Codex Responses backend. OAuth tokens are
+ * ChatGPT/Codex credentials, not public OpenAI API keys, so `/models` on
+ * `api.openai.com` is not a valid connection probe for them.
+ */
+export async function testOpenAiOAuthConnection(config: ProviderConfig) {
+  const client = await createOAuthClient(config);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25_000);
+  try {
+    const response = await client.request('/responses', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        accept: 'text/event-stream',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.model,
+        instructions: 'Reply with exactly OK.',
+        input: [{ type: 'message', role: 'user', content: 'Connection test.' }],
+        stream: true,
+        store: false
+      })
+    });
+    const body = await response.text();
+    if (!response.ok) throw new Error(`openai ${response.status}: ${body.slice(0, 300)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function completeWithOpenAiOAuth(
+  config: ProviderConfig,
+  messages: OpenAiOAuthMessage[],
+  options: { jsonOutput?: boolean } = {}
+) {
+  const client = await createOAuthClient(config);
+  const request = toResponsesRequest(messages);
   const response = await client.request('/responses', {
     method: 'POST',
     headers: {
@@ -155,14 +195,10 @@ export async function completeWithOpenAiOAuth(
     },
     body: JSON.stringify({
       model: config.model,
-      input: messages.map((message) => ({
-        type: 'message',
-        role: message.role,
-        content: message.content
-      })),
+      ...request,
       stream: true,
       store: false,
-      text: { format: { type: 'json_object' } }
+      ...(options.jsonOutput === false ? {} : { text: { format: { type: 'json_object' } } })
     })
   });
   const body = await response.text();
@@ -173,33 +209,17 @@ export async function completeWithOpenAiOAuth(
 /** A non-streaming Responses call used by the bounded agent loop. */
 export async function completeWithOpenAiOAuthTools(
   config: ProviderConfig,
-  messages: Array<{
-    role: string;
-    content: string;
-    toolCallId?: string;
-    name?: string;
-    toolCalls?: AgentToolCall[];
-  }>,
+  messages: OpenAiOAuthMessage[],
   tools: AgentToolDefinition[]
 ) {
-  const tokens = oauthTokensFromConfig(config);
-  if (!tokens) throw new Error('OpenAI OAuth is not connected for this profile');
-  if (!config.profile || config.profile === 'audio') {
-    throw new Error('OpenAI OAuth requires a primary, fallback, or advanced AI profile');
-  }
-  const { createCodexOAuthClient } = await loadOAuthModule();
-  const client = createCodexOAuthClient({
-    tokens,
-    onTokens: async (refreshed: OpenAIOAuthTokens) => {
-      await saveOpenAiOAuthTokens(config.profile as LoginProfile, refreshed);
-    }
-  });
+  const client = await createOAuthClient(config);
+  const request = toResponsesRequest(messages);
   const response = await client.request('/responses', {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: config.model,
-      input: toResponsesInput(messages),
+      ...request,
       tools: tools.map((tool) => ({
         type: 'function',
         name: tool.name,
@@ -244,16 +264,22 @@ export async function completeWithOpenAiOAuthTools(
  * OAuth-backed Responses request fail on the second turn, so preserve the
  * native item shape here.
  */
-function toResponsesInput(
-  messages: Array<{
-    role: string;
-    content: string;
-    toolCallId?: string;
-    name?: string;
-    toolCalls?: AgentToolCall[];
-  }>
-) {
+function toResponsesRequest(messages: OpenAiOAuthMessage[]) {
+  const instructions = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content.trim())
+    .filter(Boolean)
+    .join('\n\n');
+
+  return {
+    ...(instructions ? { instructions } : {}),
+    input: toResponsesInput(messages)
+  };
+}
+
+function toResponsesInput(messages: OpenAiOAuthMessage[]) {
   return messages.flatMap((message) => {
+    if (message.role === 'system') return [];
     if (message.role === 'tool' && message.toolCallId) {
       return [
         {

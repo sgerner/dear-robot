@@ -2,9 +2,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { desc, eq } from 'drizzle-orm';
+import { waitForInboxVerification } from './browser-verification';
 import { env } from './env';
 import { db, nowIso } from './db';
-import { decryptSecret, encryptSecret } from './security';
+import {
+  decryptSecret,
+  encryptSecret,
+  issueBrowserBridgeCapability,
+  verifyBrowserBridgeCapability
+} from './security';
 import {
   browserProfiles,
   browserRecipes,
@@ -20,6 +26,14 @@ export const BrowserActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('goto'), url: z.string().url() }).strict(),
   z
     .object({
+      type: z.literal('check'),
+      selector: z.string().min(1).max(500),
+      checked: z.boolean(),
+      optional: z.boolean().optional()
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('click'),
       selector: z.string().min(1).max(500),
       optional: z.boolean().optional()
@@ -31,7 +45,7 @@ export const BrowserActionSchema = z.discriminatedUnion('type', [
       selector: z.string().min(1).max(500),
       value: z.string().max(4000).nullable().optional(),
       secret: z.boolean().optional(),
-      secretRef: z.enum(['username', 'password']).optional(),
+      secretRef: z.enum(['username', 'password', 'email_code']).optional(),
       optional: z.boolean().optional()
     })
     .strict(),
@@ -52,7 +66,12 @@ export const BrowserActionSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('wait'), milliseconds: z.number().int().min(50).max(30000) }).strict(),
-  z.object({ type: z.literal('download'), timeoutMs: z.number().int().min(500).max(30000).optional() }).strict()
+  z
+    .object({
+      type: z.literal('download'),
+      timeoutMs: z.number().int().min(500).max(30000).optional()
+    })
+    .strict()
 ]);
 
 export type BrowserAction = z.infer<typeof BrowserActionSchema>;
@@ -80,13 +99,24 @@ type ActiveSession = {
   runId: number;
   profileId: number;
   recipeId: number | null;
+  recording: boolean;
   context: import('playwright').BrowserContext;
   pages: Set<import('playwright').Page>;
   downloadDir: string;
+  recordingActions: BrowserAction[];
+  recordingLimitReached?: boolean;
+  downloadError?: string;
+  downloadTasks: Set<Promise<void>>;
   closed: boolean;
 };
 
 const activeSessions = new Map<number, ActiveSession>();
+/**
+ * Persistent Chromium profiles cannot be safely shared by two contexts. Keep
+ * a reservation before launching so two HTTP requests cannot race into the
+ * same profile while the first browser is still starting.
+ */
+const profileRunLocks = new Map<number, number>();
 let playwrightPromise: Promise<typeof import('playwright')> | null = null;
 
 async function playwright() {
@@ -106,6 +136,27 @@ function runDownloadDir(runId: number) {
   return path.join(browserRoot(), 'downloads', String(runId));
 }
 
+function reserveProfileRun(profileId: number, runId: number) {
+  const existing = profileRunLocks.get(profileId);
+  if (existing !== undefined && existing !== runId) {
+    throw new Error(
+      `Browser profile is already in use by run ${existing}. Wait for it to finish or cancel it first.`
+    );
+  }
+  profileRunLocks.set(profileId, runId);
+}
+
+function releaseProfileRun(profileId: number, runId: number) {
+  if (profileRunLocks.get(profileId) === runId) profileRunLocks.delete(profileId);
+}
+
+function ensureRunActive(runId: number) {
+  const run = getBrowserRun(runId);
+  if (!run) throw new Error('Browser run not found');
+  if (run.status === 'cancelled') throw new Error('Browser run cancelled');
+  return run;
+}
+
 function safeFilename(value: string) {
   const normalized = path.basename(value).replace(/[^a-zA-Z0-9._-]+/g, '_');
   return normalized.slice(0, 180) || `download-${Date.now()}`;
@@ -119,27 +170,60 @@ function safeUrl(value: string) {
   return url;
 }
 
+function safeLogUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
+function safeBrowserError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/https?:\/\/[^\s)]+/gi, (value) => safeLogUrl(value))
+    .replace(
+      /\b(code|token|state|nonce|auth|assertion|session|ticket|redirect_uri)=([^\s&]+)/gi,
+      (_match, key: string) => `${key}=[redacted]`
+    );
+}
+
 function normalizeHost(value: string) {
-  const raw = value.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').split('/')[0];
+  const raw = value
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, '')
+    .split('/')[0];
   const host = raw.split(':')[0];
-  if (!host || host.includes('..') || /[^a-z0-9.-]/.test(host)) throw new Error(`Invalid allowed host: ${value}`);
+  if (!host || host.includes('..') || /[^a-z0-9.-]/.test(host))
+    throw new Error(`Invalid allowed host: ${value}`);
   return host;
 }
 
 function hostAllowed(url: URL, allowedHosts: string[]) {
   const hostname = url.hostname.toLowerCase();
-  return allowedHosts.some((candidate) => hostname === candidate || hostname.endsWith(`.${candidate}`));
+  return allowedHosts.some(
+    (candidate) => hostname === candidate || hostname.endsWith(`.${candidate}`)
+  );
 }
 
 function assertAllowedUrl(value: string, allowedHosts: string[]) {
   const url = safeUrl(value);
-  if (!hostAllowed(url, allowedHosts)) throw new Error(`Browser navigation blocked for host ${url.hostname}. Add it to the profile allowlist.`);
+  if (!hostAllowed(url, allowedHosts))
+    throw new Error(
+      `Browser navigation blocked for host ${url.hostname}. Add it to the profile allowlist.`
+    );
   return url;
 }
 
 function parseHosts(value: string | null | undefined) {
   const parsed = parseJson(value, []);
-  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  return Array.isArray(parsed)
+    ? parsed.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 function profileSecrets(row: typeof browserProfiles.$inferSelect) {
@@ -150,7 +234,11 @@ function profileSecrets(row: typeof browserProfiles.$inferSelect) {
 }
 
 function toProfile(row: typeof browserProfiles.$inferSelect) {
-  const { usernameEncrypted: _usernameEncrypted, passwordEncrypted: _passwordEncrypted, ...safeRow } = row;
+  const {
+    usernameEncrypted: _usernameEncrypted,
+    passwordEncrypted: _passwordEncrypted,
+    ...safeRow
+  } = row;
   return {
     ...safeRow,
     allowedHosts: parseHosts(row.allowedHostsJson),
@@ -174,12 +262,20 @@ function appendRunLog(runId: number, entry: Record<string, unknown>) {
   if (!run) return null;
   const logs = parseJson(run.logsJson, []);
   const next = [...(Array.isArray(logs) ? logs : []), { at: nowIso(), ...entry }].slice(-200);
-  db.update(browserRuns).set({ logsJson: JSON.stringify(next) }).where(eq(browserRuns.id, runId)).run();
+  db.update(browserRuns)
+    .set({ logsJson: JSON.stringify(next) })
+    .where(eq(browserRuns.id, runId))
+    .run();
   return next;
 }
 
 export function listBrowserProfiles() {
-  return db.select().from(browserProfiles).orderBy(desc(browserProfiles.updatedAt)).all().map(toProfile);
+  return db
+    .select()
+    .from(browserProfiles)
+    .orderBy(desc(browserProfiles.updatedAt))
+    .all()
+    .map(toProfile);
 }
 
 export function getBrowserProfile(id: number) {
@@ -190,7 +286,9 @@ export function getBrowserProfile(id: number) {
 export function createBrowserProfile(input: unknown) {
   const parsed = BrowserProfileInputSchema.parse(input);
   const start = safeUrl(parsed.startUrl);
-  const hosts = [...new Set([start.hostname.toLowerCase(), ...parsed.allowedHosts.map(normalizeHost)])];
+  const hosts = [
+    ...new Set([start.hostname.toLowerCase(), ...parsed.allowedHosts.map(normalizeHost)])
+  ];
   const now = nowIso();
   const row = db
     .insert(browserProfiles)
@@ -206,7 +304,11 @@ export function createBrowserProfile(input: unknown) {
     })
     .returning()
     .get();
-  recordAgentAudit({ actor: 'user', eventType: 'browser_profile_created', payload: { profileId: row.id, name: row.name, allowedHosts: hosts } });
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_profile_created',
+    payload: { profileId: row.id, name: row.name, allowedHosts: hosts }
+  });
   return toProfile(row);
 }
 
@@ -304,7 +406,11 @@ export function createBrowserRecipe(input: unknown) {
     })
     .returning()
     .get();
-  recordAgentAudit({ actor: 'user', eventType: 'browser_recipe_created', payload: { recipeId: row.id, profileId: row.profileId, actionCount: actions.length } });
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_recipe_created',
+    payload: { recipeId: row.id, profileId: row.profileId, actionCount: actions.length }
+  });
   return toRecipe(row);
 }
 
@@ -315,7 +421,9 @@ export function updateBrowserRecipe(id: number, input: unknown) {
   const profile = getBrowserProfile(parsed.profileId ?? existing.profileId);
   if (!profile) throw new Error('Browser profile not found');
   const start = assertAllowedUrl(parsed.startUrl ?? existing.startUrl, profile.allowedHosts);
-  const actions = parsed.actions ? normalizeActions(parsed.actions, profile.allowedHosts) : parseJson(existing.actionsJson, []);
+  const actions = parsed.actions
+    ? normalizeActions(parsed.actions, profile.allowedHosts)
+    : parseJson(existing.actionsJson, []);
   const row = db
     .update(browserRecipes)
     .set({
@@ -324,7 +432,8 @@ export function updateBrowserRecipe(id: number, input: unknown) {
         ? { sourceMessageId: parsed.sourceMessageId ?? null }
         : {}),
       name: parsed.name ?? existing.name,
-      description: parsed.description === undefined ? existing.description : parsed.description || null,
+      description:
+        parsed.description === undefined ? existing.description : parsed.description || null,
       startUrl: start.toString(),
       actionsJson: JSON.stringify(actions),
       enabled: parsed.enabled ?? existing.enabled,
@@ -358,7 +467,10 @@ export function getBrowserRecipeForMessage(messageId: number) {
  * chooses the link in the guided setup, which keeps email content from
  * silently initiating a browser session.
  */
-export function extractBrowserLinks(bodyText: string | null | undefined, bodyHtml: string | null | undefined) {
+export function extractBrowserLinks(
+  bodyText: string | null | undefined,
+  bodyHtml: string | null | undefined
+) {
   const candidates: string[] = [];
   const seen = new Set<string>();
   const add = (raw: string) => {
@@ -377,7 +489,8 @@ export function extractBrowserLinks(bodyText: string | null | undefined, bodyHtm
       // Ignore mailto links, malformed URLs, and credential-bearing URLs.
     }
   };
-  for (const match of String(bodyHtml || '').matchAll(/href\s*=\s*["']([^"']+)["']/gi)) add(match[1]);
+  for (const match of String(bodyHtml || '').matchAll(/href\s*=\s*["']([^"']+)["']/gi))
+    add(match[1]);
   for (const match of String(bodyText || '').matchAll(/https?:\/\/[^\s<>"']+/gi)) add(match[0]);
   return candidates.slice(0, 20);
 }
@@ -398,22 +511,35 @@ function reportLabel(message: { subject: string; from: string }) {
   return `${subject || 'Report'} · ${sender}`.slice(0, 120);
 }
 
-function prepareEmailBrowserAutomation(messageId: number, input: {
-  startUrl?: string;
-  name?: string;
-  username?: string;
-  password?: string;
-}) {
+function prepareEmailBrowserAutomation(
+  messageId: number,
+  input: {
+    startUrl?: string;
+    name?: string;
+    username?: string;
+    password?: string;
+  }
+) {
   const message = db
-    .select({ id: messages.id, subject: messages.subject, from: messages.from, bodyText: messages.bodyText, bodyHtml: messages.bodyHtml })
+    .select({
+      id: messages.id,
+      subject: messages.subject,
+      from: messages.from,
+      bodyText: messages.bodyText,
+      bodyHtml: messages.bodyHtml
+    })
     .from(messages)
     .where(eq(messages.id, messageId))
     .get();
   if (!message) throw new Error('Message not found');
   const links = extractBrowserLinks(message.bodyText, message.bodyHtml);
   const selectedUrl = input.startUrl?.trim() || links[0];
-  if (!selectedUrl) throw new Error('This email has no safe dashboard link. Paste the report URL to continue.');
+  if (!selectedUrl)
+    throw new Error('This email has no safe dashboard link. Paste the report URL to continue.');
   const start = safeUrl(selectedUrl);
+  const serviceHosts = ['doordash.com', 'uber.com'].filter(
+    (host) => start.hostname === host || start.hostname.endsWith(`.${host}`)
+  );
   const existing = getBrowserRecipeForMessage(messageId);
   let profile = existing ? getBrowserProfile(existing.profileId) : null;
   let recipe = existing;
@@ -421,6 +547,7 @@ function prepareEmailBrowserAutomation(messageId: number, input: {
     profile = createBrowserProfile({
       name: input.name?.trim() || reportLabel(message),
       startUrl: start.toString(),
+      allowedHosts: serviceHosts,
       username: input.username?.trim() || undefined,
       password: input.password || undefined,
       enabled: true
@@ -436,7 +563,9 @@ function prepareEmailBrowserAutomation(messageId: number, input: {
     });
   } else {
     const profileUpdates = {
-      ...(!profile.allowedHosts.some((host) => host === start.hostname || start.hostname.endsWith(`.${host}`))
+      ...(!profile.allowedHosts.some(
+        (host) => host === start.hostname || start.hostname.endsWith(`.${host}`)
+      )
         ? { allowedHosts: [...profile.allowedHosts, start.hostname] }
         : {}),
       ...(input.username?.trim() ? { username: input.username.trim() } : {}),
@@ -460,12 +589,15 @@ function prepareEmailBrowserAutomation(messageId: number, input: {
  * One-click email-first setup. Profiles and empty recipes are implementation
  * details; the user only sees the guided browser session launched from mail.
  */
-export async function startEmailBrowserAutomation(messageId: number, input: {
-  startUrl?: string;
-  name?: string;
-  username?: string;
-  password?: string;
-}) {
+export async function startEmailBrowserAutomation(
+  messageId: number,
+  input: {
+    startUrl?: string;
+    name?: string;
+    username?: string;
+    password?: string;
+  }
+) {
   const { links, profile, recipe } = prepareEmailBrowserAutomation(messageId, input);
   const started = await startBrowserRecording({
     profileId: profile.id,
@@ -491,12 +623,17 @@ export async function startEmailBrowserAutomation(messageId: number, input: {
  * The browser bridge records actions in the user's own browser and sends the
  * sanitized actions back through the authenticated app page when finished.
  */
-export function startEmailBrowserAutomationClient(messageId: number, input: {
-  startUrl?: string;
-  name?: string;
-  username?: string;
-  password?: string;
-}) {
+export function startEmailBrowserAutomationClient(
+  messageId: number,
+  input: {
+    startUrl?: string;
+    name?: string;
+    username?: string;
+    password?: string;
+    bridgeSessionId: string;
+    bridgeOrigin: string;
+  }
+) {
   const { links, profile, recipe } = prepareEmailBrowserAutomation(messageId, input);
   const now = nowIso();
   const run = db
@@ -507,7 +644,9 @@ export function startEmailBrowserAutomationClient(messageId: number, input: {
       status: 'recording',
       triggerType: 'client_recording',
       currentActionIndex: 0,
-      logsJson: JSON.stringify([{ at: now, event: 'client_recording_started', url: recipe.startUrl }]),
+      logsJson: JSON.stringify([
+        { at: now, event: 'client_recording_started', url: safeLogUrl(recipe.startUrl) }
+      ]),
       createdAt: now,
       startedAt: now
     })
@@ -523,8 +662,33 @@ export function startEmailBrowserAutomationClient(messageId: number, input: {
     links,
     profile: getBrowserProfile(profile.id),
     recipe: getBrowserRecipe(recipe.id),
-    run: getBrowserRun(run.id)
+    run: getBrowserRun(run.id),
+    bridge: {
+      token: issueBrowserBridgeCapability({
+        runId: run.id,
+        sessionId: input.bridgeSessionId,
+        appOrigin: input.bridgeOrigin
+      }),
+      sessionId: input.bridgeSessionId,
+      appOrigin: input.bridgeOrigin
+    }
   };
+}
+
+/** Verify the short-lived extension capability and ensure its recording is still live. */
+export function verifyClientBrowserBridgeCapability(input: {
+  token: string;
+  sessionId: string;
+  appOrigin: string;
+}) {
+  const capability = verifyBrowserBridgeCapability(input.token, {
+    sessionId: input.sessionId,
+    appOrigin: input.appOrigin
+  });
+  if (!capability) return null;
+  const run = getBrowserRun(capability.runId);
+  if (!run || run.status !== 'recording' || run.triggerType !== 'client_recording') return null;
+  return capability;
 }
 
 export function finishClientBrowserRecording(input: {
@@ -646,8 +810,12 @@ export async function startBrowserRecording(input: {
   const profile = getBrowserProfile(input.profileId);
   if (!profile || !profile.enabled) throw new Error('Browser profile is missing or disabled');
   let recipe = input.recipeId ? getBrowserRecipe(input.recipeId) : null;
-  const startUrl = assertAllowedUrl(input.startUrl || recipe?.startUrl || profile.startUrl, profile.allowedHosts);
-  if (recipe && recipe.profileId !== profile.id) throw new Error('Recipe does not belong to this profile');
+  const startUrl = assertAllowedUrl(
+    input.startUrl || recipe?.startUrl || profile.startUrl,
+    profile.allowedHosts
+  );
+  if (recipe && recipe.profileId !== profile.id)
+    throw new Error('Recipe does not belong to this profile');
   if (!recipe) {
     recipe = createBrowserRecipe({
       profileId: profile.id,
@@ -667,12 +835,23 @@ export async function startBrowserRecording(input: {
       status: 'recording',
       triggerType: 'manual',
       currentActionIndex: 0,
-      logsJson: JSON.stringify([{ at: now, event: 'recording_started', url: startUrl.toString() }]),
+      logsJson: JSON.stringify([
+        { at: now, event: 'recording_started', url: safeLogUrl(startUrl.toString()) }
+      ]),
       createdAt: now,
       startedAt: now
     })
     .returning()
     .get();
+  try {
+    reserveProfileRun(profile.id, run.id);
+  } catch (error) {
+    db.update(browserRuns)
+      .set({ status: 'failed', errorMessage: safeBrowserError(error), finishedAt: nowIso() })
+      .where(eq(browserRuns.id, run.id))
+      .run();
+    throw error;
+  }
   let session: ActiveSession;
   try {
     session = await launchSession({
@@ -683,25 +862,35 @@ export async function startBrowserRecording(input: {
       recording: true
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = safeBrowserError(error);
     db.update(browserRuns)
       .set({ status: 'failed', errorMessage: message, finishedAt: nowIso() })
       .where(eq(browserRuns.id, run.id))
       .run();
+    releaseProfileRun(profile.id, run.id);
     throw new Error(message, { cause: error });
   }
   activeSessions.set(run.id, session);
-  db.update(browserProfiles).set({ lastUsedAt: now, updatedAt: now }).where(eq(browserProfiles.id, profile.id)).run();
+  db.update(browserProfiles)
+    .set({ lastUsedAt: now, updatedAt: now })
+    .where(eq(browserProfiles.id, profile.id))
+    .run();
   return { run: getBrowserRun(run.id), recipe: getBrowserRecipe(recipe.id) };
 }
 
 export async function getBrowserRecordingEvents(runId: number) {
   const session = activeSessions.get(runId);
-  const events: BrowserAction[] = [];
-  if (session) {
+  const events: BrowserAction[] = session?.recordingActions.length
+    ? [...session.recordingActions]
+    : [];
+  // Console capture is the durable path and survives navigations. Keep a
+  // page-state fallback for older sessions/scripts that are already open.
+  if (session && !events.length)
     for (const page of session.pages) events.push(...(await readPageEvents(page)));
-  }
-  return { run: getBrowserRun(runId), actions: normalizeActions(events, await allowedHostsForRun(runId)) };
+  return {
+    run: getBrowserRun(runId),
+    actions: normalizeActions(events, await allowedHostsForRun(runId))
+  };
 }
 
 export async function stopBrowserRecording(runId: number, save = true) {
@@ -710,8 +899,11 @@ export async function stopBrowserRecording(runId: number, save = true) {
   if (!run) throw new Error('Browser run not found');
   if (!session) return { run, recipe: run.recipeId ? getBrowserRecipe(run.recipeId) : null };
   const profileHosts = await allowedHostsForRun(runId);
-  const pageEvents: BrowserAction[] = [];
-  for (const page of session.pages) pageEvents.push(...(await readPageEvents(page)));
+  const pageEvents: BrowserAction[] = session.recordingActions.length
+    ? [...session.recordingActions]
+    : [];
+  if (!pageEvents.length)
+    for (const page of session.pages) pageEvents.push(...(await readPageEvents(page)));
   const actions = normalizeActions(pageEvents, profileHosts);
   let recipe = run.recipeId ? getBrowserRecipe(run.recipeId) : null;
   if (save && recipe) {
@@ -724,6 +916,7 @@ export async function stopBrowserRecording(runId: number, save = true) {
     recipe = toRecipe(updated);
   }
   await closeSession(runId);
+  releaseProfileRun(session.profileId, runId);
   const priorLogs = parseLogs(runId);
   db.update(browserRuns)
     .set({
@@ -737,14 +930,22 @@ export async function stopBrowserRecording(runId: number, save = true) {
     })
     .where(eq(browserRuns.id, runId))
     .run();
-  recordAgentAudit({ actor: 'user', eventType: 'browser_recording_stopped', payload: { runId, recipeId: recipe?.id || null, actionCount: actions.length } });
+  recordAgentAudit({
+    actor: 'user',
+    eventType: 'browser_recording_stopped',
+    payload: { runId, recipeId: recipe?.id || null, actionCount: actions.length }
+  });
   return { run: getBrowserRun(runId), recipe };
 }
 
-export async function runBrowserRecipe(
-  recipeId: number,
-  options: { taskRunId?: number; taskStepId?: number; headless?: boolean; triggerType?: string } = {}
-) {
+type BrowserRecipeRunOptions = {
+  taskRunId?: number;
+  taskStepId?: number;
+  headless?: boolean;
+  triggerType?: string;
+};
+
+function prepareBrowserRecipeRun(recipeId: number, options: BrowserRecipeRunOptions) {
   const recipe = getBrowserRecipe(recipeId);
   if (!recipe || !recipe.enabled) throw new Error('Browser recipe is missing or disabled');
   const profile = getBrowserProfile(recipe.profileId);
@@ -766,6 +967,23 @@ export async function runBrowserRecipe(
     .returning()
     .get();
   try {
+    reserveProfileRun(profile.id, run.id);
+  } catch (error) {
+    db.update(browserRuns)
+      .set({ status: 'failed', errorMessage: safeBrowserError(error), finishedAt: nowIso() })
+      .where(eq(browserRuns.id, run.id))
+      .run();
+    throw error;
+  }
+  return { recipe, profile, actions, run };
+}
+
+async function executeBrowserRecipeRun(
+  prepared: ReturnType<typeof prepareBrowserRecipeRun>,
+  options: BrowserRecipeRunOptions
+) {
+  const { recipe, profile, actions, run } = prepared;
+  try {
     const session = await launchSession({
       runId: run.id,
       profileId: profile.id,
@@ -775,16 +993,20 @@ export async function runBrowserRecipe(
       headless: options.headless ?? env.BROWSER_HEADLESS
     });
     activeSessions.set(run.id, session);
+    ensureRunActive(run.id);
     const page = [...session.pages][0] || (await session.context.newPage());
     for (let index = 0; index < actions.length; index += 1) {
       const action = actions[index];
-      const current = getBrowserRun(run.id);
-      if (current?.status === 'cancelled') throw new Error('Browser run cancelled');
-      db.update(browserRuns).set({ currentActionIndex: index }).where(eq(browserRuns.id, run.id)).run();
+      ensureRunActive(run.id);
+      db.update(browserRuns)
+        .set({ currentActionIndex: index })
+        .where(eq(browserRuns.id, run.id))
+        .run();
       await executeAction(page, action, profile.allowedHosts, run.id, profile.id);
       appendRunLog(run.id, { event: 'action_completed', index, type: action.type });
     }
-    await waitForDownload(run.id, 1800).catch(() => null);
+    await waitForDownload(run.id, 10000);
+    ensureRunActive(run.id);
     await closeSession(run.id);
     const finished = nowIso();
     const priorLogs = parseLogs(run.id);
@@ -800,22 +1022,74 @@ export async function runBrowserRecipe(
       })
       .where(eq(browserRuns.id, run.id))
       .run();
-    db.update(browserRecipes).set({ lastRunAt: finished, updatedAt: finished }).where(eq(browserRecipes.id, recipe.id)).run();
-    recordAgentAudit({ taskRunId: options.taskRunId, taskStepId: options.taskStepId, actor: 'agent', eventType: 'browser_recipe_completed', payload: { runId: run.id, recipeId, downloadPath: getBrowserRun(run.id)?.downloadPath || null } });
+    db.update(browserRecipes)
+      .set({ lastRunAt: finished, updatedAt: finished })
+      .where(eq(browserRecipes.id, recipe.id))
+      .run();
+    recordAgentAudit({
+      taskRunId: options.taskRunId,
+      taskStepId: options.taskStepId,
+      actor: 'agent',
+      eventType: 'browser_recipe_completed',
+      payload: {
+        runId: run.id,
+        recipeId: recipe.id,
+        downloadPath: getBrowserRun(run.id)?.downloadPath || null
+      }
+    });
     return getBrowserRun(run.id);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = safeBrowserError(error);
     await closeSession(run.id).catch(() => undefined);
-    db.update(browserRuns).set({ status: 'failed', errorMessage: message, finishedAt: nowIso() }).where(eq(browserRuns.id, run.id)).run();
-    recordAgentAudit({ taskRunId: options.taskRunId, taskStepId: options.taskStepId, actor: 'agent', eventType: 'browser_recipe_failed', payload: { runId: run.id, recipeId, error: message } });
+    const current = getBrowserRun(run.id);
+    if (current?.status !== 'cancelled') {
+      db.update(browserRuns)
+        .set({ status: 'failed', errorMessage: message, finishedAt: nowIso() })
+        .where(eq(browserRuns.id, run.id))
+        .run();
+      recordAgentAudit({
+        taskRunId: options.taskRunId,
+        taskStepId: options.taskStepId,
+        actor: 'agent',
+        eventType: 'browser_recipe_failed',
+        payload: { runId: run.id, recipeId: recipe.id, error: message }
+      });
+    }
+    if (current?.status === 'cancelled') return current;
     throw new Error(message, { cause: error });
+  } finally {
+    releaseProfileRun(profile.id, run.id);
   }
+}
+
+export async function runBrowserRecipe(recipeId: number, options: BrowserRecipeRunOptions = {}) {
+  const prepared = prepareBrowserRecipeRun(recipeId, options);
+  return executeBrowserRecipeRun(prepared, options);
+}
+
+/** Persist a run and launch it in the background for HTTP callers that need an immediate response. */
+export function startBrowserRecipeRun(recipeId: number, options: BrowserRecipeRunOptions = {}) {
+  const prepared = prepareBrowserRecipeRun(recipeId, {
+    ...options,
+    headless: options.headless ?? true,
+    triggerType: options.triggerType || 'verification'
+  });
+  void executeBrowserRecipeRun(prepared, {
+    ...options,
+    headless: options.headless ?? true,
+    triggerType: options.triggerType || 'verification'
+  }).catch(() => undefined);
+  return getBrowserRun(prepared.run.id);
 }
 
 export async function cancelBrowserRun(id: number) {
   const run = getBrowserRun(id);
   if (!run) return null;
-  db.update(browserRuns).set({ status: 'cancelled', finishedAt: nowIso(), errorMessage: 'Cancelled by user.' }).where(eq(browserRuns.id, id)).run();
+  if (!['recording', 'running', 'needs_attention'].includes(run.status)) return run;
+  db.update(browserRuns)
+    .set({ status: 'cancelled', finishedAt: nowIso(), errorMessage: 'Cancelled by user.' })
+    .where(eq(browserRuns.id, id))
+    .run();
   await closeSession(id);
   recordAgentAudit({ actor: 'user', eventType: 'browser_run_cancelled', payload: { runId: id } });
   return getBrowserRun(id);
@@ -847,9 +1121,12 @@ async function launchSession(input: {
     runId: input.runId,
     profileId: profile.id,
     recipeId: input.recipeId,
+    recording: input.recording,
     context,
     pages: new Set(context.pages()),
     downloadDir: downloads,
+    recordingActions: [],
+    downloadTasks: new Set(),
     closed: false
   };
   context.on('page', (page) => {
@@ -859,31 +1136,91 @@ async function launchSession(input: {
   for (const page of session.pages) attachPageListeners(page, session, profile.allowedHosts);
   const page = [...session.pages][0] || (await context.newPage());
   if (input.recording) await context.addInitScript({ content: recorderScript });
-  await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: env.BROWSER_MAX_RUNTIME_MS });
+  try {
+    await page.goto(url.toString(), {
+      waitUntil: 'domcontentloaded',
+      timeout: env.BROWSER_MAX_RUNTIME_MS
+    });
+  } catch (error) {
+    await context.close().catch(() => undefined);
+    throw error;
+  }
   return session;
 }
 
-function attachPageListeners(page: import('playwright').Page, session: ActiveSession, hosts: string[]) {
+const recorderEventPrefix = '__dear_robot_browser_event__:';
+
+function attachPageListeners(
+  page: import('playwright').Page,
+  session: ActiveSession,
+  hosts: string[]
+) {
+  page.on('console', (message) => {
+    if (!session.recording) return;
+    const text = message.text();
+    if (!text.startsWith(recorderEventPrefix)) return;
+    try {
+      const envelope = JSON.parse(text.slice(recorderEventPrefix.length)) as {
+        action?: unknown;
+        replaceLast?: boolean;
+      };
+      const parsed = BrowserActionSchema.safeParse(envelope.action);
+      if (!parsed.success) return;
+      const action = parsed.data;
+      if (envelope.replaceLast && session.recordingActions.length) {
+        const previous = session.recordingActions[session.recordingActions.length - 1];
+        if (
+          previous.type === 'fill' &&
+          action.type === 'fill' &&
+          previous.selector === action.selector
+        ) {
+          session.recordingActions[session.recordingActions.length - 1] = action;
+          return;
+        }
+      }
+      if (session.recordingActions.length >= 100) {
+        if (!session.recordingLimitReached) {
+          session.recordingLimitReached = true;
+          appendRunLog(session.runId, { event: 'recording_step_limit_reached' });
+        }
+        return;
+      }
+      session.recordingActions.push(action);
+    } catch {
+      // A page's console output is untrusted; malformed recorder events are ignored.
+    }
+  });
   page.on('framenavigated', (frame) => {
     if (frame !== page.mainFrame()) return;
     try {
       assertAllowedUrl(frame.url(), hosts);
-      appendRunLog(session.runId, { event: 'navigated', url: frame.url() });
+      appendRunLog(session.runId, { event: 'navigated', url: safeLogUrl(frame.url()) });
     } catch (error) {
-      appendRunLog(session.runId, { event: 'navigation_blocked', url: frame.url(), error: error instanceof Error ? error.message : String(error) });
+      appendRunLog(session.runId, {
+        event: 'navigation_blocked',
+        url: safeLogUrl(frame.url()),
+        error: safeBrowserError(error)
+      });
       void page.goBack().catch(() => undefined);
     }
   });
   page.on('download', (download) => {
+    if (session.recording) session.recordingActions.push({ type: 'download' });
     void page
       .evaluate(() => {
         const target = window as Window & { __dearRobotBrowserEvents?: unknown[] };
         target.__dearRobotBrowserEvents?.push({ type: 'download' });
       })
       .catch(() => undefined);
-    void saveDownload(download, session).catch((error) => {
-      appendRunLog(session.runId, { event: 'download_failed', error: error instanceof Error ? error.message : String(error) });
-    });
+    const task = saveDownload(download, session)
+      .catch((error) => {
+        const message = safeBrowserError(error);
+        session.downloadError = message;
+        appendRunLog(session.runId, { event: 'download_failed', error: message });
+      })
+      .then(() => undefined);
+    session.downloadTasks.add(task);
+    void task.finally(() => session.downloadTasks.delete(task));
   });
 }
 
@@ -894,13 +1231,20 @@ async function saveDownload(download: import('playwright').Download, session: Ac
   const stat = await fs.stat(target);
   if (stat.size > env.BROWSER_MAX_DOWNLOAD_BYTES) {
     await fs.rm(target, { force: true });
-    throw new Error(`Download exceeds the ${Math.round(env.BROWSER_MAX_DOWNLOAD_BYTES / 1024 / 1024)} MB browser limit.`);
+    throw new Error(
+      `Download exceeds the ${Math.round(env.BROWSER_MAX_DOWNLOAD_BYTES / 1024 / 1024)} MB browser limit.`
+    );
   }
   db.update(browserRuns)
     .set({ downloadPath: target, downloadFilename: suggested })
     .where(eq(browserRuns.id, session.runId))
     .run();
-  appendRunLog(session.runId, { event: 'download_saved', path: target, filename: suggested, bytes: stat.size });
+  appendRunLog(session.runId, {
+    event: 'download_saved',
+    path: target,
+    filename: suggested,
+    bytes: stat.size
+  });
 }
 
 async function executeAction(
@@ -910,8 +1254,15 @@ async function executeAction(
   runId: number,
   profileId: number
 ) {
+  // A redirect can complete between actions. Re-check the live page before
+  // filling credentials or clicking anything so OAuth/session URLs cannot be
+  // used as an accidental action target.
+  if (page.url() && page.url() !== 'about:blank') assertAllowedUrl(page.url(), hosts);
   if (action.type === 'goto') {
-    await page.goto(assertAllowedUrl(action.url, hosts).toString(), { waitUntil: 'domcontentloaded', timeout: env.BROWSER_MAX_RUNTIME_MS });
+    await page.goto(assertAllowedUrl(action.url, hosts).toString(), {
+      waitUntil: 'domcontentloaded',
+      timeout: env.BROWSER_MAX_RUNTIME_MS
+    });
     return;
   }
   if (action.type === 'wait') {
@@ -922,28 +1273,75 @@ async function executeAction(
     await waitForDownload(runId, action.timeoutMs || 10000);
     return;
   }
-  const locator = page.locator(action.selector).first();
+  let locator = page.locator(action.selector);
+  let count = await locator.count();
+  if (count > 1) {
+    throw new Error(
+      `Selector “${action.selector}” matched ${count} elements. Refine the saved recipe selector before replaying it.`
+    );
+  }
   try {
+    if (count === 0) {
+      if (await completeVisibleEmailChallenge(page, runId, profileId)) {
+        locator = page.locator(action.selector);
+        count = await locator.count();
+        if (count > 1) {
+          throw new Error(
+            `Selector “${action.selector}” matched ${count} elements after verification. Refine the saved recipe selector.`
+          );
+        }
+      }
+      if (count === 0 && action.optional && !(await hasVisibleAuthenticationSurface(page))) return;
+    }
     await locator.waitFor({
       state: 'visible',
-      timeout: action.optional ? Math.min(env.BROWSER_MAX_RUNTIME_MS, 1800) : env.BROWSER_MAX_RUNTIME_MS
+      timeout: action.optional
+        ? Math.min(env.BROWSER_MAX_RUNTIME_MS, 1800)
+        : env.BROWSER_MAX_RUNTIME_MS
     });
   } catch (error) {
-    if (action.optional) return;
-    throw error;
+    if (await completeVisibleEmailChallenge(page, runId, profileId)) {
+      locator = page.locator(action.selector);
+      count = await locator.count();
+      if (count > 1) {
+        throw new Error(
+          `Selector “${action.selector}” matched ${count} elements after verification. Refine the saved recipe selector.`,
+          { cause: error }
+        );
+      }
+      await locator.waitFor({ state: 'visible', timeout: env.BROWSER_MAX_RUNTIME_MS });
+    } else if (action.optional && !(await hasVisibleAuthenticationSurface(page))) {
+      // Optional login controls are skipped only when the page clearly is not
+      // showing a login/challenge surface. A changed selector on an expired
+      // login page must remain a visible failure.
+      return;
+    } else {
+      throw error;
+    }
   }
   if (action.type === 'click') {
     await locator.click({ timeout: env.BROWSER_MAX_RUNTIME_MS });
+  } else if (action.type === 'check') {
+    await locator.setChecked(action.checked, { timeout: env.BROWSER_MAX_RUNTIME_MS });
   } else if (action.type === 'fill') {
     if (action.secretRef) {
       const secrets = getBrowserProfileSecrets(profileId);
-      const value = secrets?.[action.secretRef] || '';
+      const value =
+        action.secretRef === 'email_code'
+          ? await waitForEmailVerification(runId, profileId)
+          : secrets?.[action.secretRef] || '';
       if (!value) {
         throw new Error(
-          `Browser profile is missing its saved ${action.secretRef} credential. Add it in Browser automations.`
+          `This automation is missing its saved ${action.secretRef}. Open Automate this report from the source email to update the login.`
         );
       }
-      await locator.fill(value, { timeout: env.BROWSER_MAX_RUNTIME_MS });
+      try {
+        await locator.fill(value, { timeout: env.BROWSER_MAX_RUNTIME_MS });
+      } catch (error) {
+        throw new Error(`Could not fill the saved ${action.secretRef} into the login form.`, {
+          cause: error
+        });
+      }
     } else {
       if (action.secret || action.value === null || action.value === undefined) {
         throw new Error(
@@ -959,20 +1357,148 @@ async function executeAction(
   }
 }
 
+async function hasVisibleAuthenticationSurface(page: import('playwright').Page) {
+  const candidates = page.locator(
+    'input[type="password"], input[autocomplete="current-password"], input[autocomplete="username"], input[autocomplete="one-time-code"], input[name="otp"], input[name="verificationCode"]'
+  );
+  const count = await candidates.count();
+  for (let index = 0; index < count; index += 1) {
+    if (
+      await candidates
+        .nth(index)
+        .isVisible()
+        .catch(() => false)
+    )
+      return true;
+  }
+  return false;
+}
+
+/** Complete a visible email-code challenge, including split one-character fields. */
+async function completeVisibleEmailChallenge(
+  page: import('playwright').Page,
+  runId: number,
+  profileId: number
+) {
+  const fields = page.locator(
+    'input[autocomplete="one-time-code"], input[name="otp"], input[name="verificationCode"], input[inputmode="numeric"]'
+  );
+  const visible: import('playwright').Locator[] = [];
+  for (let index = 0; index < (await fields.count()); index += 1) {
+    const field = fields.nth(index);
+    if (await field.isVisible().catch(() => false)) visible.push(field);
+  }
+  if (!visible.length) return false;
+  const code = await waitForEmailVerification(runId, profileId);
+  try {
+    if (visible.length === 1) {
+      await visible[0].fill(code, { timeout: env.BROWSER_MAX_RUNTIME_MS });
+    } else if (visible.length >= code.length && visible.length <= 8) {
+      for (let index = 0; index < code.length; index += 1) {
+        await visible[index].fill(code[index], { timeout: env.BROWSER_MAX_RUNTIME_MS });
+      }
+    } else {
+      throw new Error('unsupported field count');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === 'unsupported field count') {
+      throw new Error(
+        'The verification form has an unsupported number of code fields. Complete this login in the browser recording window.',
+        { cause: error }
+      );
+    }
+    throw new Error('Could not fill the fresh verification code into the login form.', {
+      cause: error
+    });
+  }
+  const submits = page.getByRole('button', {
+    name: /^(verify|verify code|continue|submit|next|sign in)$/i
+  });
+  const submitCount = await submits.count();
+  let submit: import('playwright').Locator | null = null;
+  for (let index = 0; index < submitCount; index += 1) {
+    const candidate = submits.nth(index);
+    if (await candidate.isVisible().catch(() => false)) {
+      if (submit)
+        throw new Error(
+          'Verification form has multiple visible submit buttons. Complete this login in the browser recording window.'
+        );
+      submit = candidate;
+    }
+  }
+  if (!submit) {
+    const fallback = page.locator('button[type="submit"], input[type="submit"]');
+    const fallbackVisible: import('playwright').Locator[] = [];
+    for (let index = 0; index < (await fallback.count()); index += 1) {
+      const candidate = fallback.nth(index);
+      if (await candidate.isVisible().catch(() => false)) fallbackVisible.push(candidate);
+    }
+    if (fallbackVisible.length === 1) submit = fallbackVisible[0];
+  }
+  if (!submit)
+    throw new Error(
+      'Verification code entered; the verification form needs your help to continue.'
+    );
+  await submit.click({ timeout: env.BROWSER_MAX_RUNTIME_MS });
+  return true;
+}
+
+async function waitForEmailVerification(runId: number, profileId: number) {
+  const run = getBrowserRun(runId);
+  const recipe = run?.recipeId ? getBrowserRecipe(run.recipeId) : null;
+  const source = recipe?.sourceMessageId
+    ? db.select().from(messages).where(eq(messages.id, recipe.sourceMessageId)).get()
+    : null;
+  const profile = getBrowserProfile(profileId);
+  const email = getBrowserProfileSecrets(profileId)?.username;
+  if (!source || !profile || !email?.includes('@')) {
+    throw new Error(
+      'Email verification needs a source email and a saved login email address. Reopen Automate this report from your inbox.'
+    );
+  }
+  const since = Math.max(
+    Date.parse(run!.startedAt || run!.createdAt) - 30000,
+    Date.now() - 5 * 60000
+  );
+  appendRunLog(runId, { event: 'waiting_for_email_code', accountId: source.accountId });
+  const code = await waitForInboxVerification({
+    sourceAccountId: source.accountId,
+    email,
+    hosts: profile.allowedHosts,
+    since,
+    isCancelled: () => getBrowserRun(runId)?.status === 'cancelled'
+  });
+  appendRunLog(runId, { event: 'email_code_received' });
+  return code;
+}
+
 async function waitForDownload(runId: number, timeoutMs: number) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const run = getBrowserRun(runId);
+    if (run?.status === 'cancelled') throw new Error('Browser run cancelled');
+    const session = activeSessions.get(runId);
+    if (session?.downloadError) throw new Error(`Report download failed: ${session.downloadError}`);
     if (run?.downloadPath) return run.downloadPath;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
+  const session = activeSessions.get(runId);
+  if (session?.downloadError) throw new Error(`Report download failed: ${session.downloadError}`);
+  if (getBrowserRun(runId)?.status === 'cancelled') throw new Error('Browser run cancelled');
   throw new Error('Timed out waiting for a report download.');
 }
 
 async function readPageEvents(page: import('playwright').Page) {
   try {
-    const raw = await page.evaluate(() => (window as Window & { __dearRobotBrowserEvents?: unknown[] }).__dearRobotBrowserEvents || []);
-    return Array.isArray(raw) ? raw.flatMap((value) => BrowserActionSchema.safeParse(value).success ? [value as BrowserAction] : []) : [];
+    const raw = await page.evaluate(
+      () =>
+        (window as Window & { __dearRobotBrowserEvents?: unknown[] }).__dearRobotBrowserEvents || []
+    );
+    return Array.isArray(raw)
+      ? raw.flatMap((value) =>
+          BrowserActionSchema.safeParse(value).success ? [value as BrowserAction] : []
+        )
+      : [];
   } catch {
     return [];
   }
@@ -1011,7 +1537,11 @@ function normalizeActions(actions: BrowserAction[], hosts: string[]) {
 }
 
 function parseLogs(runId: number) {
-  const row = db.select({ logs: browserRuns.logsJson }).from(browserRuns).where(eq(browserRuns.id, runId)).get();
+  const row = db
+    .select({ logs: browserRuns.logsJson })
+    .from(browserRuns)
+    .where(eq(browserRuns.id, runId))
+    .get();
   return parseJson(row?.logs, []);
 }
 
@@ -1020,15 +1550,24 @@ async function closeSession(runId: number) {
   if (!session || session.closed) return;
   session.closed = true;
   activeSessions.delete(runId);
+  releaseProfileRun(session.profileId, runId);
   await session.context.close();
 }
 
 async function closeSessionsForProfile(profileId: number) {
-  await Promise.all([...activeSessions.values()].filter((session) => session.profileId === profileId).map((session) => closeSession(session.runId)));
+  await Promise.all(
+    [...activeSessions.values()]
+      .filter((session) => session.profileId === profileId)
+      .map((session) => closeSession(session.runId))
+  );
 }
 
 async function closeSessionsForRecipe(recipeId: number) {
-  await Promise.all([...activeSessions.values()].filter((session) => session.recipeId === recipeId).map((session) => closeSession(session.runId)));
+  await Promise.all(
+    [...activeSessions.values()]
+      .filter((session) => session.recipeId === recipeId)
+      .map((session) => closeSession(session.runId))
+  );
 }
 
 const recorderScript = `
@@ -1036,13 +1575,22 @@ const recorderScript = `
   const win = window;
   win.__dearRobotBrowserEvents = win.__dearRobotBrowserEvents || [];
   const events = win.__dearRobotBrowserEvents;
+  const emit = (action, replaceLast = false) => {
+    // The server receives this through Playwright's page console stream. It
+    // remains available when a navigation replaces the document, unlike a
+    // window property that would otherwise be lost.
+    try { console.debug('__dear_robot_browser_event__:' + JSON.stringify({ action, replaceLast })); } catch {}
+  };
   const selector = (element) => {
     if (!(element instanceof Element)) return '';
-    if (element.id) return '#' + CSS.escape(element.id);
+    if (element.id && !element.id.includes(':')) return '#' + CSS.escape(element.id);
     const testId = element.getAttribute('data-testid');
     if (testId) return '[data-testid="' + CSS.escape(testId) + '"]';
     const name = element.getAttribute('name');
     if (name) return element.tagName.toLowerCase() + '[name="' + CSS.escape(name) + '"]';
+    const label = element.getAttribute('aria-label');
+    if (label) return element.tagName.toLowerCase() + '[aria-label=' + JSON.stringify(label) + ']';
+    if (element.matches('button,a,[role="button"]') && element.textContent.trim()) return element.tagName.toLowerCase() + ':text-is(' + JSON.stringify(element.textContent.trim()) + ')';
     const parts = [];
     let current = element;
     for (let i = 0; current && current.nodeType === 1 && i < 5; i++, current = current.parentElement) {
@@ -1059,6 +1607,7 @@ const recorderScript = `
     const hint = [target.autocomplete, target.name, target.id, target.getAttribute('aria-label') || '']
       .join(' ')
       .toLowerCase();
+    if (/one-time-code|otp|verification|security.?code|verify.?code/.test(hint)) return 'email_code';
     if (/(^|[\\s_-])(user(name)?|login|email)([\\s_-]|$)/.test(hint)) return 'username';
     return null;
   };
@@ -1069,18 +1618,32 @@ const recorderScript = `
   };
   const recordFill = (target) => {
     if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+    if (target instanceof HTMLInputElement && ['checkbox', 'radio'].includes(target.type)) return;
     const secretRef = credentialRef(target);
     const value = secretRef ? null : target.value.slice(0, 4000);
     const item = secretRef
       ? { type: 'fill', selector: selector(target), value: null, secret: true, secretRef }
       : { type: 'fill', selector: selector(target), value, secret: false };
     const previous = events[events.length - 1];
-    if (previous && previous.type === 'fill' && previous.selector === item.selector) events[events.length - 1] = item;
-    else events.push(item);
+    if (previous && previous.type === 'fill' && previous.selector === item.selector) {
+      events[events.length - 1] = item;
+      emit(item, true);
+    } else {
+      events.push(item);
+      emit(item);
+    }
   };
   document.addEventListener('change', (event) => {
     const target = event.target;
-    if (target instanceof HTMLSelectElement) events.push({ type: 'select', selector: selector(target), value: target.value });
+    if (target instanceof HTMLInputElement && ['checkbox', 'radio'].includes(target.type)) {
+      const item = { type: 'check', selector: selector(target), checked: target.checked };
+      events.push(item);
+      emit(item);
+    } else if (target instanceof HTMLSelectElement) {
+      const item = { type: 'select', selector: selector(target), value: target.value };
+      events.push(item);
+      emit(item);
+    }
     else recordFill(target);
   }, true);
   document.addEventListener('blur', (event) => recordFill(event.target), true);
@@ -1088,14 +1651,18 @@ const recorderScript = `
     const target = event.target instanceof Element ? event.target.closest('button,a,[role="button"],input[type="submit"]') : null;
     if (target) {
       const item = { type: 'click', selector: selector(target), optional: isLoginControl(target) };
-      events.push(item.optional ? item : { type: 'click', selector: item.selector });
+      const normalized = item.optional ? item : { type: 'click', selector: item.selector };
+      events.push(normalized);
+      emit(normalized);
     }
   }, true);
   document.addEventListener('keydown', (event) => {
     const target = event.target;
     if (event.key === 'Enter' && target instanceof Element) {
       const item = { type: 'press', selector: selector(target), key: 'Enter', optional: isLoginControl(target) };
-      events.push(item.optional ? item : { type: 'press', selector: item.selector, key: item.key });
+      const normalized = item.optional ? item : { type: 'press', selector: item.selector, key: item.key };
+      events.push(normalized);
+      emit(normalized);
     }
   }, true);
 })();

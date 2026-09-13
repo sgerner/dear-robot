@@ -92,7 +92,9 @@
     rejectSuggestion: () => void | Promise<void>;
     regenerate: () => void | Promise<void>;
     generateSuggestion: (_id: number) => void | Promise<void>;
-    recordMessageOutcome: (_type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action') => void | Promise<void>;
+    recordMessageOutcome: (
+      _type: 'resolved' | 'needs_followup' | 'bad_draft' | 'wrong_action'
+    ) => void | Promise<void>;
     createTaskPlan: () => void | Promise<void>;
     approveTask: (_id: number, _stepId?: number | null) => void | Promise<void>;
     executeTask: (_id: number) => void | Promise<void>;
@@ -169,7 +171,7 @@
         const data = await res.json();
         detail = data;
         if (data.message?.safeBodyHtml) bodyMode = 'html';
-        
+
         // 3. Save to cache for next time
         void upsertCache('message_details', [{ id: message.id, ...data }]);
       }
@@ -183,13 +185,9 @@
   $effect(() => {
     if (open) void loadDetail();
   });
-
 </script>
 
-<div
-  data-testid="message-row"
-  class="relative overflow-hidden rounded-md"
->
+<div data-testid="message-row" class="relative overflow-hidden rounded-md">
   <!-- Swipe left background (archive) -->
   <div
     class="absolute inset-y-0 left-0 flex w-28 items-center gap-2 bg-primary/10 px-4 text-xs font-medium text-primary transition-opacity duration-150"
@@ -269,9 +267,7 @@
             </span>
           {/if}
 
-          <time
-            class="shrink-0 text-xs tabular-nums tracking-tight text-muted-foreground"
-          >
+          <time class="shrink-0 text-xs tabular-nums tracking-tight text-muted-foreground">
             {open && detail?.message?.date
               ? fullFormatDate(detail.message.date)
               : formatDate(message.date)}
@@ -284,7 +280,9 @@
         >
           {message.subject}
           {#if message.conversationCount > 1}
-            <span class="ml-2 inline-flex items-center rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span
+              class="ml-2 inline-flex items-center rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground"
+            >
               {message.conversationCount} msgs
             </span>
           {/if}
@@ -300,7 +298,11 @@
       </button>
 
       {#if open && detail?.message?.safeBodyHtml}
-        <div class="flex items-center justify-end gap-1 pt-1" role="group" aria-label="Message display options">
+        <div
+          class="flex items-center justify-end gap-1 pt-1"
+          role="group"
+          aria-label="Message display options"
+        >
           <!-- Light/Dark toggle -->
           <div class="flex border border-border/40 p-0.5 bg-background">
             <button
@@ -309,7 +311,9 @@
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
-              onclick={() => { emailTheme = 'dark'; }}
+              onclick={() => {
+                emailTheme = 'dark';
+              }}
               title="Dark Mode"
               aria-label="Use dark email theme"
               aria-pressed={emailTheme === 'dark'}
@@ -322,7 +326,9 @@
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
-              onclick={() => { emailTheme = 'light'; }}
+              onclick={() => {
+                emailTheme = 'light';
+              }}
               title="Light Mode"
               aria-label="Use light email theme"
               aria-pressed={emailTheme === 'light'}
@@ -338,7 +344,9 @@
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
-              onclick={() => { bodyMode = 'html'; }}
+              onclick={() => {
+                bodyMode = 'html';
+              }}
               title="Show formatted HTML"
               aria-label="Show formatted HTML"
               aria-pressed={bodyMode === 'html'}
@@ -351,7 +359,9 @@
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
-              onclick={() => { bodyMode = 'text'; }}
+              onclick={() => {
+                bodyMode = 'text';
+              }}
               title="Show plain text"
               aria-label="Show plain text"
               aria-pressed={bodyMode === 'text'}
@@ -371,7 +381,9 @@
             <div class="h-3 w-3/4 animate-pulse rounded bg-muted/70"></div>
             <div class="h-3 w-full animate-pulse rounded bg-muted/50"></div>
             <div class="h-3 w-5/6 animate-pulse rounded bg-muted/50"></div>
-            <div class="h-20 w-full animate-pulse rounded-lg border border-border/40 bg-muted/30"></div>
+            <div
+              class="h-20 w-full animate-pulse rounded-lg border border-border/40 bg-muted/30"
+            ></div>
           </div>
         {:else if detail}
           <!-- Body content -->
@@ -393,13 +405,20 @@
           {#if detail.attachments?.length}
             <div class="pb-3">
               <details>
-                <summary class="flex cursor-pointer list-none items-center gap-2 text-xs text-foreground">
+                <summary
+                  class="flex cursor-pointer list-none items-center gap-2 text-xs text-foreground"
+                >
                   <Paperclip size={13} class="text-muted-foreground" />
                   <span class="font-medium">Attachments</span>
-                  <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 bg-muted text-muted-foreground">
+                  <span
+                    class="text-xs uppercase tracking-wider px-1.5 py-0.5 bg-muted text-muted-foreground"
+                  >
                     {detail.attachments.length}
                   </span>
-                  <ChevronDown size={12} class="text-muted-foreground transition-transform group-open:rotate-180" />
+                  <ChevronDown
+                    size={12}
+                    class="text-muted-foreground transition-transform group-open:rotate-180"
+                  />
                 </summary>
                 <div class="mt-2 flex flex-wrap gap-2">
                   {#each detail.attachments as attachment (attachment.id)}
@@ -420,9 +439,22 @@
           {/if}
 
           {#if isBrowserAutomationCandidate()}
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-3" transition:fade={{ duration: 140 }}>
-              <div class="flex min-w-0 items-start gap-2"><Globe2 size={14} class="mt-0.5 shrink-0 text-primary" /><p class="text-xs leading-5 text-muted-foreground">Need to download a report from this email?</p></div>
-              <Button size="sm" onclick={() => openBrowserAutomation(message.id)}><Globe2 size={12} /> Automate</Button>
+            <div
+              class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-3"
+              transition:fade={{ duration: 140 }}
+            >
+              <div class="flex min-w-0 items-start gap-2">
+                <Globe2 size={14} class="mt-0.5 shrink-0 text-primary" />
+                <p class="text-xs leading-5 text-muted-foreground">
+                  Need to download a report from this email?
+                </p>
+              </div>
+              <Button
+                size="sm"
+                aria-label="Automate this report"
+                onclick={() => openBrowserAutomation(message.id)}
+                ><Globe2 size={12} /> Automate report</Button
+              >
             </div>
           {/if}
 
@@ -437,11 +469,15 @@
                         ? 'bg-primary/[0.04] border-l-2 border-primary/30'
                         : 'bg-muted/20 border-l-2 border-transparent hover:bg-muted/40'
                     }`}
-                    onclick={() => { selectMessage(item.id); }}
+                    onclick={() => {
+                      selectMessage(item.id);
+                    }}
                   >
                     <div class="flex items-center justify-between gap-2 mb-0.5">
                       <p class="truncate text-xs font-medium text-foreground">{item.from}</p>
-                      <time class="shrink-0 text-xs text-muted-foreground">{formatDate(item.date)}</time>
+                      <time class="shrink-0 text-xs text-muted-foreground"
+                        >{formatDate(item.date)}</time
+                      >
                     </div>
                     <p class="truncate text-xs text-muted-foreground">{item.subject}</p>
                   </button>
@@ -449,7 +485,9 @@
                 {#if detail.thread.length > visibleThreadLimit}
                   <button
                     class="w-full py-2 text-center text-xs text-primary hover:text-primary transition-colors"
-                    onclick={() => { visibleThreadLimit += 5; }}
+                    onclick={() => {
+                      visibleThreadLimit += 5;
+                    }}
                   >
                     + More ({detail.thread.length - visibleThreadLimit} remaining)
                   </button>
@@ -472,7 +510,9 @@
                 size="sm"
                 class="hidden lg:inline-flex"
                 data-testid={`quick-action-${actionId.replace(/_/g, '-')}`}
-                onclick={() => { runQuickAction(actionId, message.id); }}
+                onclick={() => {
+                  runQuickAction(actionId, message.id);
+                }}
               >
                 {#if actionId === 'toggle_read'}
                   {#if message.isRead}<EyeOff size={13} />{:else}<Eye size={13} />{/if}
@@ -488,7 +528,9 @@
             <select
               class="touch-target h-11 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring lg:h-7"
               aria-label="Move message to folder"
-              onchange={(e) => { moveSelected(e.currentTarget.value); }}
+              onchange={(e) => {
+                moveSelected(e.currentTarget.value);
+              }}
             >
               <option value="">Move to...</option>
               {#each folders.filter((f: any) => f.accountId === message.accountId) as folder (folder.id)}
@@ -504,13 +546,22 @@
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex items-center gap-1.5 min-w-0">
                     <Sparkles size={13} class="text-primary shrink-0 mt-0.5" />
-                    <h3 class="font-semibold text-sm text-foreground">{detail.suggestion.category}</h3>
+                    <h3 class="font-semibold text-sm text-foreground">
+                      {detail.suggestion.category}
+                    </h3>
                   </div>
                   <div class="flex gap-1.5 shrink-0">
-                    <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium bg-primary/15 text-primary">
+                    <span
+                      class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium bg-primary/15 text-primary"
+                    >
                       {formatActionLabel(detail.suggestion.recommendedAction)}
                     </span>
-                    <span class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {detail.suggestion.riskLevel === 'high' ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground'}">
+                    <span
+                      class="text-xs uppercase tracking-wider px-1.5 py-0.5 font-medium {detail
+                        .suggestion.riskLevel === 'high'
+                        ? 'bg-destructive/15 text-destructive'
+                        : 'bg-muted text-muted-foreground'}"
+                    >
                       {detail.suggestion.riskLevel}
                     </span>
                   </div>
@@ -541,8 +592,7 @@
                       class="min-h-24 w-full resize-y bg-muted border border-border/40 p-2.5 pr-10 text-xs leading-relaxed outline-none placeholder:text-muted-foreground focus:border-primary/40 transition-all"
                       aria-label="Draft reply"
                       placeholder="Draft reply..."
-                      bind:value={draftText}
-                    ></textarea>
+                      bind:value={draftText}></textarea>
                     <div class="absolute right-1.5 top-1.5">
                       <DictationButton
                         targetId={`draft-reply-${message.id}`}
@@ -563,7 +613,9 @@
                   <Send size={12} class="mr-1" /> Execute
                 </Button>
                 <Button variant="outline" size="sm" onclick={() => saveEdit()}>Save</Button>
-                <Button variant="outline" size="sm" onclick={() => rejectSuggestion()}>Reject</Button>
+                <Button variant="outline" size="sm" onclick={() => rejectSuggestion()}
+                  >Reject</Button
+                >
               </div>
             </div>
           {:else if selectedId === message.id && !detail.suggestion}

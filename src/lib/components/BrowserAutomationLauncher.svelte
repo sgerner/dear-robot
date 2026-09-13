@@ -16,6 +16,8 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
+  const bridgeProtocolVersion = 3;
+
   type Message = {
     id: number;
     subject: string;
@@ -28,6 +30,9 @@
     downloadFilename?: string | null;
     downloadPath?: string | null;
     errorMessage?: string | null;
+    currentActionIndex?: number;
+    logs?: Array<{ event?: string; type?: string; at?: string }>;
+    triggerType?: string;
   };
 
   let {
@@ -47,14 +52,14 @@
   } = $props();
 
   let open = $state(false);
-  let phase = $state<'idle' | 'loading' | 'ready' | 'recording' | 'completed'>('idle');
+  let phase = $state<'idle' | 'loading' | 'ready' | 'recording' | 'completed' | 'testing'>('idle');
   let links = $state<string[]>([]);
+  let linkLabels = $state<Record<string, string>>({});
   let startUrl = $state('');
   let name = $state('');
   let username = $state('');
   let password = $state('');
   let repeatWeekly = $state(true);
-  let enableWorkflow = $state(false);
   let run = $state<Run | null>(null);
   let profileId = $state<number | null>(null);
   let recipeId = $state<number | null>(null);
@@ -63,12 +68,28 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let bridgeAvailable = $state(false);
   let bridgeChecked = $state(false);
+  let bridgeOutdated = $state(false);
   let serverFallbackAvailable = $state(false);
   let recordingMode = $state<'client' | 'server'>('client');
   let clientSessionId = $state('');
+  let bridgeToken = $state('');
   let clientActions = $state<Array<Record<string, unknown>>>([]);
   let clientDownloadFilename = $state('');
   let bridgeTimeout: ReturnType<typeof setTimeout> | null = null;
+  let bridgeAck: {
+    type: 'STARTED' | 'STOPPED';
+    resolve: () => void;
+    reject: (_error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+  let bridgeStopped = false;
+  let hasSavedLogin = $state(false);
+  let tested = $state(false);
+  const testProgress = $derived(
+    run?.logs?.at(-1)?.event === 'waiting_for_email_code'
+      ? 'Checking your connected inbox for a fresh verification code…'
+      : `Replaying the report on the server · step ${(run?.currentActionIndex ?? 0) + 1}`
+  );
 
   async function request(path: string, init: RequestInit = {}) {
     const response = await fetch(path, {
@@ -80,19 +101,24 @@
       }
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body?.message || body?.error || `Request failed (${response.status})`);
+    if (!response.ok)
+      throw new Error(body?.message || body?.error || `Request failed (${response.status})`);
     return body;
   }
 
   function reset() {
     phase = 'idle';
     links = [];
+    linkLabels = {};
     startUrl = '';
     name = '';
     username = '';
     password = '';
     repeatWeekly = true;
-    enableWorkflow = false;
+    hasSavedLogin = false;
+    tested = false;
+    bridgeStopped = false;
+    bridgeOutdated = false;
     run = null;
     profileId = null;
     recipeId = null;
@@ -100,6 +126,7 @@
     errorMessage = '';
     recordingMode = 'client';
     clientSessionId = '';
+    bridgeToken = '';
     clientActions = [];
     clientDownloadFilename = '';
     if (pollTimer) clearInterval(pollTimer);
@@ -107,9 +134,15 @@
   }
 
   function bridgeMessage(event: MessageEvent) {
-    if (event.source !== window || event.data?.source !== 'dear-robot-browser-bridge') return;
+    if (
+      event.source !== window ||
+      event.origin !== window.location.origin ||
+      event.data?.source !== 'dear-robot-browser-bridge'
+    )
+      return;
     if (event.data.type === 'READY') {
-      bridgeAvailable = true;
+      bridgeAvailable = event.data.protocolVersion === bridgeProtocolVersion;
+      bridgeOutdated = !bridgeAvailable;
       bridgeChecked = true;
       if (bridgeTimeout) clearTimeout(bridgeTimeout);
       bridgeTimeout = null;
@@ -117,21 +150,51 @@
     }
     if (event.data.type !== 'BRIDGE_EVENT' || event.data.sessionId !== clientSessionId) return;
     const bridgeEvent = event.data.event || {};
+    if (bridgeAck && bridgeEvent.type === bridgeAck.type) {
+      clearTimeout(bridgeAck.timer);
+      bridgeAck.resolve();
+      bridgeAck = null;
+    }
     if (bridgeEvent.type === 'STARTED') {
       onStatus('Your browser is ready. Complete the sign-in and report download there.');
     } else if (bridgeEvent.type === 'ACTION' && bridgeEvent.action) {
-      clientActions = [...clientActions, bridgeEvent.action].slice(-100);
+      if (clientActions.length >= 100) {
+        errorMessage =
+          'This recording reached the 100-step limit. Cancel and record a shorter path to the report.';
+        return;
+      }
+      clientActions = [...clientActions, bridgeEvent.action];
       if (bridgeEvent.action.type === 'download' && bridgeEvent.downloadFilename) {
         clientDownloadFilename = String(bridgeEvent.downloadFilename);
       }
     } else if (bridgeEvent.type === 'ERROR') {
       errorMessage = String(bridgeEvent.message || 'The browser bridge stopped unexpectedly.');
       onStatus(errorMessage);
+      if (bridgeAck) {
+        clearTimeout(bridgeAck.timer);
+        bridgeAck.reject(new Error(errorMessage));
+        bridgeAck = null;
+      }
     }
+  }
+
+  function waitForBridge(type: 'STARTED' | 'STOPPED') {
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        bridgeAck = null;
+        reject(
+          new Error(
+            'The browser bridge did not respond. Keep the report tab open and check that the extension is enabled.'
+          )
+        );
+      }, 10000);
+      bridgeAck = { type, resolve, reject, timer };
+    });
   }
 
   function pingBridge() {
     bridgeChecked = false;
+    bridgeOutdated = false;
     if (bridgeTimeout) clearTimeout(bridgeTimeout);
     window.postMessage({ source: 'dear-robot-app', type: 'PING' }, '*');
     bridgeTimeout = setTimeout(() => {
@@ -146,11 +209,26 @@
     open = true;
     phase = 'loading';
     try {
-      const result = await request(`/api/messages/${message.id}/browser-automation`, { method: 'GET' });
+      const result = await request(`/api/messages/${message.id}/browser-automation`, {
+        method: 'GET'
+      });
       links = result.links || [];
+      linkLabels = Object.fromEntries(
+        (result.linkOptions || []).map((option: { url: string; label: string }) => [
+          option.url,
+          option.label
+        ])
+      );
       const existing = result.automation;
       startUrl = existing?.recipe?.startUrl || links[0] || '';
       name = existing?.recipe?.name || `Download ${message.subject}`.slice(0, 120);
+      recipeId = existing?.recipe?.id || null;
+      profileId = existing?.profile?.id || null;
+      hasSavedLogin = Boolean(existing?.profile?.hasUsername && existing?.profile?.hasPassword);
+      run = existing?.latestRun || null;
+      tested = Boolean(
+        run?.triggerType === 'verification' && run.status === 'completed' && run.downloadPath
+      );
       phase = 'ready';
     } catch (error) {
       phase = 'ready';
@@ -198,7 +276,10 @@
     errorMessage = '';
     clientActions = [];
     clientDownloadFilename = '';
-    clientSessionId = globalThis.crypto?.randomUUID?.() || `dear-robot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    clientSessionId =
+      globalThis.crypto?.randomUUID?.() ||
+      `dear-robot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let recordingRun: Run | null = null;
     try {
       const result = await request(`/api/messages/${message.id}/browser-automation`, {
         method: 'POST',
@@ -207,25 +288,42 @@
           startUrl: startUrl.trim(),
           name: name.trim() || undefined,
           username: username.trim() || undefined,
-          password: password || undefined
+          password: password || undefined,
+          bridgeSessionId: clientSessionId
         })
       });
       run = result.run;
+      recordingRun = result.run;
       profileId = result.profile?.id || null;
       recipeId = result.recipe?.id || null;
+      bridgeToken = String(result.bridge?.token || '');
+      if (!bridgeToken)
+        throw new Error(
+          'The browser bridge could not create a secure recording session. Refresh this email and try again.'
+        );
       recordingMode = 'client';
-      phase = 'recording';
+      bridgeStopped = false;
+      const started = waitForBridge('STARTED');
       window.postMessage(
         {
           source: 'dear-robot-app',
           type: 'START_RECORDING',
           sessionId: clientSessionId,
-          startUrl: startUrl.trim()
+          startUrl: startUrl.trim(),
+          bridgeToken
         },
         '*'
       );
+      await started;
+      phase = 'recording';
       onStatus('Your browser opened in a new tab. Complete the report there, then return here.');
     } catch (error) {
+      if (recordingRun?.status === 'recording') {
+        await request(`/api/browser/runs/${recordingRun.id}/cancel`, {
+          method: 'POST',
+          body: '{}'
+        }).catch(() => undefined);
+      }
       phase = 'ready';
       errorMessage = error instanceof Error ? error.message : 'Could not start browser recording';
     }
@@ -249,6 +347,17 @@
         if (!['recording', 'running'].includes(result.run.status)) {
           if (pollTimer) clearInterval(pollTimer);
           pollTimer = null;
+          if (phase === 'testing') {
+            phase = 'completed';
+            tested = result.run.status === 'completed' && Boolean(result.run.downloadPath);
+            errorMessage = tested
+              ? ''
+              : result.run.errorMessage ||
+                'The server did not download a report. Record the login and download again.';
+            onStatus(
+              tested ? 'Server test passed. Your report is ready to inspect.' : errorMessage
+            );
+          }
         }
       } catch {
         // Keep the guided session visible if the browser is temporarily unavailable.
@@ -260,17 +369,24 @@
 
   async function finishGuidedBrowser() {
     if (!message || !run || !profileId || !recipeId) return;
+    if (recordingMode === 'client' && !clientActions.some((action) => action.type === 'download')) {
+      errorMessage =
+        'No download has been captured yet. Download the report in the recording tab before saving.';
+      return;
+    }
     phase = 'loading';
     errorMessage = '';
     try {
       if (recordingMode === 'client') {
-        window.postMessage(
-          { source: 'dear-robot-app', type: 'STOP_RECORDING', sessionId: clientSessionId },
-          '*'
-        );
-        // Let the bridge forward the final blur/click event before persisting
-        // the action list captured in this page.
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        if (!bridgeStopped) {
+          const stopped = waitForBridge('STOPPED');
+          window.postMessage(
+            { source: 'dear-robot-app', type: 'STOP_RECORDING', sessionId: clientSessionId },
+            '*'
+          );
+          await stopped;
+          bridgeStopped = true;
+        }
         const result = await request(`/api/messages/${message.id}/browser-automation`, {
           method: 'POST',
           body: JSON.stringify({
@@ -283,7 +399,7 @@
             username: username.trim() || undefined,
             password: password || undefined,
             createWorkflow: repeatWeekly,
-            enableWorkflow,
+            enableWorkflow: false,
             schedule: 'every 7d',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
           })
@@ -310,7 +426,7 @@
           username: username.trim() || undefined,
           password: password || undefined,
           createWorkflow: repeatWeekly,
-          enableWorkflow,
+          enableWorkflow: false,
           schedule: 'every 7d',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
         })
@@ -320,9 +436,7 @@
       password = '';
       phase = 'completed';
       onStatus(
-        workflow
-          ? `${workflow.name} is ready in paused dry-run mode.`
-          : 'Report automation saved.'
+        workflow ? `${workflow.name} is ready in paused dry-run mode.` : 'Report automation saved.'
       );
       await onChanged();
     } catch (error) {
@@ -345,18 +459,50 @@
       // Closing the dialog is still safe if the browser already exited.
     }
     onStatus('Guided browser setup cancelled.');
+    phase = 'ready';
     closeLauncher();
   }
 
+  async function testOnServer() {
+    if (!message || !recipeId) return;
+    errorMessage = '';
+    tested = false;
+    phase = 'testing';
+    try {
+      const result = await request(`/api/messages/${message.id}/browser-automation`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'test', recipeId })
+      });
+      run = result.run;
+      await pollRun(result.run.id);
+    } catch (error) {
+      phase = 'completed';
+      errorMessage = error instanceof Error ? error.message : 'Could not start the server test.';
+    }
+  }
+
+  async function cancelTest() {
+    if (!run) return;
+    await request(`/api/browser/runs/${run.id}/cancel`, { method: 'POST', body: '{}' }).catch(
+      () => undefined
+    );
+    phase = 'completed';
+    errorMessage = 'Server test cancelled.';
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
   function closeLauncher() {
-    if (phase === 'recording') return;
+    if (['recording', 'loading', 'testing'].includes(phase)) return;
     open = false;
     reset();
     onClosed();
   }
 
   onMount(() => {
-    serverFallbackAvailable = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(window.location.hostname);
+    serverFallbackAvailable = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(
+      window.location.hostname
+    );
     window.addEventListener('message', bridgeMessage);
     pingBridge();
     if (message) void openLauncher();
@@ -365,6 +511,7 @@
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer);
     if (bridgeTimeout) clearTimeout(bridgeTimeout);
+    if (bridgeAck) clearTimeout(bridgeAck.timer);
     window.removeEventListener('message', bridgeMessage);
   });
 </script>
@@ -391,18 +538,28 @@
         <div class="flex min-w-0 items-start gap-3">
           <div class="rounded-xl bg-primary/10 p-2.5 text-primary"><Globe2 size={18} /></div>
           <div class="min-w-0">
-            <h2 id="browser-automation-title" class="text-base font-semibold text-foreground">Automate this email</h2>
+            <h2 id="browser-automation-title" class="text-base font-semibold text-foreground">
+              Automate this email
+            </h2>
             <p class="mt-1 truncate text-xs text-muted-foreground">{message.subject}</p>
           </div>
         </div>
-        {#if phase !== 'recording'}
-          <button class="touch-target rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close automation setup" title="Close" onclick={closeLauncher}><X size={16} /></button>
+        {#if !['recording', 'loading', 'testing'].includes(phase)}
+          <button
+            class="touch-target rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Close automation setup"
+            title="Close"
+            onclick={closeLauncher}><X size={16} /></button
+          >
         {/if}
       </div>
 
       <div class="space-y-5 p-5">
         {#if phase === 'loading'}
-          <div class="flex flex-col items-center gap-3 py-12 text-center" in:fade={{ duration: 120 }}>
+          <div
+            class="flex flex-col items-center gap-3 py-12 text-center"
+            in:fade={{ duration: 120 }}
+          >
             <LoaderCircle size={24} class="animate-spin text-primary" />
             <p class="text-sm text-muted-foreground">Preparing your guided setup…</p>
           </div>
@@ -413,37 +570,75 @@
                 <ShieldCheck size={16} class="mt-0.5 shrink-0 text-primary" />
                 <div>
                   <p class="text-sm font-medium text-foreground">One guided setup</p>
-                  <p class="mt-1 text-xs leading-5 text-muted-foreground">Dear Robot creates the secure profile and recipe for you. You only need to complete the report once.</p>
+                  <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                    Show Dear Robot the login and report download, then test that it can repeat the
+                    steps on the server.
+                  </p>
                 </div>
               </div>
             </div>
 
             {#if !bridgeChecked}
-              <div class="flex items-center gap-2 rounded-lg border border-border bg-muted/10 px-3 py-2 text-xs text-muted-foreground" in:fade={{ duration: 120 }}>
+              <div
+                class="flex items-center gap-2 rounded-lg border border-border bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
+                in:fade={{ duration: 120 }}
+              >
                 <LoaderCircle size={13} class="animate-spin" /> Checking for the browser bridge…
               </div>
             {:else if bridgeAvailable}
-              <div class="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-primary" in:fade={{ duration: 120 }}>
+              <div
+                class="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-primary"
+                in:fade={{ duration: 120 }}
+              >
                 <Globe2 size={13} /> Browser bridge connected · recording will happen in your browser
               </div>
             {:else}
-              <div class="space-y-2 rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-3 py-2.5 text-xs text-amber-100" in:fade={{ duration: 120 }}>
-                <p class="font-medium">Install the browser bridge to record on this device.</p>
-                <p class="leading-5 text-amber-100/70">{serverFallbackAvailable ? 'Without it, Dear Robot can only open a server-side window on this computer.' : 'This app is running remotely, so a client browser bridge is required.'}</p>
+              <div
+                class="space-y-2 rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-3 py-2.5 text-xs text-amber-100"
+                in:fade={{ duration: 120 }}
+              >
+                <p class="font-medium">
+                  {bridgeOutdated
+                    ? 'Update the browser bridge to record on this device.'
+                    : 'Install the browser bridge to record on this device.'}
+                </p>
+                <p class="leading-5 text-amber-100/70">
+                  {bridgeOutdated
+                    ? 'Download and reinstall the current bridge, then click the refresh button here.'
+                    : serverFallbackAvailable
+                      ? 'Without it, Dear Robot can only open a server-side window on this computer.'
+                      : 'This app is running remotely, so a client browser bridge is required.'}
+                </p>
                 <div class="flex flex-wrap gap-x-3 gap-y-1">
-                  <a class="inline-flex items-center font-medium text-amber-200 underline decoration-amber-200/40 underline-offset-2 hover:text-amber-100" href="/browser-bridge/dear-robot-browser-bridge.zip" download>Download bridge</a>
-                  <a class="inline-flex items-center font-medium text-amber-200 underline decoration-amber-200/40 underline-offset-2 hover:text-amber-100" href="/browser-bridge/README.md" target="_blank" rel="noreferrer">Install instructions</a>
+                  <a
+                    class="inline-flex items-center font-medium text-amber-200 underline decoration-amber-200/40 underline-offset-2 hover:text-amber-100"
+                    href="/browser-bridge/dear-robot-browser-bridge.zip"
+                    download>Download bridge</a
+                  >
+                  <a
+                    class="inline-flex items-center font-medium text-amber-200 underline decoration-amber-200/40 underline-offset-2 hover:text-amber-100"
+                    href="/browser-bridge/README.md"
+                    target="_blank"
+                    rel="noreferrer">Install instructions</a
+                  >
                 </div>
               </div>
             {/if}
 
             {#if links.length > 0}
               <div class="space-y-2">
-                <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Link from the email</p>
+                <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Link from the email
+                </p>
                 <div class="space-y-1.5">
                   {#each links.slice(0, 5) as link (link)}
-                    <button class={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${startUrl === link ? 'border-primary/50 bg-primary/10 text-foreground' : 'border-border bg-background/50 text-muted-foreground hover:border-primary/30 hover:text-foreground'}`} onclick={() => (startUrl = link)}>
-                      <span class="min-w-0 flex-1 truncate">{link}</span>
+                    <button
+                      class={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${startUrl === link ? 'border-primary/50 bg-primary/10 text-foreground' : 'border-border bg-background/50 text-muted-foreground hover:border-primary/30 hover:text-foreground'}`}
+                      onclick={() => (startUrl = link)}
+                    >
+                      <span class="min-w-0 flex-1 truncate" title={link}
+                        >{linkLabels[link] || new URL(link).hostname}</span
+                      >
                       {#if startUrl === link}<Check size={13} class="shrink-0 text-primary" />{/if}
                     </button>
                   {/each}
@@ -451,67 +646,239 @@
               </div>
             {/if}
 
-            <label class="block text-sm text-foreground">Dashboard URL <span class="text-xs text-muted-foreground">(edit if the email link is indirect)</span>
-              <input class="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20" bind:value={startUrl} placeholder="https://dashboard.example.com/reports" autocomplete="url" />
+            <label class="block text-sm text-foreground"
+              >Dashboard URL <span class="text-xs text-muted-foreground"
+                >(edit if the email link is indirect)</span
+              >
+              <input
+                class="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                bind:value={startUrl}
+                placeholder="https://dashboard.example.com/reports"
+                autocomplete="url"
+              />
             </label>
-            <label class="block text-sm text-foreground">Automation name <span class="text-xs text-muted-foreground">(optional)</span>
-              <input class="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20" bind:value={name} placeholder="Weekly delivery report" />
+            <label class="block text-sm text-foreground"
+              >Automation name <span class="text-xs text-muted-foreground">(optional)</span>
+              <input
+                class="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                bind:value={name}
+                placeholder="Weekly delivery report"
+              />
             </label>
 
             <div class="rounded-xl border border-border bg-muted/10 p-3">
-              <div class="flex items-center gap-2"><KeyRound size={15} class="text-primary" /><p class="text-sm font-medium text-foreground">Server login (optional)</p></div>
-              <p class="mt-1 text-xs leading-5 text-muted-foreground">Save credentials once so the server can renew an expired session. Leave blank for SSO or manual MFA.</p>
+              <div class="flex items-center gap-2">
+                <KeyRound size={15} class="text-primary" />
+                <p class="text-sm font-medium text-foreground">Server login (optional)</p>
+              </div>
+              {#if hasSavedLogin}<p class="mt-1 text-xs text-primary">
+                  Login saved and encrypted. Leave blank to keep it.
+                </p>{/if}
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                Save your login so the server can renew expired sessions. Demonstrate the login as
+                well as the download. For emailed verification codes, Dear Robot checks this email’s
+                inbox for a fresh code addressed to your saved login. Codes are never saved in the
+                recording. SMS, authenticator apps and CAPTCHA still need your help.
+              </p>
               <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                <input class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="username" placeholder="Email or username" bind:value={username} />
-                <input class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="new-password" type="password" placeholder="Password" bind:value={password} />
+                <input
+                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  aria-label="Portal email or username"
+                  autocomplete="username"
+                  placeholder="Email or username"
+                  bind:value={username}
+                />
+                <input
+                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  aria-label="Portal password"
+                  autocomplete="new-password"
+                  type="password"
+                  placeholder="Password"
+                  bind:value={password}
+                />
               </div>
             </div>
 
-            <div class="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/10 px-3 py-2.5">
-              <div class="flex items-center gap-2"><CalendarClock size={15} class="text-primary" /><div><p class="text-sm font-medium text-foreground">Repeat weekly</p><p class="text-xs text-muted-foreground">Starts paused in dry-run mode</p></div></div>
+            <div
+              class="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/10 px-3 py-2.5"
+            >
+              <div class="flex items-center gap-2">
+                <CalendarClock size={15} class="text-primary" />
+                <div>
+                  <p class="text-sm font-medium text-foreground">Repeat weekly</p>
+                  <p class="text-xs text-muted-foreground">Starts paused in dry-run mode</p>
+                </div>
+              </div>
               <Switch bind:checked={repeatWeekly} label="Repeat this report weekly" />
             </div>
-            {#if repeatWeekly}
-              <div class="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/10 px-3 py-2.5">
-                <div><p class="text-sm font-medium text-foreground">Enable after setup</p><p class="text-xs text-muted-foreground">Keep off until you verify one test run</p></div>
-                <Switch bind:checked={enableWorkflow} label="Enable weekly workflow automatically" />
-              </div>
-            {/if}
-            {#if errorMessage}<p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{errorMessage}</p>{/if}
+            {#if errorMessage}<p
+                class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                role="alert"
+              >
+                {errorMessage}
+              </p>{/if}
             <div class="flex flex-wrap gap-2">
-              <Button class="min-w-0 flex-1" onclick={startGuidedBrowser} disabled={!startUrl.trim() || !bridgeChecked || (!bridgeAvailable && !serverFallbackAvailable)}>
-                <Globe2 size={15} /> {bridgeAvailable ? 'Record in my browser' : serverFallbackAvailable ? 'Open local browser window' : 'Install bridge to continue'}
+              <Button
+                class="min-w-0 flex-1"
+                onclick={startGuidedBrowser}
+                disabled={!startUrl.trim() ||
+                  !bridgeChecked ||
+                  (!bridgeAvailable && !serverFallbackAvailable)}
+              >
+                <Globe2 size={15} />
+                {bridgeAvailable
+                  ? 'Record in my browser'
+                  : serverFallbackAvailable
+                    ? 'Open local browser window'
+                    : bridgeOutdated
+                      ? 'Update bridge to continue'
+                      : 'Install bridge to continue'}
               </Button>
-              {#if !bridgeAvailable}<Button variant="outline" size="sm" onclick={pingBridge} title="Check for the browser bridge" aria-label="Check for the browser bridge"><RefreshCw size={15} /></Button>{/if}
+              {#if !bridgeAvailable}<Button
+                  variant="outline"
+                  size="sm"
+                  onclick={pingBridge}
+                  title="Check for the browser bridge"
+                  aria-label="Check for the browser bridge"><RefreshCw size={15} /></Button
+                >{/if}
+              {#if recipeId}<Button variant="outline" onclick={testOnServer}>Test on server</Button
+                >{/if}
             </div>
           </div>
         {:else if phase === 'recording'}
           <div class="space-y-4" in:fly={{ y: 8, duration: 160 }}>
             <div class="rounded-xl border border-primary/30 bg-primary/[0.06] p-4">
               <div class="flex items-start gap-3">
-                <div class="mt-0.5 rounded-full bg-primary/15 p-2 text-primary"><LoaderCircle size={17} class="animate-spin" /></div>
+                <div class="mt-0.5 rounded-full bg-primary/15 p-2 text-primary">
+                  <LoaderCircle size={17} class="animate-spin" />
+                </div>
                 <div>
-                  <p class="text-sm font-semibold text-foreground">Finish the report {recordingMode === 'client' ? 'in your browser' : 'in the browser window'}</p>
-                  <p class="mt-1 text-sm leading-6 text-muted-foreground">Sign in if asked, open the latest report, and download it. When the file is saved, return here and click Done.</p>
+                  <p class="text-sm font-semibold text-foreground">
+                    Finish the report {recordingMode === 'client'
+                      ? 'in your browser'
+                      : 'in the browser window'}
+                  </p>
+                  <p class="mt-1 text-sm leading-6 text-muted-foreground">
+                    Sign in if asked, open the latest report, and download it. When the file is
+                    saved, return here and click Done.
+                  </p>
                 </div>
               </div>
             </div>
             <ol class="space-y-2 text-xs text-muted-foreground">
-              <li class="flex gap-2"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary">1</span><span>Complete sign-in or MFA in the report browser tab.</span></li>
-              <li class="flex gap-2"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary">2</span><span>Navigate to the report and download the file.</span></li>
-              <li class="flex gap-2"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary">3</span><span>Return here and save the automation.</span></li>
+              <li class="flex gap-2">
+                <span
+                  class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary"
+                  >1</span
+                ><span>Complete sign-in or MFA in the report browser tab.</span>
+              </li>
+              <li class="flex gap-2">
+                <span
+                  class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary"
+                  >2</span
+                ><span>Navigate to the report and download the file.</span>
+              </li>
+              <li class="flex gap-2">
+                <span
+                  class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary"
+                  >3</span
+                ><span>Return here and save the automation.</span>
+              </li>
             </ol>
-            {#if recordingMode === 'client'}<p class="rounded-lg border border-border bg-muted/10 px-3 py-2 text-xs text-muted-foreground" transition:slide={{ duration: 140 }}>Captured {clientActions.length} step{clientActions.length === 1 ? '' : 's'}{#if clientDownloadFilename} · {clientDownloadFilename}{/if}</p>{/if}
-            {#if run?.downloadFilename}<div class="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary" transition:slide={{ duration: 140 }}><Download size={14} /> Downloaded {run.downloadFilename}</div>{/if}
-            {#if errorMessage}<p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">{errorMessage}</p>{/if}
-            <div class="flex flex-wrap justify-end gap-2"><Button variant="ghost" size="sm" onclick={cancelGuidedBrowser}><CircleStop size={14} /> Cancel</Button><Button size="sm" onclick={finishGuidedBrowser}><Check size={14} /> Done — save automation</Button></div>
+            {#if recordingMode === 'client'}<p
+                class="rounded-lg border border-border bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
+                transition:slide={{ duration: 140 }}
+              >
+                Captured {clientActions.length} step{clientActions.length === 1
+                  ? ''
+                  : 's'}{#if clientDownloadFilename}
+                  · {clientDownloadFilename}{/if}
+              </p>{/if}
+            {#if run?.downloadFilename}<div
+                class="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary"
+                transition:slide={{ duration: 140 }}
+              >
+                <Download size={14} /> Downloaded {run.downloadFilename}
+              </div>{/if}
+            {#if errorMessage}<p
+                class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                role="alert"
+              >
+                {errorMessage}
+              </p>{/if}
+            <div class="flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" size="sm" onclick={cancelGuidedBrowser}
+                ><CircleStop size={14} /> Cancel</Button
+              ><Button size="sm" onclick={finishGuidedBrowser}
+                ><Check size={14} /> Done — save automation</Button
+              >
+            </div>
+          </div>
+        {:else if phase === 'testing'}
+          <div class="space-y-4 py-6 text-center" in:fade={{ duration: 150 }}>
+            <LoaderCircle size={28} class="mx-auto animate-spin text-primary" />
+            <p class="text-base font-semibold">Testing on the server</p>
+            <p class="text-sm text-muted-foreground" role="status" aria-live="polite">
+              {testProgress}
+            </p>
+            <p class="text-xs leading-5 text-muted-foreground">
+              This test signs in and downloads a report. It does not upload to Farin. Report
+              preparation and verification emails can take a few minutes.
+            </p>
+            <Button variant="outline" size="sm" onclick={cancelTest}>Cancel test</Button>
           </div>
         {:else if phase === 'completed'}
           <div class="space-y-4 text-center" in:fly={{ y: 8, duration: 160 }}>
-            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/15 text-primary"><Check size={28} /></div>
-            <div><p class="text-base font-semibold text-foreground">Automation saved</p><p class="mt-1 text-sm leading-6 text-muted-foreground">The safe browser steps are now stored on the server. {#if workflow}Your weekly workflow is paused until you enable it in Operations.{/if}</p></div>
-            {#if run?.downloadFilename}<div class="mx-auto inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary"><Download size={14} /> {run.downloadFilename}</div>{/if}
-            <div class="flex items-center justify-center gap-2"><Button variant="outline" size="sm" onclick={closeLauncher}>Close</Button><Button size="sm" onclick={() => { closeLauncher(); void onReview(); }}>Review in Operations</Button></div>
+            <div
+              class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/15 text-primary"
+            >
+              <Check size={28} />
+            </div>
+            <div>
+              <p class="text-base font-semibold text-foreground">
+                {tested ? 'Server test passed' : 'Recording saved · server test needed'}
+              </p>
+              <p class="mt-1 text-sm leading-6 text-muted-foreground">
+                {tested
+                  ? 'Dear Robot downloaded a report on the server. Inspect the file before enabling the workflow.'
+                  : 'Test the saved steps to confirm the server can sign in and download the report without your browser session.'}
+                {#if workflow}Your weekly workflow remains paused in Operations.{/if}
+              </p>
+            </div>
+            {#if run?.downloadFilename}<div
+                class="mx-auto inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary"
+              >
+                <Download size={14} />
+                {run.downloadFilename}
+              </div>{/if}
+            {#if tested && run}<a
+                class="btn btn-sm preset-tonal inline-flex items-center gap-2"
+                href={`/api/browser/runs/${run.id}/download`}
+                download><Download size={14} /> Inspect downloaded report</a
+              >{/if}
+            {#if errorMessage}<p
+                class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                role="alert"
+              >
+                {errorMessage}
+              </p>{/if}
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onclick={closeLauncher}>Close</Button><Button
+                variant="outline"
+                size="sm"
+                onclick={() => {
+                  phase = 'ready';
+                }}>Record again</Button
+              ><Button size="sm" onclick={testOnServer}
+                >{tested ? 'Test again' : 'Test on server'}</Button
+              >{#if tested}<Button
+                  size="sm"
+                  onclick={() => {
+                    closeLauncher();
+                    void onReview();
+                  }}>Review in Operations</Button
+                >{/if}
+            </div>
           </div>
         {/if}
       </div>
