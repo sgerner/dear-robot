@@ -187,6 +187,7 @@ export async function completeWithOpenAiOAuth(
 ) {
   const client = await createOAuthClient(config);
   const request = toResponsesRequest(messages);
+  const requestInput = options.jsonOutput === false ? request : ensureJsonInputInstruction(request);
   const response = await client.request('/responses', {
     method: 'POST',
     headers: {
@@ -195,7 +196,7 @@ export async function completeWithOpenAiOAuth(
     },
     body: JSON.stringify({
       model: config.model,
-      ...request,
+      ...requestInput,
       stream: true,
       store: false,
       ...(options.jsonOutput === false ? {} : { text: { format: { type: 'json_object' } } })
@@ -277,6 +278,28 @@ function toResponsesRequest(messages: OpenAiOAuthMessage[]) {
   };
 }
 
+function ensureJsonInputInstruction(request: ReturnType<typeof toResponsesRequest>) {
+  const hasJsonInstruction = request.input.some(
+    (item) => typeof item.content === 'string' && /json/i.test(item.content)
+  );
+  if (hasJsonInstruction) return request;
+
+  const input = [...request.input];
+  const userMessageIndex = input.findLastIndex(
+    (item) => item.type === 'message' && item.role === 'user' && typeof item.content === 'string'
+  );
+  if (userMessageIndex >= 0) {
+    const userMessage = input[userMessageIndex];
+    input[userMessageIndex] = {
+      ...userMessage,
+      content: `${userMessage.content}\n\nReturn valid JSON.`
+    };
+  } else {
+    input.push({ type: 'message', role: 'user', content: 'Return valid JSON.' });
+  }
+  return { ...request, input };
+}
+
 function toResponsesInput(messages: OpenAiOAuthMessage[]) {
   return messages.flatMap((message) => {
     if (message.role === 'system') return [];
@@ -307,19 +330,30 @@ function toResponsesInput(messages: OpenAiOAuthMessage[]) {
 
 function extractResponseText(body: string) {
   const deltas: string[] = [];
+  const events: Record<string, unknown>[] = [];
   for (const line of body.split(/\r?\n/)) {
     if (!line.startsWith('data:')) continue;
     const raw = line.slice(5).trim();
     if (!raw || raw === '[DONE]') continue;
     try {
       const event = JSON.parse(raw) as Record<string, unknown>;
+      events.push(event);
       if (typeof event.delta === 'string') deltas.push(event.delta);
-      collectOutputText(event, deltas);
     } catch {
       // Ignore non-JSON keepalive lines in the SSE stream.
     }
   }
   if (deltas.length) return deltas.join('');
+
+  const completedText: string[] = [];
+  for (const event of events) {
+    if (event.type === 'response.output_text.done' && typeof event.text === 'string') {
+      completedText.push(event.text);
+    } else if (event.type === 'response.completed' && event.response) {
+      collectOutputText(event.response, completedText);
+    }
+  }
+  if (completedText.length) return completedText.join('');
 
   try {
     const parsed = JSON.parse(body) as Record<string, unknown>;
@@ -340,6 +374,7 @@ function collectOutputText(value: unknown, output: string[]) {
   }
   const record = value as Record<string, unknown>;
   if (typeof record.text === 'string') output.push(record.text);
+  if (record.response) collectOutputText(record.response, output);
   if (record.output) collectOutputText(record.output, output);
   if (record.content) collectOutputText(record.content, output);
 }

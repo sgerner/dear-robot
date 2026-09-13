@@ -54,12 +54,16 @@ describe('OpenAI device login', () => {
   });
 
   it('sends system content as Responses instructions for OAuth requests', async () => {
+    const expectedOutput = '{"ok":true}';
     requestMock.mockResolvedValueOnce(
-      new Response('data: {"delta":"ok"}\n\ndata: [DONE]\n', { status: 200 })
+      new Response(
+        `data: ${JSON.stringify({ delta: expectedOutput })}\n\ndata: ${JSON.stringify({ type: 'response.output_text.done', text: expectedOutput })}\n\ndata: [DONE]\n`,
+        { status: 200 }
+      )
     );
     const { completeWithOpenAiOAuth } = await import('../src/lib/server/ai/openai-codex');
 
-    await completeWithOpenAiOAuth(
+    const result = await completeWithOpenAiOAuth(
       {
         profile: 'primary',
         provider: 'openai',
@@ -79,11 +83,12 @@ describe('OpenAI device login', () => {
       ]
     );
 
+    expect(result).toBe(expectedOutput);
     const [, init] = requestMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
     expect(body.instructions).toBe('You are a helpful assistant.');
     expect(body.input).toEqual([
-      { type: 'message', role: 'user', content: 'Say ok.' }
+      { type: 'message', role: 'user', content: 'Say ok.\n\nReturn valid JSON.' }
     ]);
   });
 
