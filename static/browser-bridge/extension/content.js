@@ -3,8 +3,9 @@
 (() => {
   const APP_SOURCE = 'dear-robot-app';
   const BRIDGE_SOURCE = 'dear-robot-browser-bridge';
-  const PROTOCOL_VERSION = 3;
+  const PROTOCOL_VERSION = 4;
   const CAPABILITIES = ['email_code', 'download', 'persistent_sessions'];
+  let configuredAppOrigin = null;
   let activeSessionId = null;
   let listeners = [];
   let lastFill = null;
@@ -18,8 +19,8 @@
     }
   }
 
-  function post(message) {
-    window.postMessage({ source: BRIDGE_SOURCE, ...message }, window.location.origin);
+  function post(message, targetOrigin = window.location.origin) {
+    window.postMessage({ source: BRIDGE_SOURCE, ...message }, targetOrigin);
   }
 
   function escapeCss(value) {
@@ -149,18 +150,40 @@
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === 'BEGIN_RECORDING') begin(message.sessionId);
     if (message?.type === 'END_RECORDING' && message.sessionId === activeSessionId) stop();
+    if (message?.type === 'BRIDGE_READY' && message.appOrigin === window.location.origin) {
+      configuredAppOrigin = message.appOrigin;
+      post(
+        {
+          type: 'READY',
+          appOrigin: message.appOrigin,
+          protocolVersion: PROTOCOL_VERSION,
+          capabilities: CAPABILITIES
+        },
+        message.appOrigin
+      );
+    }
     if (message?.type === 'BRIDGE_EVENT') {
-      post({ type: 'BRIDGE_EVENT', sessionId: message.sessionId, event: message.event });
+      if (message.appOrigin !== configuredAppOrigin || message.appOrigin !== window.location.origin) return;
+      post(
+        {
+          type: 'BRIDGE_EVENT',
+          appOrigin: message.appOrigin,
+          sessionId: message.sessionId,
+          event: message.event
+        },
+        message.appOrigin
+      );
     }
   });
 
   window.addEventListener('message', (event) => {
     if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== APP_SOURCE) return;
     if (event.data.type === 'PING') {
-      post({ type: 'READY', protocolVersion: PROTOCOL_VERSION, capabilities: CAPABILITIES });
+      send({ type: 'PING' });
       return;
     }
     if (event.data.type === 'START_RECORDING') {
+      if (configuredAppOrigin !== window.location.origin) return;
       const sessionId = typeof event.data.sessionId === 'string' ? event.data.sessionId.slice(0, 160) : '';
       const bridgeToken = typeof event.data.bridgeToken === 'string' ? event.data.bridgeToken.slice(0, 2000) : '';
       let startUrl = '';
@@ -182,6 +205,7 @@
       return;
     }
     if (event.data.type === 'STOP_RECORDING') {
+      if (configuredAppOrigin !== window.location.origin) return;
       if (typeof event.data.sessionId === 'string' && event.data.sessionId.length <= 160) {
         send({ type: 'STOP_RECORDING', sessionId: event.data.sessionId });
       }

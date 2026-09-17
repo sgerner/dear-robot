@@ -78,11 +78,11 @@ async function startFixture(): Promise<FixtureServer> {
             source: 'dear-robot-app', type: 'START_RECORDING',
             sessionId: 'extension-runtime-session-001', startUrl: '${origin}/portal',
             bridgeToken: 'runtime-bridge-capability-token'
-          }, '*');
+          }, window.location.origin);
           document.querySelector('#stop').onclick = () => window.postMessage({
             source: 'dear-robot-app', type: 'STOP_RECORDING', sessionId: 'extension-runtime-session-001'
-          }, '*');
-          window.postMessage({ source: 'dear-robot-app', type: 'PING' }, '*');
+          }, window.location.origin);
+          window.postMessage({ source: 'dear-robot-app', type: 'PING' }, window.location.origin);
         </script>`
       );
       return;
@@ -141,6 +141,20 @@ test('loads the packaged bridge in Chromium and records an authenticated local d
           expect.stringMatching(/^chrome-extension:\/\/[^/]+\/background\.js$/)
         ])
       );
+    const extensionWorker = context
+      .serviceWorkers()
+      .find((worker) => worker.url().endsWith('/background.js'));
+    expect(extensionWorker).toBeTruthy();
+    const extensionId = new URL(extensionWorker!.url()).host;
+    const settings = await context.newPage();
+    await settings.goto(`chrome-extension://${extensionId}/options.html`);
+    await settings.locator('#app-origin').fill('http://attacker.example.test');
+    await settings.getByRole('button', { name: 'Save origin' }).click();
+    await expect(settings.locator('#status')).toContainText('Use HTTPS');
+    await settings.locator('#app-origin').fill(fixture.origin);
+    await settings.getByRole('button', { name: 'Save origin' }).click();
+    await expect(settings.locator('#status')).toContainText('Origin saved');
+    await settings.close();
 
     const app = await context.newPage();
     await app.goto(`${fixture.origin}/app`);

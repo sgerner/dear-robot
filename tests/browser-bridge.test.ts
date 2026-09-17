@@ -14,11 +14,13 @@ function flush() {
 function backgroundHarness(
   recordings: unknown[] = [],
   apiMode: 'callback' | 'promise' = 'callback',
-  capabilityValid = true
+  capabilityValid = true,
+  configuredAppOrigin = 'https://dear-robot.example.test'
 ) {
   const events: Record<string, (...args: any[]) => void> = {};
   const sent: any[] = [];
   const writes: any[] = [];
+  const created: any[] = [];
   const verificationRequests: any[] = [];
   const fetch = async (_url: string, init: { body?: string } = {}) => {
     const body = JSON.parse(init.body || '{}');
@@ -62,21 +64,29 @@ function backgroundHarness(
             callback([{ id: 2, url: 'https://reports.example.test/dashboard' }]),
     create:
       apiMode === 'promise'
-        ? async (details: unknown) => ({ id: 2, ...(details as object) })
-        : (_details: unknown, callback: (tab: unknown) => void) =>
-            callback({ id: 2, url: 'https://reports.example.test/dashboard' }),
+        ? async (details: unknown) => {
+            created.push(details);
+            return { id: 2, ...(details as object) };
+          }
+        : (details: unknown, callback: (tab: unknown) => void) => {
+            created.push(details);
+            callback({ id: 2, url: 'https://reports.example.test/dashboard' });
+          },
     sendMessage: (id: number, data: unknown, callback?: () => void) => {
       sent.push({ id, data });
       callback?.();
     }
   };
+  const localStorage = {
+    get: async () => ({ appOrigin: configuredAppOrigin })
+  };
   const chrome = {
-    storage: { session: storage },
+    storage: { session: storage, local: localStorage },
     runtime: { onMessage: listener('message'), lastError: null },
     tabs,
     downloads: { onCreated: listener('download'), onChanged: listener('changed') }
   };
-  return { chrome, events, sent, writes, verificationRequests, fetch };
+  return { chrome, events, sent, writes, created, verificationRequests, fetch };
 }
 
 describe('Dear Robot browser bridge bundle', () => {
@@ -97,6 +107,7 @@ describe('Dear Robot browser bridge bundle', () => {
                 sessionId: 'session',
                 appTabId: 1,
                 targetTabId: 2,
+                appOrigin: 'https://dear-robot.example.test',
                 startedAt: Date.now(),
                 stopped: false
               }
@@ -128,6 +139,7 @@ describe('Dear Robot browser bridge bundle', () => {
       id: 1,
       data: {
         type: 'BRIDGE_EVENT',
+        appOrigin: 'https://dear-robot.example.test',
         sessionId: 'session',
         event: { type: 'ACTION', action: { type: 'download' }, downloadFilename: 'payout.csv' }
       }
@@ -150,6 +162,7 @@ describe('Dear Robot browser bridge bundle', () => {
       expect(manifest.permissions).toEqual(expect.arrayContaining(['tabs', 'downloads']));
       expect(manifest.content_scripts[0].matches).toContain('<all_urls>');
       expect(manifest.content_scripts[0].js).toContain('content.js');
+      expect(manifest.options_ui.page).toBe('options.html');
     }
     expect(chromeManifest.background.service_worker).toBe('background.js');
     expect(firefoxManifest.background.scripts).toContain('background.js');
@@ -164,7 +177,14 @@ describe('Dear Robot browser bridge bundle', () => {
 
   it('waits for the content ENDED handshake and rejects stale or unsafe actions', async () => {
     const { chrome, events, sent } = backgroundHarness([
-      { sessionId: 'session', appTabId: 1, targetTabId: 2, startedAt: Date.now(), stopped: false }
+      {
+        sessionId: 'session',
+        appTabId: 1,
+        targetTabId: 2,
+        appOrigin: 'https://dear-robot.example.test',
+        startedAt: Date.now(),
+        stopped: false
+      }
     ]);
     vm.runInNewContext(await fs.readFile(path.join(extensionDir, 'background.js'), 'utf8'), {
       chrome,
@@ -172,7 +192,10 @@ describe('Dear Robot browser bridge bundle', () => {
       clearTimeout,
       URL
     });
-    events.message({ type: 'STOP_RECORDING', sessionId: 'session' }, { tab: { id: 1 } });
+    events.message(
+      { type: 'STOP_RECORDING', sessionId: 'session' },
+      { tab: { id: 1 }, url: 'https://dear-robot.example.test/inbox' }
+    );
     await flush();
     expect(sent).toContainEqual({ id: 2, data: { type: 'END_RECORDING', sessionId: 'session' } });
     expect(sent.some((entry) => entry.data?.event?.type === 'STOPPED')).toBe(false);
@@ -205,6 +228,7 @@ describe('Dear Robot browser bridge bundle', () => {
       id: 1,
       data: {
         type: 'BRIDGE_EVENT',
+        appOrigin: 'https://dear-robot.example.test',
         sessionId: 'session',
         event: {
           type: 'ACTION',
@@ -248,7 +272,7 @@ describe('Dear Robot browser bridge bundle', () => {
         appOrigin: 'https://dear-robot.example.test',
         bridgeToken: 'signed-capability-token-for-the-test'
       },
-      { tab: { id: 1 } }
+      { tab: { id: 1 }, url: 'https://dear-robot.example.test/inbox' }
     );
     await flush();
     await flush();
@@ -256,6 +280,7 @@ describe('Dear Robot browser bridge bundle', () => {
       id: 1,
       data: {
         type: 'BRIDGE_EVENT',
+        appOrigin: 'https://dear-robot.example.test',
         sessionId: 'promise-session',
         event: { type: 'STARTED', targetTabId: 2 }
       }
@@ -299,6 +324,7 @@ describe('Dear Robot browser bridge bundle', () => {
       id: 1,
       data: {
         type: 'BRIDGE_EVENT',
+        appOrigin: 'https://dear-robot.example.test',
         sessionId: 'promise-session',
         event: {
           type: 'ACTION',
@@ -326,7 +352,7 @@ describe('Dear Robot browser bridge bundle', () => {
         appOrigin: 'https://dear-robot.example.test',
         bridgeToken: 'invalid-capability-token-for-the-test'
       },
-      { tab: { id: 1 } }
+      { tab: { id: 1 }, url: 'https://dear-robot.example.test/inbox' }
     );
     await flush();
     await flush();
@@ -334,11 +360,71 @@ describe('Dear Robot browser bridge bundle', () => {
       id: 1,
       data: {
         type: 'BRIDGE_EVENT',
+        appOrigin: 'https://dear-robot.example.test',
         sessionId: 'unverified-session-001',
         event: { type: 'ERROR', message: expect.stringMatching(/could not verify/i) }
       }
     });
     expect(sent.some((entry) => entry.data?.event?.type === 'STARTED')).toBe(false);
+  });
+
+  it('ignores bridge probes, starts, and stops from outside the configured app origin', async () => {
+    const { chrome, events, sent, created, verificationRequests } = backgroundHarness([
+      {
+        sessionId: 'active-session-001',
+        appTabId: 1,
+        targetTabId: 2,
+        appOrigin: 'https://dear-robot.example.test',
+        startedAt: Date.now(),
+        stopped: false
+      }
+    ]);
+    vm.runInNewContext(await fs.readFile(path.join(extensionDir, 'background.js'), 'utf8'), {
+      chrome,
+      setTimeout,
+      clearTimeout,
+      URL
+    });
+
+    const unrelatedPage = { tab: { id: 1 }, url: 'https://attacker.example.test/page' };
+    events.message({ type: 'PING' }, unrelatedPage);
+    events.message(
+      {
+        type: 'START_RECORDING',
+        sessionId: 'attacker-session-001',
+        startUrl: 'https://reports.example.test/dashboard',
+        appOrigin: 'https://attacker.example.test',
+        bridgeToken: 'attacker-controlled-token-value'
+      },
+      unrelatedPage
+    );
+    events.message(
+      {
+        type: 'START_RECORDING',
+        sessionId: 'redirected-session-001',
+        startUrl: 'https://reports.example.test/dashboard',
+        appOrigin: 'https://attacker.example.test',
+        bridgeToken: 'attacker-controlled-token-value'
+      },
+      { tab: { id: 1 }, url: 'https://dear-robot.example.test/inbox' }
+    );
+    events.message({ type: 'STOP_RECORDING', sessionId: 'active-session-001' }, unrelatedPage);
+    await flush();
+    await flush();
+
+    expect(sent).toHaveLength(0);
+    expect(created).toHaveLength(0);
+    expect(verificationRequests).toHaveLength(0);
+
+    events.message(
+      { type: 'PING' },
+      { tab: { id: 1 }, url: 'https://dear-robot.example.test/inbox' }
+    );
+    await flush();
+    expect(sent).toContainEqual({
+      id: 1,
+      data: { type: 'BRIDGE_READY', appOrigin: 'https://dear-robot.example.test' }
+    });
   });
 
   it('records fills, OTP references, checks, selects, clicks and Enter with no file or hidden values', async () => {
@@ -490,14 +576,56 @@ describe('Dear Robot browser bridge bundle', () => {
     window.emit('message', {
       source: window,
       origin: 'https://report.test',
+      data: {
+        source: 'dear-robot-app',
+        type: 'START_RECORDING',
+        sessionId: 'spoofed-session',
+        startUrl: 'https://reports.example.test/dashboard',
+        bridgeToken: 'attacker-controlled-token-value'
+      }
+    });
+    expect(runtimeMessages.some((message) => message.type === 'START_RECORDING')).toBe(false);
+    window.emit('message', {
+      source: window,
+      origin: 'https://report.test',
       data: { source: 'dear-robot-app', type: 'PING' }
     });
+    expect(runtimeMessages.at(-1)).toEqual({ type: 'PING' });
+    expect(window.posts).toHaveLength(0);
+
+    runtimeListeners[0]({ type: 'BRIDGE_READY', appOrigin: 'https://evil.test' });
+    expect(window.posts).toHaveLength(0);
+    runtimeListeners[0]({ type: 'BRIDGE_READY', appOrigin: 'https://report.test' });
     expect(window.posts.at(-1)).toEqual({
       message: {
         source: 'dear-robot-browser-bridge',
         type: 'READY',
-        protocolVersion: 3,
+        appOrigin: 'https://report.test',
+        protocolVersion: 4,
         capabilities: ['email_code', 'download', 'persistent_sessions']
+      },
+      targetOrigin: 'https://report.test'
+    });
+    runtimeListeners[0]({
+      type: 'BRIDGE_EVENT',
+      appOrigin: 'https://evil.test',
+      sessionId: 'content-session',
+      event: { type: 'ACTION', action: { type: 'click', selector: '#secret' } }
+    });
+    expect(window.posts).toHaveLength(1);
+    runtimeListeners[0]({
+      type: 'BRIDGE_EVENT',
+      appOrigin: 'https://report.test',
+      sessionId: 'content-session',
+      event: { type: 'ACTION', action: { type: 'click', selector: '#button' } }
+    });
+    expect(window.posts[1]).toEqual({
+      message: {
+        source: 'dear-robot-browser-bridge',
+        type: 'BRIDGE_EVENT',
+        appOrigin: 'https://report.test',
+        sessionId: 'content-session',
+        event: { type: 'ACTION', action: { type: 'click', selector: '#button' } }
       },
       targetOrigin: 'https://report.test'
     });

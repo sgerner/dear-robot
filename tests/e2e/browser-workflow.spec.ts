@@ -282,8 +282,13 @@ async function installBridgeSimulation(page: Page, mode: 'success' | 'failure') 
         if (event.source !== window || event.data?.source !== 'dear-robot-app') return;
         if (event.data.type === 'PING') {
           window.postMessage(
-            { source: 'dear-robot-browser-bridge', type: 'READY', protocolVersion: 3 },
-            '*'
+            {
+              source: 'dear-robot-browser-bridge',
+              type: 'READY',
+              appOrigin: window.location.origin,
+              protocolVersion: 4
+            },
+            window.location.origin
           );
           return;
         }
@@ -292,10 +297,11 @@ async function installBridgeSimulation(page: Page, mode: 'success' | 'failure') 
             {
               source: 'dear-robot-browser-bridge',
               type: 'BRIDGE_EVENT',
+              appOrigin: window.location.origin,
               sessionId: event.data.sessionId,
               event: { type: 'STOPPED' }
             },
-            '*'
+            window.location.origin
           );
           return;
         }
@@ -305,10 +311,11 @@ async function installBridgeSimulation(page: Page, mode: 'success' | 'failure') 
           {
             source: 'dear-robot-browser-bridge',
             type: 'BRIDGE_EVENT',
+            appOrigin: window.location.origin,
             sessionId,
             event: { type: 'STARTED' }
           },
-          '*'
+          window.location.origin
         );
         const actions = [
           {
@@ -348,10 +355,11 @@ async function installBridgeSimulation(page: Page, mode: 'success' | 'failure') 
               {
                 source: 'dear-robot-browser-bridge',
                 type: 'BRIDGE_EVENT',
+                appOrigin: window.location.origin,
                 sessionId,
                 event: { type: 'ACTION', action }
               },
-              '*'
+              window.location.origin
             );
           }
         }, 25);

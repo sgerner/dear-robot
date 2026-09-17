@@ -16,7 +16,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Switch from '$lib/components/ui/Switch.svelte';
 
-  const bridgeProtocolVersion = 3;
+  const bridgeProtocolVersion = 4;
 
   type Message = {
     id: number;
@@ -141,14 +141,22 @@
     )
       return;
     if (event.data.type === 'READY') {
-      bridgeAvailable = event.data.protocolVersion === bridgeProtocolVersion;
-      bridgeOutdated = !bridgeAvailable;
+      if (event.data.appOrigin && event.data.appOrigin !== window.location.origin) return;
+      bridgeAvailable =
+        event.data.appOrigin === window.location.origin &&
+        event.data.protocolVersion === bridgeProtocolVersion;
+      bridgeOutdated = event.data.protocolVersion !== bridgeProtocolVersion;
       bridgeChecked = true;
       if (bridgeTimeout) clearTimeout(bridgeTimeout);
       bridgeTimeout = null;
       return;
     }
-    if (event.data.type !== 'BRIDGE_EVENT' || event.data.sessionId !== clientSessionId) return;
+    if (
+      event.data.type !== 'BRIDGE_EVENT' ||
+      event.data.appOrigin !== window.location.origin ||
+      event.data.sessionId !== clientSessionId
+    )
+      return;
     const bridgeEvent = event.data.event || {};
     if (bridgeAck && bridgeEvent.type === bridgeAck.type) {
       clearTimeout(bridgeAck.timer);
@@ -196,7 +204,7 @@
     bridgeChecked = false;
     bridgeOutdated = false;
     if (bridgeTimeout) clearTimeout(bridgeTimeout);
-    window.postMessage({ source: 'dear-robot-app', type: 'PING' }, '*');
+    window.postMessage({ source: 'dear-robot-app', type: 'PING' }, window.location.origin);
     bridgeTimeout = setTimeout(() => {
       bridgeChecked = true;
       bridgeTimeout = null;
@@ -312,7 +320,7 @@
           startUrl: startUrl.trim(),
           bridgeToken
         },
-        '*'
+        window.location.origin
       );
       await started;
       phase = 'recording';
@@ -332,7 +340,7 @@
   async function startGuidedBrowser() {
     if (bridgeAvailable) return startClientBrowser();
     if (!serverFallbackAvailable) {
-      errorMessage = 'Install the browser bridge to record on this device.';
+      errorMessage = 'Install and configure the browser bridge for this app origin.';
       return;
     }
     return startServerBrowser();
@@ -382,7 +390,7 @@
           const stopped = waitForBridge('STOPPED');
           window.postMessage(
             { source: 'dear-robot-app', type: 'STOP_RECORDING', sessionId: clientSessionId },
-            '*'
+            window.location.origin
           );
           await stopped;
           bridgeStopped = true;
@@ -450,7 +458,7 @@
     if (recordingMode === 'client') {
       window.postMessage(
         { source: 'dear-robot-app', type: 'STOP_RECORDING', sessionId: clientSessionId },
-        '*'
+        window.location.origin
       );
     }
     try {
@@ -600,14 +608,14 @@
                 <p class="font-medium">
                   {bridgeOutdated
                     ? 'Update the browser bridge to record on this device.'
-                    : 'Install the browser bridge to record on this device.'}
+                    : 'Install and configure the browser bridge for this app origin.'}
                 </p>
                 <p class="leading-5 text-amber-100/70">
                   {bridgeOutdated
                     ? 'Download and reinstall the current bridge, then click the refresh button here.'
                     : serverFallbackAvailable
                       ? 'Without it, Dear Robot can only open a server-side window on this computer.'
-                      : 'This app is running remotely, so a client browser bridge is required.'}
+                      : 'Install the bridge and set this app origin in its extension settings.'}
                 </p>
                 <div class="flex flex-wrap gap-x-3 gap-y-1">
                   <a

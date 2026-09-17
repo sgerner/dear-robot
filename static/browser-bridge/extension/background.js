@@ -5,6 +5,7 @@
 // browser provides it so a suspended worker can resume routing messages; the
 // in-memory map remains the fallback for older Firefox builds.
 const SESSION_TTL_MS = 60 * 60 * 1000;
+const LOCAL_APP_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const sessions = new Map();
 const stopTimers = new Map();
 const storageSession = chrome.storage?.session || null;
@@ -54,6 +55,7 @@ function persistedSession(session) {
     sessionId: session.sessionId,
     appTabId: session.appTabId,
     targetTabId: session.targetTabId,
+    appOrigin: session.appOrigin,
     startedAt: session.startedAt,
     stopped: Boolean(session.stopped),
     stopping: Boolean(session.stopping)
@@ -71,6 +73,7 @@ function validStoredSession(value) {
     typeof value.sessionId === 'string' && value.sessionId.length > 0 && value.sessionId.length <= 160 &&
     Number.isInteger(value.appTabId) && value.appTabId >= 0 &&
     (value.targetTabId === null || Number.isInteger(value.targetTabId)) &&
+    appOrigin(value.appOrigin) === value.appOrigin &&
     Number.isFinite(value.startedAt) && Date.now() - value.startedAt < SESSION_TTL_MS
   );
 }
@@ -102,15 +105,25 @@ function sendToTab(tabId, message) {
 }
 
 function sendToApp(session, message) {
+  const trustedOrigin = appOrigin(session.appOrigin);
+  if (!trustedOrigin) return;
   sendToTab(session.appTabId, {
     type: 'BRIDGE_EVENT',
+    appOrigin: trustedOrigin,
     sessionId: session.sessionId,
     event: message
   });
 }
 
-function sendErrorToAppTab(tabId, sessionId, message) {
-  sendToTab(tabId, { type: 'BRIDGE_EVENT', sessionId, event: { type: 'ERROR', message } });
+function sendErrorToAppTab(tabId, trustedOriginValue, sessionId, message) {
+  const trustedOrigin = appOrigin(trustedOriginValue);
+  if (!trustedOrigin) return;
+  sendToTab(tabId, {
+    type: 'BRIDGE_EVENT',
+    appOrigin: trustedOrigin,
+    sessionId,
+    event: { type: 'ERROR', message }
+  });
 }
 
 function sessionForTarget(tabId) {
@@ -135,10 +148,31 @@ function appOrigin(value) {
   try {
     const url = new URL(String(value));
     if (!['http:', 'https:'].includes(url.protocol) || url.origin !== String(value)) return null;
+    if (url.protocol === 'http:' && !LOCAL_APP_HOSTS.has(url.hostname)) return null;
     return url.origin;
   } catch {
     return null;
   }
+}
+
+function pageOrigin(value) {
+  try {
+    const url = new URL(String(value));
+    return ['http:', 'https:'].includes(url.protocol) ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function isTopLevelSender(sender) {
+  return !Number.isInteger(sender?.frameId) || sender.frameId === 0;
+}
+
+function readConfiguredAppOrigin() {
+  if (!chrome.storage?.local?.get) return Promise.resolve(null);
+  return invokeApi(chrome.storage.local, 'get', ['appOrigin'])
+    .then((settings) => appOrigin(settings?.appOrigin))
+    .catch(() => null);
 }
 
 async function verifyBridgeCapability(message, sessionId) {
@@ -220,23 +254,31 @@ function finishStop(session) {
   void persist();
 }
 
-async function startRecording(message, senderTabId) {
+async function startRecording(message, senderTabId, trustedOrigin) {
   const sessionId = String(message.sessionId || '');
   const startUrl = httpUrl(message.startUrl);
-  if (!Number.isInteger(senderTabId) || !sessionId || sessionId.length > 160 || !startUrl) return;
-  if (!(await verifyBridgeCapability(message, sessionId))) {
-    sendErrorToAppTab(senderTabId, sessionId, 'Dear Robot could not verify this recording request. Return to the email and start again.');
+  if (
+    !Number.isInteger(senderTabId) ||
+    !trustedOrigin ||
+    appOrigin(message.appOrigin) !== trustedOrigin ||
+    !sessionId ||
+    sessionId.length > 160 ||
+    !startUrl
+  ) return;
+  if (!(await verifyBridgeCapability({ ...message, appOrigin: trustedOrigin }, sessionId))) {
+    sendErrorToAppTab(senderTabId, trustedOrigin, sessionId, 'Dear Robot could not verify this recording request. Return to the email and start again.');
     return;
   }
   const existing = [...sessions.values()].find((session) => session.appTabId === senderTabId && !session.stopped);
   if (existing) {
-    sendErrorToAppTab(senderTabId, sessionId, 'A browser recording is already active in this tab.');
+    sendErrorToAppTab(senderTabId, trustedOrigin, sessionId, 'A browser recording is already active in this tab.');
     return;
   }
   const session = {
     sessionId,
     appTabId: senderTabId,
     targetTabId: null,
+    appOrigin: trustedOrigin,
     startUrl,
     startedAt: Date.now(),
     stopped: false,
@@ -262,20 +304,33 @@ async function startRecording(message, senderTabId) {
   } catch {
     sessions.delete(session.sessionId);
     await persist();
-    sendErrorToAppTab(senderTabId, sessionId, 'The browser could not open the report tab.');
+    sendErrorToAppTab(senderTabId, trustedOrigin, sessionId, 'The browser could not open the report tab.');
   }
 }
 
-function handleMessage(message, sender) {
+async function handleMessage(message, sender) {
   const senderTabId = sender?.tab?.id;
+  const senderOrigin = pageOrigin(sender?.url);
+  if (!isTopLevelSender(sender)) return;
+
+  if (message?.type === 'PING') {
+    const configuredOrigin = await readConfiguredAppOrigin();
+    if (!Number.isInteger(senderTabId) || !senderOrigin || senderOrigin !== configuredOrigin) return;
+    sendToTab(senderTabId, { type: 'BRIDGE_READY', appOrigin: configuredOrigin });
+    return;
+  }
+
   if (message?.type === 'START_RECORDING') {
-    void startRecording(message, senderTabId);
+    const configuredOrigin = await readConfiguredAppOrigin();
+    if (!senderOrigin || senderOrigin !== configuredOrigin) return;
+    await startRecording(message, senderTabId, configuredOrigin);
     return;
   }
 
   if (message?.type === 'STOP_RECORDING') {
     const session = sessionForApp(senderTabId, String(message.sessionId || ''));
-    if (!session || session.stopping) return;
+    const configuredOrigin = await readConfiguredAppOrigin();
+    if (!session || session.stopping || senderOrigin !== session.appOrigin || senderOrigin !== configuredOrigin) return;
     session.stopping = true;
     sendToTab(session.targetTabId, { type: 'END_RECORDING', sessionId: session.sessionId });
     // END_RECORDING normally receives an immediate ENDED acknowledgement.
