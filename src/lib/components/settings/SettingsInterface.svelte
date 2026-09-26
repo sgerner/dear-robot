@@ -45,15 +45,15 @@
   }>();
 
   const themes: Array<{ id: Theme; label: string; colors: string[] }> = [
-    { id: 'cinematic-dark', label: 'Cinematic Dark', colors: ['#0d0f14', '#00ffd2', '#1a1d23'] },
-    { id: 'midnight-glow', label: 'Midnight Glow', colors: ['#08050a', '#ff00ff', '#120a15'] },
-    { id: 'nordic-frost', label: 'Nordic Frost', colors: ['#1a1f2b', '#8ecae6', '#242a38'] },
-    { id: 'sunset-mirage', label: 'Sunset Mirage', colors: ['#1a0f26', '#ff9f1c', '#2d1b40'] },
-    { id: 'forest-haven', label: 'Forest Haven', colors: ['#0f1a14', '#70e000', '#1b2d24'] },
+    { id: 'cinematic-dark', label: 'Cinematic Dark', colors: ['#101321', '#55d3ca', '#252a38'] },
+    { id: 'midnight-glow', label: 'Midnight Glow', colors: ['#100d19', '#bf72d2', '#252033'] },
+    { id: 'nordic-frost', label: 'Nordic Frost', colors: ['#1c2834', '#91c5df', '#2a3542'] },
+    { id: 'sunset-mirage', label: 'Sunset Mirage', colors: ['#1c1424', '#edaa72', '#34213b'] },
+    { id: 'forest-haven', label: 'Forest Haven', colors: ['#102019', '#9bd06a', '#20372a'] },
     { id: 'solarized-light', label: 'Solarized Light', colors: ['#fdf6e3', '#268bd2', '#eee8d5'] },
-    { id: 'boi-butter', label: 'boi butter', colors: ['#2b1f0a', '#ff1493', '#ffcc33'] },
-    { id: 'daddy-please', label: 'daddy please', colors: ['#050505', '#8b0000', '#2a2a2a'] },
-    { id: 'himbo-juice', label: 'himbo juice', colors: ['#1a0a2e', '#00e5ff', '#ff00ff'] }
+    { id: 'boi-butter', label: 'boi butter', colors: ['#302612', '#e889b6', '#584523'] },
+    { id: 'daddy-please', label: 'daddy please', colors: ['#211416', '#c5656c', '#382528'] },
+    { id: 'himbo-juice', label: 'himbo juice', colors: ['#19152e', '#73d7dd', '#7753bc'] }
   ];
 </script>
 

@@ -194,7 +194,7 @@
           />
           <input
             bind:this={searchInput}
-            class="h-9 w-full rounded-md border border-input bg-background pl-8 pr-12 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
+            class="touch-target h-11 w-full rounded-md border border-input bg-background pl-8 pr-12 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring transition-all"
             aria-label="Search mail"
             placeholder="Search mail..."
             bind:value={search}
@@ -227,7 +227,7 @@
           </div>
         </div>
         <button
-          class="touch-target flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors lg:min-h-8 lg:min-w-8"
+          class="touch-target flex h-11 w-11 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-pressed={showShortcutHelp}
           class:bg-muted={showShortcutHelp}
           class:text-foreground={showShortcutHelp}
@@ -240,13 +240,12 @@
 
       <!-- Row 2: View Tabs & Folders Toggle -->
       <div class="flex items-center gap-1.5">
-        <div class="flex flex-1 items-center gap-0.5 rounded-lg border border-border/40 bg-muted/20 p-0.5">
+        <div class="grid flex-1 grid-cols-2 gap-0.5 rounded-lg border border-border/40 bg-muted/20 p-0.5 sm:flex sm:items-center">
           {#each views as v (v.id)}
             {@const Icon = v.icon}
             <button
               class={`
-                flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md py-1 px-1.5 text-xs font-medium
-                lg:min-h-7
+                flex min-h-11 w-full flex-1 items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-medium
                 transition-all duration-200
                 ${
                   view === v.id
@@ -259,16 +258,15 @@
               aria-pressed={view === v.id}
               title={v.label}
             >
-              <Icon size={12} />
-              <span class="hidden sm:inline">{v.label}</span>
+              <Icon size={14} />
+              <span>{v.label}</span>
             </button>
           {/each}
         </div>
 
-          <button
+        <button
           class={`
-            flex min-h-11 items-center gap-1.5 rounded-md border border-border/60 px-2 text-xs font-medium transition-all
-            lg:min-h-7
+            touch-target flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-border/60 px-2 text-xs font-medium transition-all
             ${foldersExpanded ? 'bg-primary/10 text-primary border-primary/20' : 'bg-muted/10 text-muted-foreground hover:bg-muted/30'}
           `}
           onclick={() => (foldersExpanded = !foldersExpanded)}
@@ -276,8 +274,8 @@
           aria-label={foldersExpanded ? 'Hide folders' : 'Show folders'}
           title={foldersExpanded ? 'Hide folders' : 'Show folders'}
         >
-          <FolderOpen size={12} />
-          <span class="hidden sm:inline">Folders</span>
+          <FolderOpen size={14} />
+          <span class="lg:hidden">Folders</span>
           {#if !foldersExpanded}
             <Badge variant="outline" class="text-xs h-3.5 px-1 min-w-0 border-current/20">{folders.length}</Badge>
           {/if}

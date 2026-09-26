@@ -29,7 +29,7 @@
       type="password"
       required
       autocomplete="current-password"
-      class="focus-ring mt-2 h-11 w-full rounded-lg border border-input bg-background/70 px-3 text-foreground"
+      class="focus-ring touch-target mt-2 h-12 w-full rounded-lg border border-input bg-background/70 px-3 text-foreground"
     />
     {#if form?.message}
       <p id="login-error" class="mt-3 text-sm text-destructive" role="alert" aria-live="assertive" transition:fade>
@@ -38,7 +38,7 @@
     {/if}
     <button
       type="submit"
-      class="mt-5 inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0"
+      class="mt-5 inline-flex min-h-12 w-full items-center justify-center whitespace-nowrap rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors duration-150 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:bg-primary/80"
     >
       Sign in
     </button>

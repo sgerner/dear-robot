@@ -708,12 +708,12 @@
   >
     <!-- Suggestion Header -->
     <div class="p-4 bg-primary/5 border-b border-primary/10">
-      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+      <div class="mb-3 space-y-2">
         <div class="flex min-w-0 items-center gap-2">
           <Sparkles size={16} class="text-primary" />
-          <h3 class="truncate font-bold text-sm text-foreground uppercase tracking-wider">{selected.suggestion.category}</h3>
+          <h3 class="break-words font-bold text-sm leading-tight text-foreground uppercase tracking-wider">{selected.suggestion.category}</h3>
         </div>
-        <div class="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex shrink-0 rounded-md border border-border/60 bg-background/40 p-0.5">
             <button class="touch-target rounded-md p-1 hover:bg-muted hover:text-primary transition-colors" onclick={() => recordMessageOutcome('resolved')} title="Perfect Outcome" aria-label="Mark suggestion as a perfect outcome">
               <ThumbsUp size={12} />
@@ -722,11 +722,11 @@
               <ThumbsDown size={12} />
             </button>
           </div>
-          <div class="flex min-w-0 flex-wrap justify-end gap-1">
-            <span class="max-w-full truncate rounded border border-primary/20 bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
+          <div class="flex flex-wrap justify-end gap-1">
+            <span class="whitespace-nowrap rounded border border-primary/20 bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
               {formatActionLabel(selected.suggestion.recommendedAction)}
             </span>
-            <span class="max-w-full truncate rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase {selected.suggestion.riskLevel === 'high' ? 'border-destructive/20 bg-destructive/20 text-destructive' : 'border-border bg-muted text-muted-foreground'}">
+            <span class="whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase {selected.suggestion.riskLevel === 'high' ? 'border-destructive/20 bg-destructive/20 text-destructive' : 'border-border bg-muted text-muted-foreground'}">
               {selected.suggestion.riskLevel}
             </span>
           </div>
