@@ -2,7 +2,11 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db, nowIso } from './db';
 import { accounts, folders, folderSyncState, messageAttachments, messages } from './db/schema';
 import { providerForAccount } from './email/provider';
-import { suggestForMessage } from './services/messages';
+import {
+  invalidateConversationIndex,
+  registerConversationMessage,
+  suggestForMessage
+} from './services/messages';
 import { appEvents } from './events';
 
 type WorkerState = {
@@ -122,17 +126,23 @@ export async function syncAccount(accountId: number) {
         for (const row of rows) existingProviderIds.add(row.providerMessageId);
       }
       let maxSeenUid = sinceUid;
+      let conversationIndexChanged = false;
       for (const remote of uniqueRemote) {
         const existedBefore = existingProviderIds.has(remote.providerMessageId);
         const saved = upsertRemoteMessage(accountId, remote);
         const uid = messageUid(remote.providerMessageId);
         if (uid > maxSeenUid) maxSeenUid = uid;
+        if (!existedBefore && saved) {
+          conversationIndexChanged = true;
+          registerConversationMessage(saved);
+        }
         if (!existedBefore && saved && isInboxFolder) {
           void suggestForMessage(saved.id).catch((error) => {
             console.error('[dear-robot] AI evaluation failed for inserted message', saved.id, error);
           });
         }
       }
+      if (conversationIndexChanged) invalidateConversationIndex();
       const highestUid = Math.max(maxSeenUid, remoteState?.highestUid ?? 0);
       if (provider.fetchAllUids && priorState?.uidValidity && !uidValidityChanged) {
         const remoteUids = await provider.fetchAllUids(account, folder.path);
@@ -155,6 +165,7 @@ export async function syncAccount(accountId: number) {
           const batch = staleIds.slice(offset, offset + 400);
           db.delete(messages).where(inArray(messages.id, batch)).run();
         }
+        if (staleIds.length) invalidateConversationIndex();
       }
       db.insert(folderSyncState)
         .values({

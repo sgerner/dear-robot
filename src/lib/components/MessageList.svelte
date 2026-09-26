@@ -1,8 +1,7 @@
 <script lang="ts">
   import ScrollArea from '$lib/components/ui/ScrollArea.svelte';
   import MessageRow from '$lib/components/MessageRow.svelte';
-  import { flip } from 'svelte/animate';
-  import { fade, fly, slide } from 'svelte/transition';
+  import { fade } from 'svelte/transition';
 
   let {
     messages = [],
@@ -19,6 +18,8 @@
     finishSwipe,
     cancelSwipe,
     onToggleMessage,
+    loadMessageDetail,
+    preloadMessageDetail,
     riskClass,
     quickActionIds = [],
     quickActionMeta,
@@ -57,6 +58,8 @@
     finishSwipe: (_e: PointerEvent, _id: number) => Promise<void>;
     cancelSwipe: () => void;
     onToggleMessage: (_id: number) => void;
+    loadMessageDetail: (_id: number) => Promise<any | null>;
+    preloadMessageDetail: (_id: number) => void;
     riskClass: (_risk: string | null | undefined) => string;
     quickActionIds: string[];
     quickActionMeta: (_id: any) => any;
@@ -87,9 +90,6 @@
   {#each messages as message (message.id)}
     <div
       class="mx-2 border-b border-border/25 py-0.5 last:border-b-0"
-      animate:flip={{ duration: 200 }}
-      in:fly={{ y: 6, duration: 180 }}
-      out:slide={{ duration: 200 }}
     >
       <MessageRow
       {message}
@@ -106,6 +106,8 @@
       {updateSwipe}
       {finishSwipe}
       {cancelSwipe}
+      {loadMessageDetail}
+      {preloadMessageDetail}
       {riskClass}
       {quickActionIds}
       {quickActionMeta}

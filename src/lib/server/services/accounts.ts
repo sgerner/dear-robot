@@ -13,6 +13,7 @@ import {
 import { encryptSecret } from '../security';
 import { providerForAccount } from '../email/provider';
 import { startSyncWorkerForAccount, stopSyncWorkerForAccount } from '../sync';
+import { invalidateConversationIndex } from './messages';
 
 export const AccountInputSchema = z.object({
   email: z.string().email(),
@@ -205,6 +206,7 @@ export function removeAccount(id: number) {
     db.delete(aiSuggestions).where(eq(aiSuggestions.messageId, row.id)).run();
   }
   db.delete(messages).where(eq(messages.accountId, id)).run();
+  invalidateConversationIndex();
   db.delete(folders).where(eq(folders.accountId, id)).run();
   const result = db.delete(accounts).where(eq(accounts.id, id)).run();
   return result.changes > 0;

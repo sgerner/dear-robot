@@ -28,7 +28,9 @@ import { extractAndStoreObligationsForMessage } from '../agent/obligations';
 import {
   buildConversationKeyResolver,
   buildReplyReferences,
-  duplicateDeliveryKey
+  duplicateDeliveryKey,
+  threadKeyCandidateFromHeaders,
+  type ThreadableMessage
 } from '../email/threading';
 
 export const MessageQuerySchema = z.object({
@@ -170,6 +172,103 @@ type ConversationListRow = MessageListRow & {
   threadSubject: string;
 };
 
+type ConversationIndex = {
+  resolveConversationKey: (message: ThreadableMessage) => string;
+  register: (message: ThreadableMessage) => string;
+  messageIdsByConversation: Map<string, number[]>;
+  messageIdHeaderToConversation: Map<string, string>;
+  aliases: Map<string, string>;
+};
+
+let conversationIndexCache: ConversationIndex | null = null;
+
+export function invalidateConversationIndex() {
+  conversationIndexCache = null;
+}
+
+export function registerConversationMessage(message: ThreadableMessage) {
+  conversationIndexCache?.register(message);
+}
+
+function getConversationIndex() {
+  if (conversationIndexCache) return conversationIndexCache;
+
+  const threadMessages = db
+    .select({
+      id: messages.id,
+      accountId: messages.accountId,
+      messageIdHeader: messages.messageIdHeader,
+      inReplyTo: messages.inReplyTo,
+      references: messages.references,
+      threadId: messages.threadId
+    })
+    .from(messages)
+    .all();
+  const resolveFromSnapshot = buildConversationKeyResolver(threadMessages);
+  const messageIdsByConversation = new Map<string, number[]>();
+  const messageIdHeaderToConversation = new Map<string, string>();
+  const aliases = new Map<string, string>();
+
+  for (const message of threadMessages) {
+    const key = resolveFromSnapshot(message);
+    const ids = messageIdsByConversation.get(key);
+    if (ids) ids.push(message.id);
+    else messageIdsByConversation.set(key, [message.id]);
+    const header = message.messageIdHeader?.trim();
+    if (header) messageIdHeaderToConversation.set(header, key);
+  }
+
+  function canonicalKey(key: string) {
+    let current = key;
+    const visited: string[] = [];
+    while (aliases.has(current)) {
+      visited.push(current);
+      current = aliases.get(current)!;
+    }
+    for (const alias of visited) aliases.set(alias, current);
+    return current;
+  }
+
+  function resolveConversationKey(message: ThreadableMessage) {
+    const candidate = threadKeyCandidateFromHeaders(message);
+    const knownParentKey = candidate ? messageIdHeaderToConversation.get(candidate) : undefined;
+    return canonicalKey(knownParentKey || resolveFromSnapshot(message));
+  }
+
+  function register(message: ThreadableMessage) {
+    const key = resolveConversationKey(message);
+    const header = message.messageIdHeader?.trim();
+    if (header) {
+      const priorIds = messageIdsByConversation.get(header);
+      const priorKey = canonicalKey(header);
+      if (priorIds && priorKey !== key) {
+        const nextIds = messageIdsByConversation.get(key) || [];
+        for (const id of priorIds) {
+          if (!nextIds.includes(id)) nextIds.push(id);
+        }
+        messageIdsByConversation.set(key, nextIds);
+        messageIdsByConversation.delete(priorKey);
+        aliases.set(priorKey, key);
+      }
+      messageIdHeaderToConversation.set(header, key);
+    }
+
+    const ids = messageIdsByConversation.get(key) || [];
+    if (!ids.includes(message.id)) ids.push(message.id);
+    messageIdsByConversation.set(key, ids);
+    return key;
+  }
+
+  conversationIndexCache = {
+    resolveConversationKey,
+    register,
+    messageIdsByConversation,
+    messageIdHeaderToConversation,
+    aliases
+  };
+  return conversationIndexCache;
+}
+
 export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
   const where = [];
   if (query.accountId) where.push(eq(messages.accountId, query.accountId));
@@ -295,18 +394,7 @@ export function listMessages(query: z.infer<typeof MessageQuerySchema>) {
 export function listConversationMessages(query: z.infer<typeof MessageQuerySchema>) {
   const rows = listMessages(query) as MessageListRow[];
   if (!rows.length) return [];
-  const threadMessages = db
-    .select({
-      id: messages.id,
-      accountId: messages.accountId,
-      messageIdHeader: messages.messageIdHeader,
-      inReplyTo: messages.inReplyTo,
-      references: messages.references,
-      threadId: messages.threadId
-    })
-    .from(messages)
-    .all();
-  const resolveConversationKey = buildConversationKeyResolver(threadMessages);
+  const { resolveConversationKey } = getConversationIndex();
   const groups = new Map<string, MessageListRow[]>();
   for (const row of rows) {
     const key = resolveConversationKey(row);
@@ -449,7 +537,10 @@ export function getMessageDetail(id: number) {
     .where(eq(executedActions.messageId, id))
     .orderBy(desc(executedActions.createdAt))
     .all();
-  const allMessages = db
+  const conversationIndex = getConversationIndex();
+  const conversationKey = conversationIndex.register(message);
+  const threadMessageIds = conversationIndex.messageIdsByConversation.get(conversationKey) || [id];
+  const threadMessages = db
     .select({
       id: messages.id,
       accountId: messages.accountId,
@@ -470,13 +561,10 @@ export function getMessageDetail(id: number) {
       isFlagged: messages.isFlagged
     })
     .from(messages)
-    .orderBy(messages.date)
+    .where(inArray(messages.id, threadMessageIds))
     .all();
-  const resolveConversationKey = buildConversationKeyResolver(allMessages);
-  const conversationKey = resolveConversationKey(message);
   const thread = dedupeMessageRows(
-    allMessages
-      .filter((item) => resolveConversationKey(item) === conversationKey)
+    threadMessages
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   )
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())

@@ -17,11 +17,11 @@
     Forward,
     Globe2
   } from 'lucide-svelte';
+  import { onDestroy } from 'svelte';
   import { slide, fade } from 'svelte/transition';
   import Button from '$lib/components/ui/Button.svelte';
   import DictationButton from '$lib/components/DictationButton.svelte';
   import { formatActionLabel, formatPlainText } from '$lib/utils/format';
-  import { getCache, upsertCache } from '$lib/client/local-cache';
 
   let {
     message,
@@ -45,6 +45,8 @@
     moveSelected,
     folders = [],
     selectMessage,
+    loadMessageDetail,
+    preloadMessageDetail,
     dictationTargetId = null,
     dictationActive = false,
     dictationUnavailable = false,
@@ -82,6 +84,8 @@
     moveSelected: (_path: string) => void | Promise<void>;
     folders: any[];
     selectMessage: (_id: number) => void | Promise<void>;
+    loadMessageDetail: (_id: number) => Promise<any | null>;
+    preloadMessageDetail: (_id: number) => void;
     dictationTargetId: string | null;
     dictationActive: boolean;
     dictationUnavailable: boolean;
@@ -107,6 +111,22 @@
   let emailTheme = $state<'light' | 'dark'>('dark');
   let draftText = $state('');
   let visibleThreadLimit = $state(5);
+  let detailPreloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleDetailPreload() {
+    if (detailPreloadTimer) return;
+    detailPreloadTimer = setTimeout(() => {
+      detailPreloadTimer = null;
+      preloadMessageDetail(message.id);
+    }, 100);
+  }
+
+  function cancelDetailPreload() {
+    if (detailPreloadTimer) clearTimeout(detailPreloadTimer);
+    detailPreloadTimer = null;
+  }
+
+  onDestroy(cancelDetailPreload);
 
   const actionIcons: Record<string, any> = {
     reply: Reply,
@@ -156,25 +176,10 @@
     if (detail || detailLoading) return;
     detailLoading = true;
     try {
-      // 1. Try local cache first
-      const cached = await getCache('message_details', message.id);
-      if (cached && cached.message) {
-        detail = cached;
-        if (detail.message?.safeBodyHtml) bodyMode = 'html';
-        detailLoading = false;
-        return;
-      }
-
-      // 2. Fallback to network
-      const res = await fetch(`/api/messages/${message.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        detail = data;
-        if (data.message?.safeBodyHtml) bodyMode = 'html';
-
-        // 3. Save to cache for next time
-        void upsertCache('message_details', [{ id: message.id, ...data }]);
-      }
+      const loaded = await loadMessageDetail(message.id);
+      if (!loaded?.message) return;
+      detail = loaded;
+      if (loaded.message?.safeBodyHtml) bodyMode = 'html';
     } catch {
       // detail unavailable
     } finally {
@@ -187,7 +192,10 @@
   });
 </script>
 
-<div data-testid="message-row" class="relative overflow-hidden rounded-md">
+<div
+  data-testid="message-row"
+  class="relative overflow-hidden rounded-md"
+>
   <!-- Swipe left background (archive) -->
   <div
     class="absolute inset-y-0 left-0 flex w-28 items-center gap-2 bg-primary/10 px-4 text-xs font-medium text-primary transition-opacity duration-150"
@@ -240,6 +248,9 @@
         type="button"
         class="block min-w-0 w-full text-left rounded-sm transition-colors hover:bg-muted/20 focus-visible:bg-muted/20"
         onclick={() => onToggle(message.id)}
+        onpointerenter={scheduleDetailPreload}
+        onpointerleave={cancelDetailPreload}
+        onfocus={() => preloadMessageDetail(message.id)}
         aria-expanded={open}
         aria-label={`${open ? 'Collapse' : 'Open'} message: ${message.subject || 'Untitled'}`}
       >

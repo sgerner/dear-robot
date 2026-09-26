@@ -10,7 +10,7 @@
     Sparkles,
     X
   } from 'lucide-svelte';
-  import { goto, invalidate, pushState } from '$app/navigation';
+  import { goto, invalidate, preloadData, pushState } from '$app/navigation';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { fade, fly, slide } from 'svelte/transition';
   import type { ModelsDevProvider } from '$lib/server/ai/modelsdev';
@@ -283,7 +283,8 @@
   let searchDebounce: ReturnType<typeof setTimeout> | null = null;
   let mobileMenuOpen = $state(false);
   let selectedMessageId = $state<number | null>(null);
-  let messageDetailCache = $state<Record<number, any>>({});
+  const messageDetailCache = new Map<number, any>();
+  const messageDetailRequests = new Map<number, Promise<any | null>>();
   let openMessageIds = $state(new Set<number>());
   let contactsImportCsv = $state('');
   let cachePassphrase = $state('');
@@ -659,7 +660,7 @@
     loadUiPreferences();
     if (typeof window === 'undefined') return;
     if (data.selected?.message?.id) {
-      messageDetailCache = { ...messageDetailCache, [data.selected.message.id]: data.selected };
+      rememberMessageDetail(data.selected.message.id, data.selected);
     }
     // Keep tablets in the focused mobile shell until there is enough room for
     // the rail, mailbox list, and message detail to remain readable side by side.
@@ -760,9 +761,53 @@
     dictationLevel = 0;
   }
 
+  function setShallowViewParam(
+    nextView: 'operations' | 'settings',
+    key: 'ops' | 'settings',
+    value: 'autopilot' | 'executed' | SettingsCategory
+  ) {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(location.search);
+    params.set('view', nextView);
+    params.delete('message');
+    params.delete('folder');
+    params.delete('accountId');
+    if (key === 'settings') {
+      params.delete('ops');
+      params.set('settings', value);
+    } else {
+      params.delete('settings');
+      params.set('ops', value);
+    }
+    pushState(`/?${params.toString()}`, {});
+    data = {
+      ...data,
+      query: {
+        ...data.query,
+        view: nextView,
+        messageId: null,
+        folder: undefined,
+        accountId: undefined,
+        [key]: value
+      }
+    };
+  }
+
   function openSettings(category: SettingsCategory = 'accounts') {
     mobileMenuOpen = false;
     mobileSettingsDetailOpen = false;
+    if (view === 'settings') {
+      if (isMobileViewport) {
+        const params = new URLSearchParams(location.search);
+        params.delete('settings');
+        params.delete('message');
+        pushState(`/?${params.toString()}`, {});
+        data = { ...data, query: { ...data.query, settings: 'accounts', messageId: null } };
+        return;
+      }
+      setShallowViewParam('settings', 'settings', category);
+      return;
+    }
     if (isMobileViewport) {
       void navigateView('settings', { clearMessage: true });
       return;
@@ -773,6 +818,10 @@
   function openSettingsCategory(category: SettingsCategory) {
     mobileMenuOpen = false;
     if (isMobileViewport) mobileSettingsDetailOpen = true;
+    if (view === 'settings') {
+      setShallowViewParam('settings', 'settings', category);
+      return;
+    }
     void navigateView('settings', { settings: category, clearMessage: true });
   }
 
@@ -798,10 +847,14 @@
 
   function openOperations(category: 'autopilot' | 'executed' = 'autopilot') {
     mobileMenuOpen = false;
+    if (view === 'operations') {
+      setShallowViewParam('operations', 'ops', category);
+      return;
+    }
     void navigateView('operations', { ops: category, clearMessage: true });
   }
 
-  async function navigateView(
+  function buildViewUrl(
     nextView: AppView,
     options: {
       settings?: SettingsCategory;
@@ -809,8 +862,6 @@
       clearMessage?: boolean;
     } = {}
   ) {
-    mobileMenuOpen = false;
-    showShortcutHelp = false;
     const params = new URLSearchParams(location.search);
     if (nextView === 'inbox') params.delete('view');
     else params.set('view', nextView);
@@ -827,7 +878,42 @@
     if (['inbox', 'unread', 'starred', 'pending'].includes(nextView)) {
       params.delete('folder');
     }
-    await goto(`/?${params.toString()}`);
+    return `/?${params.toString()}`;
+  }
+
+  let preloadingViewHref = '';
+
+  function preloadView(
+    nextView: AppView,
+    options: {
+      settings?: SettingsCategory;
+      ops?: 'autopilot' | 'executed';
+      clearMessage?: boolean;
+    } = {}
+  ) {
+    if (typeof window === 'undefined') return;
+    if (view === nextView) return;
+    const href = buildViewUrl(nextView, options);
+    if (href === preloadingViewHref) return;
+    preloadingViewHref = href;
+    void preloadData(href)
+      .catch(() => {})
+      .finally(() => {
+        if (preloadingViewHref === href) preloadingViewHref = '';
+      });
+  }
+
+  async function navigateView(
+    nextView: AppView,
+    options: {
+      settings?: SettingsCategory;
+      ops?: 'autopilot' | 'executed';
+      clearMessage?: boolean;
+    } = {}
+  ) {
+    mobileMenuOpen = false;
+    showShortcutHelp = false;
+    await goto(buildViewUrl(nextView, options));
   }
 
   $effect(() => {
@@ -903,12 +989,32 @@
       }
     };
     const onOnline = () => void flushOutbox();
+    const onPopState = () => {
+      const params = new URLSearchParams(location.search);
+      const urlView = params.get('view') || 'inbox';
+
+      if (urlView === 'settings' && data.query?.view === 'settings') {
+        const requestedCategory = params.get('settings') || 'accounts';
+        const nextCategory = settingsCategoryKeys.includes(requestedCategory as SettingsCategory)
+          ? (requestedCategory as SettingsCategory)
+          : 'accounts';
+        data = { ...data, query: { ...data.query, settings: nextCategory } };
+        if (isMobileViewport) mobileSettingsDetailOpen = params.has('settings');
+      } else if (urlView === 'operations' && data.query?.view === 'operations') {
+        data = {
+          ...data,
+          query: { ...data.query, ops: params.get('ops') === 'executed' ? 'executed' : 'autopilot' }
+        };
+      }
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('online', onOnline);
+    window.addEventListener('popstate', onPopState);
     void flushOutbox();
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('popstate', onPopState);
     };
   });
 
@@ -1030,16 +1136,14 @@
     openMessageIds = next;
 
     const fastDetail = getFastMessageDetail(id);
-    if (fastDetail) {
-      data = {
-        ...data,
-        selected: fastDetail,
-        query: {
-          ...data.query,
-          messageId: id
-        }
-      };
-    }
+    data = {
+      ...data,
+      selected: fastDetail,
+      query: {
+        ...data.query,
+        messageId: id
+      }
+    };
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(location.search);
@@ -1098,7 +1202,7 @@
 
   function getFastMessageDetail(id: number) {
     if (data.selected?.message?.id === id) return data.selected;
-    if (messageDetailCache[id]) return messageDetailCache[id];
+    if (messageDetailCache.has(id)) return messageDetailCache.get(id);
     const fallback =
       data.messages.find((message: { id: number }) => message.id === id) ||
       serverSearchResults.find((message: { id: number }) => message.id === id);
@@ -1113,24 +1217,62 @@
     };
   }
 
+  function rememberMessageDetail(id: number, detail: any) {
+    messageDetailCache.delete(id);
+    messageDetailCache.set(id, detail);
+    if (messageDetailCache.size > 16) {
+      const oldestId = messageDetailCache.keys().next().value;
+      if (oldestId !== undefined) messageDetailCache.delete(oldestId);
+    }
+  }
+
+  function requestMessageDetail(id: number): Promise<any | null> {
+    if (messageDetailCache.has(id)) return Promise.resolve(messageDetailCache.get(id));
+    if (
+      data.selected?.message?.id === id &&
+      Array.isArray(data.selected?.suggestions)
+    ) {
+      return Promise.resolve(data.selected);
+    }
+    const pending = messageDetailRequests.get(id);
+    if (pending) return pending;
+
+    const request = (async () => {
+      let cached: any = null;
+      try {
+        cached = await getCache('message_details', id);
+      } catch {
+        // An unavailable or undecryptable local cache must not block the network fallback.
+      }
+      if (cached?.message) {
+        rememberMessageDetail(id, cached);
+        return cached;
+      }
+
+      const response = await fetch(`/api/messages/${id}`);
+      if (!response.ok) return null;
+      const detail = await response.json();
+      rememberMessageDetail(id, detail);
+      void upsertCache('message_details', [{ id, ...detail }]).catch(() => {});
+      return detail;
+    })().catch(() => null);
+
+    messageDetailRequests.set(id, request);
+    void request.finally(() => {
+      if (messageDetailRequests.get(id) === request) messageDetailRequests.delete(id);
+    });
+    return request;
+  }
+
+  function preloadMessageDetail(id: number) {
+    if (messageDetailCache.has(id)) return;
+    void requestMessageDetail(id);
+  }
+
   async function hydrateMessageDetail(id: number) {
-    try {
-      const cached = messageDetailCache[id];
-      if (cached) {
-        if (selectedMessageId === id) {
-          data = { ...data, selected: cached, query: { ...data.query, messageId: id } };
-        }
-        return;
-      }
-      const res = await fetch(`/api/messages/${id}`);
-      if (!res.ok) return;
-      const detail = await res.json();
-      messageDetailCache = { ...messageDetailCache, [id]: detail };
-      if (selectedMessageId === id) {
-        data = { ...data, selected: detail, query: { ...data.query, messageId: id } };
-      }
-    } catch {
-      // Keep optimistic selection if hydration fails.
+    const detail = await requestMessageDetail(id);
+    if (detail && selectedMessageId === id) {
+      data = { ...data, selected: detail, query: { ...data.query, messageId: id } };
     }
   }
 
@@ -1141,7 +1283,11 @@
         const params = new URLSearchParams(location.search);
         params.delete('settings');
         params.delete('message');
-        await goto(`/?${params.toString()}`);
+        pushState(`/?${params.toString()}`, {});
+        data = {
+          ...data,
+          query: { ...data.query, settings: 'accounts', messageId: null }
+        };
         return;
       }
       await navigateView('inbox', { clearMessage: true });
@@ -3107,6 +3253,8 @@
         <button
           class={`touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => setQuickView('inbox')}
+          onpointerenter={() => preloadView('inbox', { clearMessage: true })}
+          onfocus={() => preloadView('inbox', { clearMessage: true })}
         >
           <Inbox size={18} />
           <span>Inbox</span>
@@ -3114,6 +3262,8 @@
         <button
           class={`touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => openOperations('autopilot')}
+          onpointerenter={() => preloadView('operations', { ops: 'autopilot', clearMessage: true })}
+          onfocus={() => preloadView('operations', { ops: 'autopilot', clearMessage: true })}
         >
           <Bot size={18} />
           <span>AI Operations</span>
@@ -3121,6 +3271,8 @@
         <button
           class={`touch-target flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           onclick={() => openSettings('accounts')}
+          onpointerenter={() => preloadView('settings', { clearMessage: true })}
+          onfocus={() => preloadView('settings', { clearMessage: true })}
         >
           <Settings size={18} />
           <span>Settings</span>
@@ -3188,6 +3340,8 @@
         class={`touch-target rounded-xl p-3 transition-all duration-200 ${isInboxView(view) ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         title="Inbox"
         onclick={() => setQuickView('inbox')}
+        onpointerenter={() => preloadView('inbox', { clearMessage: true })}
+        onfocus={() => preloadView('inbox', { clearMessage: true })}
       >
         <Inbox size={20} />
       </button>
@@ -3195,6 +3349,8 @@
         class={`touch-target rounded-xl p-3 transition-all duration-200 ${view === 'operations' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         title="Operations"
         onclick={() => openOperations('autopilot')}
+        onpointerenter={() => preloadView('operations', { ops: 'autopilot', clearMessage: true })}
+        onfocus={() => preloadView('operations', { ops: 'autopilot', clearMessage: true })}
       >
         <Bot size={20} />
       </button>
@@ -3202,6 +3358,8 @@
         class={`touch-target rounded-xl p-3 transition-all duration-200 ${view === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         title="Settings"
         onclick={() => openSettings()}
+        onpointerenter={() => preloadView('settings', { settings: 'accounts', clearMessage: true })}
+        onfocus={() => preloadView('settings', { settings: 'accounts', clearMessage: true })}
       >
         <Settings size={20} />
       </button>
@@ -3300,6 +3458,8 @@
         {cancelSwipe}
         onToggleMessage={toggleMessage}
         {selectMessage}
+        loadMessageDetail={requestMessageDetail}
+        {preloadMessageDetail}
         {riskClass}
         {quickActionIds}
         {quickActionMeta}
@@ -3352,7 +3512,7 @@
                 : `Review the log. ${data.executed?.length || 0} actions recorded.`}
             </p>
             <div class="mt-4 flex gap-2">
-              <Button variant="outline" size="sm" onclick={() => openOperations(operationsCategory)}
+              <Button variant="outline" size="sm" onclick={invalidateAll}
                 >Refresh</Button
               >
               {#if operationsCategory === 'autopilot'}
