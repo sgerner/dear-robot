@@ -1,5 +1,3 @@
-@/home/steven/.codex/RTK.md
-
 # Repo Conventions
 
 ## Product Direction
@@ -8,7 +6,6 @@ Dear Robot is an AI-first email client. Keep the mechanics simple and inspectabl
 
 ## Engineering
 
-- Use `rtk` before shell commands in this repo.
 - Prefer SvelteKit server routes plus shared `src/lib/server` services over new services or queues.
 - Keep secrets server-only. Never expose API keys, OAuth secrets, SMTP passwords, or IMAP passwords to browser data.
 - Prefer SQLite-backed settings for behavior that affects server actions. Browser-local preferences are acceptable for purely personal UI layout, keyboard, swipe, and PWA ergonomics.
