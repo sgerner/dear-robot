@@ -315,8 +315,16 @@ async function handleMessage(message, sender) {
 
   if (message?.type === 'PING') {
     const configuredOrigin = await readConfiguredAppOrigin();
-    if (!Number.isInteger(senderTabId) || !senderOrigin || senderOrigin !== configuredOrigin) return;
-    sendToTab(senderTabId, { type: 'BRIDGE_READY', appOrigin: configuredOrigin });
+    if (!Number.isInteger(senderTabId) || !senderOrigin) return;
+    if (senderOrigin === configuredOrigin) {
+      sendToTab(senderTabId, { type: 'BRIDGE_READY', appOrigin: configuredOrigin });
+    } else {
+      sendToTab(senderTabId, {
+        type: 'BRIDGE_SETUP_STATUS',
+        appOrigin: senderOrigin,
+        status: configuredOrigin ? 'origin_mismatch' : 'origin_missing'
+      });
+    }
     return;
   }
 

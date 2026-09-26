@@ -369,6 +369,41 @@ async function installBridgeSimulation(page: Page, mode: 'success' | 'failure') 
   );
 }
 
+async function installBridgeSetupSimulation(page: Page) {
+  await page.addInitScript(() => {
+    type SetupWindow = Window & {
+      __bridgeSetupMode?: 'origin_missing' | 'origin_mismatch' | 'ready';
+      __copiedAppOrigin?: string;
+    };
+    const setupWindow = window as SetupWindow;
+    setupWindow.__bridgeSetupMode = 'origin_missing';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          setupWindow.__copiedAppOrigin = value;
+        }
+      }
+    });
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || event.data?.source !== 'dear-robot-app') return;
+      if (event.data.type !== 'PING') return;
+      const mode = setupWindow.__bridgeSetupMode || 'origin_missing';
+      const ready = mode === 'ready';
+      window.postMessage(
+        {
+          source: 'dear-robot-browser-bridge',
+          type: ready ? 'READY' : 'SETUP_STATUS',
+          appOrigin: window.location.origin,
+          protocolVersion: 4,
+          ...(ready ? {} : { status: mode })
+        },
+        window.location.origin
+      );
+    });
+  });
+}
+
 async function signIn(page: Page) {
   await page.goto('/login');
   await page.getByLabel('Password').fill('test-password');
@@ -462,6 +497,64 @@ async function testOnServer(
 }
 
 test.describe('browser automation workflow', () => {
+  test('copies the current app origin and explains how to fix missing and mismatched bridge settings', async ({
+    page
+  }) => {
+    const portal = await startPortal();
+    const mailbox = seedReportMailbox(portal.startUrl);
+    try {
+      await signIn(page);
+      await installBridgeSetupSimulation(page);
+      await page.goto(`/?message=${mailbox.messageId}`);
+      await expect(
+        page
+          .getByTestId('message-row')
+          .filter({ hasText: 'Weekly delivery report is ready' })
+          .first()
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Automate this report' }).first().click();
+      await expect(page.getByRole('heading', { name: 'Automate this email' })).toBeVisible();
+
+      const appOrigin = new URL(page.url()).origin;
+      await expect(page.getByText('The browser bridge has no app origin saved.')).toBeVisible();
+      await expect(page.getByLabel('Current Dear Robot app origin')).toHaveValue(appOrigin);
+      await expect(
+        page.getByText(
+          /open Dear Robot Browser Bridge options.*paste it into Dear Robot app origin/i
+        )
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Copy origin' }).click();
+      await expect(page.getByRole('status')).toHaveText('App origin copied.');
+      expect(
+        await page.evaluate(
+          () => (window as Window & { __copiedAppOrigin?: string }).__copiedAppOrigin
+        )
+      ).toBe(appOrigin);
+
+      await page.evaluate(() => {
+        (window as Window & { __bridgeSetupMode?: string }).__bridgeSetupMode = 'origin_mismatch';
+      });
+      await page.getByRole('button', { name: 'Check for the browser bridge' }).click();
+      await expect(
+        page.getByText('The browser bridge is configured for a different app origin.')
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          /replace the saved origin with the one below.*save, return here, and check again/i
+        )
+      ).toBeVisible();
+
+      await page.evaluate(() => {
+        (window as Window & { __bridgeSetupMode?: string }).__bridgeSetupMode = 'ready';
+      });
+      await page.getByRole('button', { name: 'Check for the browser bridge' }).click();
+      await expect(page.getByText(/Browser bridge connected/)).toBeVisible();
+    } finally {
+      cleanupBrowserWorkflow([mailbox.messageId]);
+      await portal.close();
+    }
+  });
+
   test('saves bridge-recorded MFA steps, tests on the server, and shows the downloaded report without uploading it', async ({
     page
   }) => {

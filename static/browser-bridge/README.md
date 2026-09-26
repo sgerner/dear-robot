@@ -34,7 +34,11 @@ You can download the bundled archive from the Dear Robot setup dialog (or from
 
 Enter the origin only, such as `https://mail.example.com`, without a path. Use
 `http://localhost:PORT` only for local development. If you move the app to a
-different origin, update this setting and refresh the app page.
+different origin, update this setting and refresh the app page. The automation
+setup dialog shows and copies the exact origin for the current Dear Robot app.
+If it reports that the origin is missing or different, copy it from the dialog,
+paste it into the extension options, save, then return to the dialog and check
+the bridge again.
 
 The extension is intentionally not required for ordinary mail use. It only
 needs to be installed once before choosing **Automate this report** on a

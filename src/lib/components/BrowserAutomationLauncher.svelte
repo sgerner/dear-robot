@@ -5,6 +5,7 @@
     CalendarClock,
     Check,
     CircleStop,
+    Copy,
     Download,
     Globe2,
     KeyRound,
@@ -69,6 +70,11 @@
   let bridgeAvailable = $state(false);
   let bridgeChecked = $state(false);
   let bridgeOutdated = $state(false);
+  let bridgeSetupStatus = $state<'origin_missing' | 'origin_mismatch' | null>(null);
+  let appOrigin = $state('');
+  let originCopied = $state(false);
+  let originCopyError = $state('');
+  let originCopyTimer: ReturnType<typeof setTimeout> | null = null;
   let serverFallbackAvailable = $state(false);
   let recordingMode = $state<'client' | 'server'>('client');
   let clientSessionId = $state('');
@@ -140,12 +146,24 @@
       event.data?.source !== 'dear-robot-browser-bridge'
     )
       return;
-    if (event.data.type === 'READY') {
-      if (event.data.appOrigin && event.data.appOrigin !== window.location.origin) return;
-      bridgeAvailable =
-        event.data.appOrigin === window.location.origin &&
-        event.data.protocolVersion === bridgeProtocolVersion;
+    if (
+      event.data.type === 'SETUP_STATUS' &&
+      event.data.appOrigin === window.location.origin &&
+      ['origin_missing', 'origin_mismatch'].includes(event.data.status)
+    ) {
+      bridgeAvailable = false;
+      bridgeSetupStatus = event.data.status;
       bridgeOutdated = event.data.protocolVersion !== bridgeProtocolVersion;
+      bridgeChecked = true;
+      if (bridgeTimeout) clearTimeout(bridgeTimeout);
+      bridgeTimeout = null;
+      return;
+    }
+    if (event.data.type === 'READY') {
+      if (event.data.appOrigin !== window.location.origin) return;
+      bridgeAvailable = event.data.protocolVersion === bridgeProtocolVersion;
+      bridgeOutdated = event.data.protocolVersion !== bridgeProtocolVersion;
+      bridgeSetupStatus = null;
       bridgeChecked = true;
       if (bridgeTimeout) clearTimeout(bridgeTimeout);
       bridgeTimeout = null;
@@ -202,13 +220,30 @@
 
   function pingBridge() {
     bridgeChecked = false;
+    bridgeAvailable = false;
     bridgeOutdated = false;
+    bridgeSetupStatus = null;
     if (bridgeTimeout) clearTimeout(bridgeTimeout);
     window.postMessage({ source: 'dear-robot-app', type: 'PING' }, window.location.origin);
     bridgeTimeout = setTimeout(() => {
       bridgeChecked = true;
       bridgeTimeout = null;
     }, 450);
+  }
+
+  async function copyAppOrigin() {
+    if (!appOrigin) return;
+    originCopyError = '';
+    originCopied = false;
+    try {
+      await navigator.clipboard.writeText(appOrigin);
+      originCopied = true;
+      if (originCopyTimer) clearTimeout(originCopyTimer);
+      originCopyTimer = setTimeout(() => (originCopied = false), 2200);
+    } catch {
+      originCopyError =
+        'Clipboard access was blocked. Click the origin field to select it, then copy it.';
+    }
   }
 
   async function openLauncher() {
@@ -508,6 +543,7 @@
   }
 
   onMount(() => {
+    appOrigin = window.location.origin;
     serverFallbackAvailable = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(
       window.location.hostname
     );
@@ -519,6 +555,7 @@
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer);
     if (bridgeTimeout) clearTimeout(bridgeTimeout);
+    if (originCopyTimer) clearTimeout(originCopyTimer);
     if (bridgeAck) clearTimeout(bridgeAck.timer);
     window.removeEventListener('message', bridgeMessage);
   });
@@ -608,15 +645,49 @@
                 <p class="font-medium">
                   {bridgeOutdated
                     ? 'Update the browser bridge to record on this device.'
-                    : 'Install and configure the browser bridge for this app origin.'}
+                    : bridgeSetupStatus === 'origin_missing'
+                      ? 'The browser bridge has no app origin saved.'
+                      : bridgeSetupStatus === 'origin_mismatch'
+                        ? 'The browser bridge is configured for a different app origin.'
+                        : 'The browser bridge did not respond.'}
                 </p>
                 <p class="leading-5 text-amber-100/70">
                   {bridgeOutdated
-                    ? 'Download and reinstall the current bridge, then click the refresh button here.'
-                    : serverFallbackAvailable
-                      ? 'Without it, Dear Robot can only open a server-side window on this computer.'
-                      : 'Install the bridge and set this app origin in its extension settings.'}
+                    ? 'Download and reload the current bridge, then click Check for the browser bridge here.'
+                    : bridgeSetupStatus === 'origin_missing'
+                      ? 'Copy this origin. In your browser extension settings, open Dear Robot Browser Bridge options, paste it into Dear Robot app origin, and save. Return here and check again.'
+                      : bridgeSetupStatus === 'origin_mismatch'
+                        ? 'Replace the saved origin with the one below in Dear Robot Browser Bridge options. Save, return here, and check again.'
+                        : 'Install or enable Dear Robot Browser Bridge. If it is already installed, set the origin below in its options, save, return here, and check again.'}
                 </p>
+                {#if serverFallbackAvailable && !bridgeOutdated}
+                  <p class="leading-5 text-amber-100/70">
+                    You can also continue with the local browser window on this device.
+                  </p>
+                {/if}
+                <div
+                  class="flex items-end gap-2 rounded-lg border border-amber-200/15 bg-background/20 p-2"
+                >
+                  <label class="min-w-0 flex-1 text-[11px] font-medium text-amber-100/80">
+                    Current Dear Robot app origin
+                    <input
+                      class="mt-1 w-full select-all rounded-md border border-amber-200/20 bg-background/50 px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-amber-200/50"
+                      aria-label="Current Dear Robot app origin"
+                      readonly
+                      value={appOrigin}
+                      onfocus={(event) => event.currentTarget.select()}
+                    />
+                  </label>
+                  <Button variant="outline" size="sm" onclick={copyAppOrigin}>
+                    {#if originCopied}<Check size={13} /> Copied{:else}<Copy size={13} /> Copy origin{/if}
+                  </Button>
+                </div>
+                {#if originCopied}<p class="text-[11px] text-amber-100/80" role="status">
+                    App origin copied.
+                  </p>{/if}
+                {#if originCopyError}<p class="text-[11px] text-amber-100/80" role="alert">
+                    {originCopyError}
+                  </p>{/if}
                 <div class="flex flex-wrap gap-x-3 gap-y-1">
                   <a
                     class="inline-flex items-center font-medium text-amber-200 underline decoration-amber-200/40 underline-offset-2 hover:text-amber-100"

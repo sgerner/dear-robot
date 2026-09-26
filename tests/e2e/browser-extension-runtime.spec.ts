@@ -146,18 +146,47 @@ test('loads the packaged bridge in Chromium and records an authenticated local d
       .find((worker) => worker.url().endsWith('/background.js'));
     expect(extensionWorker).toBeTruthy();
     const extensionId = new URL(extensionWorker!.url()).host;
+    const app = await context.newPage();
+    await app.goto(`${fixture.origin}/app`);
+    await expect
+      .poll(async () => bridgeEvents(app))
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'SETUP_STATUS',
+            status: 'origin_missing',
+            appOrigin: fixture.origin
+          })
+        ])
+      );
+
     const settings = await context.newPage();
     await settings.goto(`chrome-extension://${extensionId}/options.html`);
     await settings.locator('#app-origin').fill('http://attacker.example.test');
     await settings.getByRole('button', { name: 'Save origin' }).click();
     await expect(settings.locator('#status')).toContainText('Use HTTPS');
+    await settings.locator('#app-origin').fill('https://attacker.example.test');
+    await settings.getByRole('button', { name: 'Save origin' }).click();
+    await expect(settings.locator('#status')).toContainText('Origin saved');
+    await app.reload();
+    await expect
+      .poll(async () => bridgeEvents(app))
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'SETUP_STATUS',
+            status: 'origin_mismatch',
+            appOrigin: fixture.origin
+          })
+        ])
+      );
+
     await settings.locator('#app-origin').fill(fixture.origin);
     await settings.getByRole('button', { name: 'Save origin' }).click();
     await expect(settings.locator('#status')).toContainText('Origin saved');
     await settings.close();
 
-    const app = await context.newPage();
-    await app.goto(`${fixture.origin}/app`);
+    await app.reload();
     await expect
       .poll(async () => (await bridgeEvents(app)).map((event) => event.type))
       .toContain('READY');

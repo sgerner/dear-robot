@@ -162,6 +162,22 @@
         message.appOrigin
       );
     }
+    if (
+      message?.type === 'BRIDGE_SETUP_STATUS' &&
+      message.appOrigin === window.location.origin &&
+      ['origin_missing', 'origin_mismatch'].includes(message.status)
+    ) {
+      configuredAppOrigin = null;
+      post(
+        {
+          type: 'SETUP_STATUS',
+          appOrigin: message.appOrigin,
+          status: message.status,
+          protocolVersion: PROTOCOL_VERSION
+        },
+        message.appOrigin
+      );
+    }
     if (message?.type === 'BRIDGE_EVENT') {
       if (message.appOrigin !== configuredAppOrigin || message.appOrigin !== window.location.origin) return;
       post(
