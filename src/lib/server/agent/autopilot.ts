@@ -166,6 +166,12 @@ export function listAutopilotDashboard() {
     .orderBy(desc(outcomeEvents.createdAt))
     .limit(20)
     .all();
+  const recentObservations = db
+    .select({ latencyMs: aiObservability.latencyMs })
+    .from(aiObservability)
+    .orderBy(desc(aiObservability.createdAt))
+    .limit(200)
+    .as('recent_observations');
   const stats = {
     proposed: countQueue('proposed'),
     approved: countQueue('approved'),
@@ -173,8 +179,8 @@ export function listAutopilotDashboard() {
     openFollowUps: followUps.length,
     avgLatencyMs: Math.round(
       db
-        .select({ value: sql<number>`coalesce(avg(latency_ms), 0)` })
-        .from(aiObservability)
+        .select({ value: sql<number>`coalesce(avg(${recentObservations.latencyMs}), 0)` })
+        .from(recentObservations)
         .get()?.value || 0
     )
   };

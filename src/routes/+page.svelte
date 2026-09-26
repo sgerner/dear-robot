@@ -3621,7 +3621,7 @@
           </div>
 
           <section class="mt-6 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-            {#each [{ value: data.autopilot?.stats?.proposed || 0, label: 'Awaiting review' }, { value: data.autopilot?.stats?.approved || 0, label: 'Approved' }, { value: data.autopilot?.stats?.openFollowUps || 0, label: 'Open follow-ups' }, { value: `${data.autopilot?.stats?.avgLatencyMs || 0}ms`, label: 'AI latency' }] as stat, i (i)}
+            {#each [{ value: data.autopilot?.stats?.proposed || 0, label: 'Awaiting review' }, { value: data.autopilot?.stats?.approved || 0, label: 'Approved' }, { value: data.autopilot?.stats?.openFollowUps || 0, label: 'Open follow-ups' }, { value: `${data.autopilot?.stats?.avgLatencyMs || 0}ms`, label: 'Recent AI latency' }] as stat, i (i)}
               <Card class="p-3 md:p-4">
                 <p class="text-xl font-semibold tabular-nums text-foreground md:text-2xl">{stat.value}</p>
                 <p class="mt-1 text-[11px] leading-tight text-muted-foreground md:text-xs">{stat.label}</p>

@@ -17,6 +17,11 @@ type WorkerState = {
 const workers = new Map<number, WorkerState>();
 const syncInFlight = new Set<number>();
 const observedFolderCounts = new Map<number, Map<string, number>>();
+const pendingSuggestionEvaluations: number[] = [];
+const queuedSuggestionIds = new Set<number>();
+const maxConcurrentSuggestionEvaluations = 3;
+let pendingSuggestionOffset = 0;
+let activeSuggestionEvaluations = 0;
 let initialized = false;
 
 export function startSyncEngine() {
@@ -126,23 +131,23 @@ export async function syncAccount(accountId: number) {
         for (const row of rows) existingProviderIds.add(row.providerMessageId);
       }
       let maxSeenUid = sinceUid;
-      let conversationIndexChanged = false;
-      for (const remote of uniqueRemote) {
-        const existedBefore = existingProviderIds.has(remote.providerMessageId);
-        const saved = upsertRemoteMessage(accountId, remote);
-        const uid = messageUid(remote.providerMessageId);
-        if (uid > maxSeenUid) maxSeenUid = uid;
-        if (!existedBefore && saved) {
-          conversationIndexChanged = true;
-          registerConversationMessage(saved);
+      // One transaction avoids a disk commit for every message and attachment.
+      const newlySaved = db.transaction((tx) => {
+        const inserted: Array<NonNullable<ReturnType<typeof upsertRemoteMessage>>> = [];
+        for (const remote of uniqueRemote) {
+          const existedBefore = existingProviderIds.has(remote.providerMessageId);
+          const saved = upsertRemoteMessage(accountId, remote, tx);
+          const uid = messageUid(remote.providerMessageId);
+          if (uid > maxSeenUid) maxSeenUid = uid;
+          if (!existedBefore && saved) inserted.push(saved);
         }
-        if (!existedBefore && saved && isInboxFolder) {
-          void suggestForMessage(saved.id).catch((error) => {
-            console.error('[dear-robot] AI evaluation failed for inserted message', saved.id, error);
-          });
-        }
+        return inserted;
+      });
+      // Keep the conversation index warm after committing the new message metadata.
+      for (const saved of newlySaved) registerConversationMessage(saved);
+      if (isInboxFolder) {
+        for (const saved of newlySaved) queueSuggestionEvaluation(saved.id);
       }
-      if (conversationIndexChanged) invalidateConversationIndex();
       const highestUid = Math.max(maxSeenUid, remoteState?.highestUid ?? 0);
       if (provider.fetchAllUids && priorState?.uidValidity && !uidValidityChanged) {
         const remoteUids = await provider.fetchAllUids(account, folder.path);
@@ -386,9 +391,10 @@ function upsertRemoteMessage(
     isRead: boolean;
     isAnswered: boolean;
     isFlagged: boolean;
-  }
+  },
+  writer: Pick<typeof db, 'insert' | 'delete'> = db
 ) {
-  const saved = db
+  const saved = writer
     .insert(messages)
     .values({
       accountId,
@@ -415,19 +421,21 @@ function upsertRemoteMessage(
     .returning()
     .get();
   if (saved?.id && remote.attachments?.length) {
-    db.delete(messageAttachments).where(eq(messageAttachments.messageId, saved.id)).run();
-    for (const attachment of remote.attachments) {
-      db.insert(messageAttachments)
-        .values({
-          messageId: saved.id,
-          filename: attachment.filename,
-          contentType: attachment.contentType,
-          sizeBytes: attachment.sizeBytes || 0,
-          contentId: attachment.contentId || null,
-          disposition: attachment.disposition || null,
-          contentBase64: attachment.contentBase64 || null,
-          createdAt: nowIso()
-        })
+    writer.delete(messageAttachments).where(eq(messageAttachments.messageId, saved.id)).run();
+    const attachmentRows = remote.attachments.map((attachment) => ({
+      messageId: saved.id,
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      sizeBytes: attachment.sizeBytes || 0,
+      contentId: attachment.contentId || null,
+      disposition: attachment.disposition || null,
+      contentBase64: attachment.contentBase64 || null,
+      createdAt: nowIso()
+    }));
+    for (let offset = 0; offset < attachmentRows.length; offset += 100) {
+      writer
+        .insert(messageAttachments)
+        .values(attachmentRows.slice(offset, offset + 100))
         .run();
     }
   }
@@ -438,6 +446,40 @@ function messageUid(providerMessageId: string) {
   const last = providerMessageId.split(':').at(-1) || '';
   const uid = Number(last);
   return Number.isFinite(uid) ? uid : 0;
+}
+
+function queueSuggestionEvaluation(messageId: number) {
+  if (queuedSuggestionIds.has(messageId)) return;
+  queuedSuggestionIds.add(messageId);
+  pendingSuggestionEvaluations.push(messageId);
+  pumpSuggestionEvaluations();
+}
+
+function pumpSuggestionEvaluations() {
+  while (
+    activeSuggestionEvaluations < maxConcurrentSuggestionEvaluations &&
+    pendingSuggestionOffset < pendingSuggestionEvaluations.length
+  ) {
+    const messageId = pendingSuggestionEvaluations[pendingSuggestionOffset++];
+    if (messageId === undefined) return;
+    activeSuggestionEvaluations += 1;
+    void suggestForMessage(messageId)
+      .catch((error) => {
+        console.error('[dear-robot] AI evaluation failed for inserted message', messageId, error);
+      })
+      .finally(() => {
+        activeSuggestionEvaluations -= 1;
+        queuedSuggestionIds.delete(messageId);
+        pumpSuggestionEvaluations();
+      });
+  }
+  if (pendingSuggestionOffset === pendingSuggestionEvaluations.length) {
+    pendingSuggestionEvaluations.length = 0;
+    pendingSuggestionOffset = 0;
+  } else if (pendingSuggestionOffset > 128) {
+    pendingSuggestionEvaluations.splice(0, pendingSuggestionOffset);
+    pendingSuggestionOffset = 0;
+  }
 }
 
 function mergeByProviderMessageId<T extends { providerMessageId: string }>(rows: T[]) {

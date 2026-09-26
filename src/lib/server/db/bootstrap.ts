@@ -651,6 +651,7 @@ CREATE INDEX IF NOT EXISTS agent_obligations_status_due_idx ON agent_obligations
 CREATE INDEX IF NOT EXISTS agent_obligations_message_idx ON agent_obligations(message_id);
 CREATE INDEX IF NOT EXISTS ai_observability_created_idx ON ai_observability(created_at);
 CREATE INDEX IF NOT EXISTS task_runs_message_created_idx ON task_runs(message_id, created_at);
+CREATE INDEX IF NOT EXISTS task_runs_created_idx ON task_runs(created_at);
 CREATE INDEX IF NOT EXISTS task_steps_run_step_idx ON task_steps(task_run_id, step_index);
 CREATE INDEX IF NOT EXISTS messages_account_date_idx ON messages(account_id, date);
 CREATE INDEX IF NOT EXISTS messages_account_read_date_idx ON messages(account_id, is_read, date);
@@ -696,16 +697,18 @@ END;
 CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
   DELETE FROM messages_fts WHERE rowid = old.id;
 END;
-CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+CREATE TRIGGER IF NOT EXISTS messages_au_content
+AFTER UPDATE OF subject, "from", "to", body_text ON messages BEGIN
   DELETE FROM messages_fts WHERE rowid = old.id;
   INSERT INTO messages_fts(rowid, subject, sender, recipients, body_text)
   VALUES (new.id, new.subject, new."from", new."to", new.body_text);
 END;
+DROP TRIGGER IF EXISTS messages_au;
 `);
-    const ftsCount = sqlite.prepare(`SELECT count(*) as value FROM messages_fts`).get() as {
+    const hasFtsRows = sqlite.prepare(`SELECT 1 as value FROM messages_fts LIMIT 1`).get() as {
       value: number;
-    };
-    if ((ftsCount?.value || 0) === 0) {
+    } | undefined;
+    if (!hasFtsRows?.value) {
       sqlite.exec(`
 INSERT INTO messages_fts(rowid, subject, sender, recipients, body_text)
 SELECT id, subject, "from", "to", body_text FROM messages;

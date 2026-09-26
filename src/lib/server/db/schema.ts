@@ -660,6 +660,7 @@ export const taskRuns = sqliteTable(
   },
   (table) => ({
     messageCreatedIdx: index('task_runs_message_created_idx').on(table.messageId, table.createdAt),
+    createdIdx: index('task_runs_created_idx').on(table.createdAt),
     workflowStatusIdx: index('task_runs_workflow_status_idx').on(table.workflowId, table.status),
     idempotencyUnique: uniqueIndex('task_runs_idempotency_unique').on(table.idempotencyKey)
   })

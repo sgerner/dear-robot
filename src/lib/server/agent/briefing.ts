@@ -10,6 +10,8 @@ import {
 } from '../db/schema';
 import { listOpenObligations, scanRecentMessagesForObligations } from './obligations';
 
+let briefingFtsAvailable = true;
+
 export function buildDailyBriefing(options: { refreshObligations?: boolean } = {}) {
   const refresh = options.refreshObligations ? scanRecentMessagesForObligations(50) : null;
   const pendingApprovals = db
@@ -45,29 +47,52 @@ export function buildDailyBriefing(options: { refreshObligations?: boolean } = {
     .orderBy(followUpReminders.dueAt)
     .limit(20)
     .all();
-  const importantUnread = db
-    .select({
-      id: messages.id,
-      subject: messages.subject,
-      sender: messages.from,
-      date: messages.date,
-      snippet: sql<string>`substr(${messages.bodyText}, 1, 220)`,
-      riskLevel: aiSuggestions.riskLevel,
-      recommendedAction: aiSuggestions.recommendedAction
-    })
-    .from(messages)
-    .innerJoin(folders, and(eq(folders.accountId, messages.accountId), eq(folders.path, messages.folderPath)))
-    .leftJoin(aiSuggestions, eq(aiSuggestions.id, messages.latestSuggestionId))
-    .where(
-      and(
-        eq(folders.role, 'inbox'),
-        eq(messages.isRead, false),
-        sql`(${aiSuggestions.riskLevel} IN ('medium', 'high') OR ${messages.isFlagged} = 1 OR ${messages.bodyText} LIKE '%urgent%' OR ${messages.bodyText} LIKE '%deadline%')`
+  const listImportantUnread = (useFts: boolean) => {
+    const urgencyMatch = useFts
+      ? sql`messages.id IN (
+          SELECT rowid FROM messages_fts
+          WHERE messages_fts MATCH 'body_text:urgent* OR body_text:deadline*'
+        )`
+      : sql`(${messages.bodyText} LIKE '%urgent%' OR ${messages.bodyText} LIKE '%deadline%')`;
+    return db
+      .select({
+        id: messages.id,
+        subject: messages.subject,
+        sender: messages.from,
+        date: messages.date,
+        snippet: sql<string>`substr(${messages.bodyText}, 1, 220)`,
+        riskLevel: aiSuggestions.riskLevel,
+        recommendedAction: aiSuggestions.recommendedAction
+      })
+      .from(messages)
+      .innerJoin(
+        folders,
+        and(eq(folders.accountId, messages.accountId), eq(folders.path, messages.folderPath))
       )
-    )
-    .orderBy(desc(messages.date))
-    .limit(20)
-    .all();
+      .leftJoin(aiSuggestions, eq(aiSuggestions.id, messages.latestSuggestionId))
+      .where(
+        and(
+          eq(folders.role, 'inbox'),
+          eq(messages.isRead, false),
+          sql`(${aiSuggestions.riskLevel} IN ('medium', 'high') OR ${messages.isFlagged} = 1 OR ${urgencyMatch})`
+        )
+      )
+      .orderBy(desc(messages.date))
+      .limit(20)
+      .all();
+  };
+  let importantUnread;
+  if (briefingFtsAvailable) {
+    try {
+      importantUnread = listImportantUnread(true);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('messages_fts')) throw error;
+      briefingFtsAvailable = false;
+      importantUnread = listImportantUnread(false);
+    }
+  } else {
+    importantUnread = listImportantUnread(false);
+  }
   const threadIntelligence = db
     .select()
     .from(threadSummaries)
